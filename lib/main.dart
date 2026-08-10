@@ -5,6 +5,10 @@ import './presentation/admin/admin_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 
 import './infrastructure/supabase/supabase_config.dart';
+import './infrastructure/repositories/supabase_auth_repository.dart';
+import './application/services/auth_service.dart';
+import './application/dtos/login_request_dto.dart';
+import './core/error/failures.dart';
 
 // Gahira Ball Mill Management System - Login Page
 // Simple, clean design in gold & black (with light mode support).
@@ -82,15 +86,63 @@ class _LoginPageState extends State<LoginPage>
     }
   }
 
-  void _handleLogin() {
+  void _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       _setLoading(true);
-      // TODO: replace with a real authentication call.
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!mounted) return;
-        _setLoading(false);
-        _goToDashboard();
-      });
+      
+      final authService = AuthService(SupabaseAuthRepository());
+      final result = await authService.login(
+        LoginRequestDto(
+          email: _usernameController.text.trim(),
+          password: _passwordController.text,
+        ),
+      );
+
+      if (!mounted) return;
+      _setLoading(false);
+
+      result.fold(
+        (failure) {
+          String message = failure.message;
+          IconData icon = Icons.error_outline;
+          Color color = Colors.redAccent;
+
+          if (failure is NetworkFailure) {
+            message = failure.message.contains('Check your internet') 
+                ? failure.message 
+                : "Connection Error: Check your internet.";
+            icon = Icons.wifi_off_rounded;
+            color = Colors.orangeAccent;
+          } else if (failure is AuthFailure) {
+            // Only use the hardcoded message if it's a generic "Invalid login credentials" from Supabase
+            if (failure.message.toLowerCase().contains('invalid login credentials')) {
+              message = "Invalid Credentials: Please try again.";
+            } else {
+              message = failure.message;
+            }
+            icon = Icons.lock_person_outlined;
+            color = Colors.redAccent;
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(icon, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(message)),
+                ],
+              ),
+              backgroundColor: color,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        },
+        (userDto) {
+          _goToDashboard();
+        },
+      );
     }
   }
 
@@ -155,17 +207,19 @@ class _LoginPageState extends State<LoginPage>
                         ),
                         const SizedBox(height: 40),
 
-                        // Username field
-                        _buildLabel('Username'),
+                        // Email field
+                        _buildLabel('Email'),
                         const SizedBox(height: 8),
                         _buildTextField(
                           context,
                           controller: _usernameController,
-                          hint: 'Enter your username',
-                          icon: Icons.person_outline,
-                          validator: (v) => (v == null || v.isEmpty)
-                              ? 'Username is required'
-                              : null,
+                          hint: 'Enter your email',
+                          icon: Icons.email_outlined,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Email is required';
+                            if (!v.contains('@')) return 'Enter a valid email';
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 20),
 

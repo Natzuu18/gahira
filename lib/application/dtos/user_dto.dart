@@ -63,7 +63,7 @@ class UserDto {
       lname: entity.lname,
       address: entity.address,
       email: entity.email,
-      password: entity.password,
+      password: entity.password ?? 'gahira123!',
       contactNum: entity.contactNum,
       roleId: entity.roleId,
       status: entity.status,

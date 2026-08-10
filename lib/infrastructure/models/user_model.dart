@@ -8,7 +8,7 @@ class UserModel extends UserEntity {
     required super.lname,
     required super.address,
     required super.email,
-    required super.password,
+    super.password,
     required super.contactNum,
     required super.roleId,
     required super.status,
@@ -22,7 +22,7 @@ class UserModel extends UserEntity {
       lname: json['lname'] ?? '',
       address: json['address'] ?? '',
       email: json['email'] ?? '',
-      password: json['password'] ?? '',
+      // password intentionally not read back — it's never stored in this table
       contactNum: json['contact_Num'] ?? '',
       roleId: json['role'] ?? '',
       status: json['status'] ?? '',
@@ -37,7 +37,9 @@ class UserModel extends UserEntity {
       'lname': lname,
       'address': address,
       'email': email,
-      'password': password,
+      // 'password' deliberately omitted — Supabase Auth owns credential
+      // storage; writing it here would put a plaintext password in your
+      // 'users' table, readable by anyone with select access.
       'contact_Num': contactNum,
       'role': roleId,
       'status': status,

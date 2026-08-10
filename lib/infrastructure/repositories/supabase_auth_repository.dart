@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dartz/dartz.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/error/failures.dart';
@@ -8,6 +9,39 @@ import '../supabase/supabase_config.dart';
 
 class SupabaseAuthRepository implements AuthRepository {
   final SupabaseClient _client = SupabaseConfig.client;
+
+  static const _networkHints = [
+    'network',
+    'connection',
+    'failed to host lookup',
+    'socketexception',
+    'clientexception',
+  ];
+
+  bool _looksLikeNetworkError(String message) {
+    final lower = message.toLowerCase();
+    return _networkHints.any(lower.contains);
+  }
+
+  Failure _mapError(Object e) {
+    if (e is SocketException) {
+      return NetworkFailure('No internet connection: ${e.message}');
+    }
+    if (e is AuthException) {
+      return _looksLikeNetworkError(e.message)
+          ? NetworkFailure(e.message)
+          : AuthFailure(e.message);
+    }
+    if (e is PostgrestException) {
+      return _looksLikeNetworkError(e.message)
+          ? NetworkFailure(e.message)
+          : ServerFailure('Database error: ${e.message}');
+    }
+    final str = e.toString();
+    return _looksLikeNetworkError(str)
+        ? NetworkFailure('Network error occurred')
+        : ServerFailure(str);
+  }
 
   @override
   Future<Either<Failure, UserEntity>> login({
@@ -20,22 +54,26 @@ class SupabaseAuthRepository implements AuthRepository {
         password: password,
       );
 
-      if (response.user == null) {
+      final authUser = response.user;
+      if (authUser == null) {
         return const Left(AuthFailure('Login failed: User not found'));
       }
 
-      // Fetch additional user info from our 'users' table
       final userData = await _client
           .from('users')
           .select()
-          .eq('userId', response.user!.id)
-          .single();
+          .eq('userId', authUser.id)
+          .maybeSingle();
+
+      if (userData == null) {
+        return const Left(
+          ServerFailure('Account found but profile data is missing. Please contact support.'),
+        );
+      }
 
       return Right(UserModel.fromJson(userData));
-    } on AuthException catch (e) {
-      return Left(AuthFailure(e.message));
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(_mapError(e));
     }
   }
 
@@ -56,30 +94,37 @@ class SupabaseAuthRepository implements AuthRepository {
         password: password,
       );
 
-      if (response.user == null) {
+      final authUser = response.user;
+      if (authUser == null) {
         return const Left(AuthFailure('Sign up failed'));
       }
 
       final newUser = UserModel(
-        userId: response.user!.id,
+        userId: authUser.id,
         fname: fname,
         mname: mname,
         lname: lname,
         address: address,
         email: email,
-        password: password, // Note: In a real app, you might not store the raw password in the DB
         contactNum: contactNum,
         roleId: roleId,
         status: 'pending',
       );
 
-      await _client.from('users').insert(newUser.toJson());
+      try {
+        await _client.from('users').insert(newUser.toJson());
+      } catch (insertError) {
+        return Left(
+          ServerFailure(
+            'Account created but profile setup failed: ${insertError.toString()}. '
+                'Please try logging in or contact support.',
+          ),
+        );
+      }
 
       return Right(newUser);
-    } on AuthException catch (e) {
-      return Left(AuthFailure(e.message));
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(_mapError(e));
     }
   }
 
@@ -89,7 +134,7 @@ class SupabaseAuthRepository implements AuthRepository {
       await _client.auth.signOut();
       return const Right(null);
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(_mapError(e));
     }
   }
 
@@ -109,7 +154,7 @@ class SupabaseAuthRepository implements AuthRepository {
 
       return Right(UserModel.fromJson(userData));
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(_mapError(e));
     }
   }
 }

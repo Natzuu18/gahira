@@ -7,7 +7,7 @@ class UserEntity extends Equatable {
   final String lname;
   final String address;
   final String email;
-  final String password; // default password on creation, hashed before use
+  final String? password; // nullable — not persisted; Supabase Auth owns credential storage
   final String contactNum;
   final String roleId; // FK -> RoleEntity
   final String status; // e.g. active / inactive / pending
@@ -19,7 +19,7 @@ class UserEntity extends Equatable {
     required this.lname,
     required this.address,
     required this.email,
-    required this.password,
+    this.password, // no longer required
     required this.contactNum,
     required this.roleId,
     required this.status,

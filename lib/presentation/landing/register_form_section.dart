@@ -6,6 +6,10 @@ import '../shared_widgets/appColor.dart';
 /// The two kinds of accounts this system supports.
 enum UserRole { client, operator }
 
+/// The kind of client account, only relevant when [UserRole.client] is
+/// selected.
+enum ClientType { individual, business }
+
 /// A self-contained "Create your account" form section, meant to be
 /// embedded directly inside another page's scrollable Column, e.g.:
 ///
@@ -33,10 +37,20 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _addressController = TextEditingController();
+  final _businessNameController = TextEditingController();
 
   UserRole _role = UserRole.client;
+
+  // Client-only fields.
+  ClientType _clientType = ClientType.individual;
+  PlatformFile? _clientDocumentFile;
+  String? _clientDocumentError;
+
+  // Operator-only fields.
   PlatformFile? _resumeFile;
   String? _resumeError;
+  DateTime? _appointmentDate;
+  String? _appointmentError;
 
   bool _isSubmitting = false;
 
@@ -49,6 +63,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     _phoneController.dispose();
     _emailController.dispose();
     _addressController.dispose();
+    _businessNameController.dispose();
     super.dispose();
   }
 
@@ -70,18 +85,101 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     setState(() => _resumeFile = null);
   }
 
+  Future<void> _pickClientDocument() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    setState(() {
+      _clientDocumentFile = result.files.single;
+      _clientDocumentError = null;
+    });
+  }
+
+  void _removeClientDocument() {
+    setState(() => _clientDocumentFile = null);
+  }
+
+  Future<void> _pickAppointmentDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _appointmentDate ?? today.add(const Duration(days: 1)),
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: kGold,
+              onPrimary: kBlack,
+              surface: context.surfaceColor,
+              onSurface: context.textColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked == null) return;
+
+    setState(() {
+      _appointmentDate = picked;
+      _appointmentError = null;
+    });
+  }
+
+  void _clearAppointmentDate() {
+    setState(() => _appointmentDate = null);
+  }
+
+  /// Formats a date like "Monday, Aug 10, 2026" without needing the intl
+  /// package.
+  String _formatAppointmentDate(DateTime date) {
+    const weekdays = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+      'Friday', 'Saturday', 'Sunday',
+    ];
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final weekday = weekdays[date.weekday - 1];
+    final month = months[date.month - 1];
+    return '$weekday, $month ${date.day}, ${date.year}';
+  }
+
   Future<void> _handleRegister() async {
     final formValid = _formKey.currentState!.validate();
 
-    // Resume is required for operators only; it isn't a Form field so we
-    // validate it manually alongside the form.
+    // File uploads and the appointment date aren't Form fields, so we
+    // validate them manually alongside the form, scoped to the active role.
     setState(() {
       _resumeError = (_role == UserRole.operator && _resumeFile == null)
           ? 'Please attach your resume'
           : null;
+      _appointmentError =
+      (_role == UserRole.operator && _appointmentDate == null)
+          ? 'Please select an appointment date'
+          : null;
+      _clientDocumentError =
+      (_role == UserRole.client && _clientDocumentFile == null)
+          ? 'Please attach a valid ID or business document'
+          : null;
     });
 
-    if (!formValid || _resumeError != null) return;
+    if (!formValid ||
+        _resumeError != null ||
+        _appointmentError != null ||
+        _clientDocumentError != null) {
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
@@ -97,8 +195,13 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     //     email: _emailController.text.trim(),
     //     address: _addressController.text.trim(),
     //     role: _role,
+    //     clientType: _role == UserRole.client ? _clientType : null,
+    //     businessName: _businessNameController.text.trim(),
+    //     clientDocumentBytes: _clientDocumentFile?.bytes,
+    //     clientDocumentFileName: _clientDocumentFile?.name,
     //     resumeBytes: _resumeFile?.bytes,
     //     resumeFileName: _resumeFile?.name,
+    //     appointmentDate: _appointmentDate,
     //   ),
     // );
     await Future.delayed(const Duration(seconds: 1));
@@ -277,12 +380,56 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                       : null,
                 ),
 
-                // --- Resume upload, operators only ---
+                // --- Client-only fields: client type, business name, document ---
+                if (_role == UserRole.client) ...[
+                  const SizedBox(height: 18),
+                  _buildLabel('Client Type'),
+                  const SizedBox(height: 8),
+                  _buildClientTypeSelector(context),
+
+                  if (_clientType == ClientType.business) ...[
+                    const SizedBox(height: 18),
+                    _buildLabel('Business Name (optional)'),
+                    const SizedBox(height: 8),
+                    _buildTextField(
+                      context,
+                      controller: _businessNameController,
+                      hint: 'Enter your business name',
+                      icon: Icons.storefront_outlined,
+                    ),
+                  ],
+
+                  const SizedBox(height: 18),
+                  _buildLabel('Upload Valid ID or Business Document'),
+                  const SizedBox(height: 8),
+                  _buildFileUploadField(
+                    context,
+                    file: _clientDocumentFile,
+                    error: _clientDocumentError,
+                    placeholder: 'Tap to upload a document',
+                    onTap: _pickClientDocument,
+                    onRemove: _removeClientDocument,
+                  ),
+                ],
+
+                // --- Operator-only fields: resume + appointment date ---
                 if (_role == UserRole.operator) ...[
                   const SizedBox(height: 18),
                   _buildLabel('Resume (PDF or Word)'),
                   const SizedBox(height: 8),
-                  _buildResumeUploader(context),
+                  _buildFileUploadField(
+                    context,
+                    file: _resumeFile,
+                    error: _resumeError,
+                    placeholder: 'Tap to upload your resume',
+                    onTap: _pickResume,
+                    onRemove: _removeResume,
+                  ),
+
+                  const SizedBox(height: 18),
+                  _buildLabel('Preferred Appointment Date'),
+                  const SizedBox(height: 8),
+                  _buildAppointmentDatePicker(context),
                 ],
 
                 const SizedBox(height: 26),
@@ -393,13 +540,87 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     );
   }
 
-  Widget _buildResumeUploader(BuildContext context) {
+  Widget _buildClientTypeSelector(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildClientTypeOption(
+            context,
+            type: ClientType.individual,
+            label: 'Individual',
+            icon: Icons.person_outline,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildClientTypeOption(
+            context,
+            type: ClientType.business,
+            label: 'Business',
+            icon: Icons.storefront_outlined,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildClientTypeOption(
+      BuildContext context, {
+        required ClientType type,
+        required String label,
+        required IconData icon,
+      }) {
+    final isSelected = _clientType == type;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => setState(() => _clientType = type),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? kGold.withOpacity(0.15) : context.surfaceColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? kGold : kGold.withOpacity(0.25),
+            width: isSelected ? 1.6 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? kGold : kGold.withOpacity(0.6),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? kGold : context.mutedTextColor,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Generic tappable file-upload row, shared by the resume upload
+  /// (operators) and the ID/business document upload (clients).
+  Widget _buildFileUploadField(
+      BuildContext context, {
+        required PlatformFile? file,
+        required String? error,
+        required String placeholder,
+        required VoidCallback onTap,
+        required VoidCallback onRemove,
+      }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: _pickResume,
+          onTap: onTap,
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
@@ -407,7 +628,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
               color: context.surfaceColor,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: _resumeError != null
+                color: error != null
                     ? Colors.redAccent
                     : kGold.withOpacity(0.25),
               ),
@@ -418,28 +639,87 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    _resumeFile?.name ?? 'Tap to upload your resume',
+                    file?.name ?? placeholder,
                     style: TextStyle(
-                      color: _resumeFile != null
+                      color: file != null
                           ? context.textColor
                           : context.mutedTextColor,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (_resumeFile != null)
+                if (file != null)
                   IconButton(
                     icon: Icon(Icons.close, color: kGold.withOpacity(0.7)),
-                    onPressed: _removeResume,
+                    onPressed: onRemove,
                   ),
               ],
             ),
           ),
         ),
-        if (_resumeError != null) ...[
+        if (error != null) ...[
           const SizedBox(height: 6),
           Text(
-            _resumeError!,
+            error,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAppointmentDatePicker(BuildContext context) {
+    final label = _appointmentDate != null
+        ? _formatAppointmentDate(_appointmentDate!)
+        : 'Tap to select a date';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: _pickAppointmentDate,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _appointmentError != null
+                    ? Colors.redAccent
+                    : kGold.withOpacity(0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today_outlined,
+                    color: kGold.withOpacity(0.8)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: _appointmentDate != null
+                          ? context.textColor
+                          : context.mutedTextColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_appointmentDate != null)
+                  IconButton(
+                    icon: Icon(Icons.close, color: kGold.withOpacity(0.7)),
+                    onPressed: _clearAppointmentDate,
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (_appointmentError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _appointmentError!,
             style: const TextStyle(color: Colors.redAccent, fontSize: 12),
           ),
         ],

@@ -4,6 +4,7 @@ import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
+
 import './infrastructure/supabase/supabase_config.dart';
 import './infrastructure/repositories/supabase_auth_repository.dart';
 import './application/services/auth_service.dart';
@@ -15,7 +16,7 @@ import './core/error/failures.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await SupabaseConfig.init();
 
   runApp(const GahiraApp());
@@ -89,7 +90,7 @@ class _LoginPageState extends State<LoginPage>
   void _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       _setLoading(true);
-      
+
       final authService = AuthService(SupabaseAuthRepository());
       final result = await authService.login(
         LoginRequestDto(
@@ -102,14 +103,14 @@ class _LoginPageState extends State<LoginPage>
       _setLoading(false);
 
       result.fold(
-        (failure) {
+            (failure) {
           String message = failure.message;
           IconData icon = Icons.error_outline;
           Color color = Colors.redAccent;
 
           if (failure is NetworkFailure) {
-            message = failure.message.contains('Check your internet') 
-                ? failure.message 
+            message = failure.message.contains('Check your internet')
+                ? failure.message
                 : "Connection Error: Check your internet.";
             icon = Icons.wifi_off_rounded;
             color = Colors.orangeAccent;

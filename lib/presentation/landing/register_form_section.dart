@@ -38,8 +38,19 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   final _emailController = TextEditingController();
   final _addressController = TextEditingController();
   final _businessNameController = TextEditingController();
+  final _otpController = TextEditingController();
 
   UserRole _role = UserRole.client;
+
+  // Phone verification (required for both roles). The phone number must be
+  // confirmed via a one-time SMS code before the form can be submitted.
+  // Once submitted, the same verified number is where the backend sends the
+  // account's username and a temporary password.
+  bool _otpSent = false;
+  bool _isSendingOtp = false;
+  bool _isVerifyingOtp = false;
+  bool _isPhoneVerified = false;
+  String? _phoneVerifyError;
 
   // Client-only fields.
   ClientType _clientType = ClientType.individual;
@@ -55,6 +66,18 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   bool _isSubmitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    // If the person edits the phone number after sending a code or getting
+    // verified, that code/verification no longer applies to the new number.
+    _phoneController.addListener(() {
+      if (_isPhoneVerified || _otpSent) {
+        _resetPhoneVerification();
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _firstNameController.dispose();
     _middleNameController.dispose();
@@ -64,6 +87,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     _emailController.dispose();
     _addressController.dispose();
     _businessNameController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -101,6 +125,95 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
 
   void _removeClientDocument() {
     setState(() => _clientDocumentFile = null);
+  }
+
+  /// Basic format check only — doesn't confirm the number is reachable.
+  /// That's what the OTP step below is for.
+  String? _phoneFormatValidator(String? v) {
+    if (v == null || v.trim().isEmpty) {
+      return 'Phone number is required';
+    }
+    final digitsOnly = v.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.length < 7) {
+      return 'Enter a valid phone number';
+    }
+    return null;
+  }
+
+  Future<void> _sendOtp() async {
+    final formatError = _phoneFormatValidator(_phoneController.text);
+    if (formatError != null) {
+      setState(() => _phoneVerifyError = formatError);
+      return;
+    }
+
+    setState(() {
+      _isSendingOtp = true;
+      _phoneVerifyError = null;
+    });
+
+    // TODO: replace with a real SMS/OTP provider call, e.g.:
+    // await AuthService(...).sendPhoneOtp(_phoneController.text.trim());
+    await Future.delayed(const Duration(seconds: 1));
+
+    if (!mounted) return;
+    setState(() {
+      _isSendingOtp = false;
+      _otpSent = true;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Verification code sent to ${_phoneController.text.trim()}',
+        ),
+        backgroundColor: Colors.blueGrey.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Future<void> _verifyOtp() async {
+    final code = _otpController.text.trim();
+    if (code.length != 6) {
+      setState(() => _phoneVerifyError = 'Enter the 6-digit code');
+      return;
+    }
+
+    setState(() {
+      _isVerifyingOtp = true;
+      _phoneVerifyError = null;
+    });
+
+    // TODO: replace with a real OTP verification call, e.g.:
+    // final isValid = await AuthService(...).verifyPhoneOtp(
+    //   phone: _phoneController.text.trim(),
+    //   code: code,
+    // );
+    await Future.delayed(const Duration(seconds: 1));
+    const isValid = true; // placeholder until wired to a real backend
+
+    if (!mounted) return;
+    setState(() {
+      _isVerifyingOtp = false;
+      if (isValid) {
+        _isPhoneVerified = true;
+        _otpSent = false;
+        _otpController.clear();
+      } else {
+        _phoneVerifyError = 'Incorrect code, please try again';
+      }
+    });
+  }
+
+  void _resetPhoneVerification() {
+    setState(() {
+      _isPhoneVerified = false;
+      _otpSent = false;
+      _otpController.clear();
+      _phoneVerifyError = null;
+    });
   }
 
   Future<void> _pickAppointmentDate() async {
@@ -195,6 +308,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     //     email: _emailController.text.trim(),
     //     address: _addressController.text.trim(),
     //     role: _role,
+    //     phone: _phoneController.text.trim(), // verified via OTP above
     //     clientType: _role == UserRole.client ? _clientType : null,
     //     businessName: _businessNameController.text.trim(),
     //     clientDocumentBytes: _clientDocumentFile?.bytes,
@@ -204,6 +318,9 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     //     appointmentDate: _appointmentDate,
     //   ),
     // );
+    // The backend is expected to text the generated username and a
+    // temporary password to this verified number, and to require a
+    // password change on first login.
     await Future.delayed(const Duration(seconds: 1));
 
     if (!mounted) return;
@@ -215,7 +332,13 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           children: [
             Icon(Icons.check_circle_outline, color: Colors.white),
             SizedBox(width: 12),
-            Expanded(child: Text('Account created. You can now log in.')),
+            Expanded(
+              child: Text(
+                'Account created. Your username and a temporary '
+                    'password were sent by SMS — please change your '
+                    'password after logging in.',
+              ),
+            ),
           ],
         ),
         backgroundColor: Colors.green.shade600,
@@ -327,23 +450,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
 
                 _buildLabel('Phone Number'),
                 const SizedBox(height: 8),
-                _buildTextField(
-                  context,
-                  controller: _phoneController,
-                  hint: 'e.g. 09XXXXXXXXX',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Phone number is required';
-                    }
-                    final digitsOnly = v.replaceAll(RegExp(r'[^0-9]'), '');
-                    if (digitsOnly.length < 7) {
-                      return 'Enter a valid phone number';
-                    }
-                    return null;
-                  },
-                ),
+                _buildPhoneVerificationField(context),
                 const SizedBox(height: 18),
 
                 _buildLabel('Gmail'),
@@ -602,6 +709,232 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Phone number field with an inline "Send Code" / OTP confirmation flow.
+  /// The field itself is a [TextFormField] so its validator participates in
+  /// the surrounding [Form], meaning submission is blocked until the number
+  /// is both well-formed AND verified.
+  Widget _buildPhoneVerificationField(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _phoneController,
+                enabled: !_isPhoneVerified,
+                keyboardType: TextInputType.phone,
+                style: TextStyle(color: context.textColor),
+                cursorColor: kGold,
+                validator: (v) {
+                  final formatError = _phoneFormatValidator(v);
+                  if (formatError != null) return formatError;
+                  if (!_isPhoneVerified) {
+                    return 'Please verify your phone number';
+                  }
+                  return null;
+                },
+                decoration: InputDecoration(
+                  hintText: 'e.g. 09XXXXXXXXX',
+                  hintStyle: TextStyle(color: context.mutedTextColor),
+                  prefixIcon:
+                  Icon(Icons.phone_outlined, color: kGold.withOpacity(0.8)),
+                  suffixIcon: _isPhoneVerified
+                      ? Icon(Icons.verified, color: Colors.green.shade400)
+                      : null,
+                  filled: true,
+                  fillColor: context.surfaceColor,
+                  contentPadding: const EdgeInsets.symmetric(
+                      vertical: 16, horizontal: 16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+                  ),
+                  disabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: kGold.withOpacity(0.15)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: kGold, width: 1.6),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.redAccent),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed:
+                (_isPhoneVerified || _isSendingOtp) ? null : _sendOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kGold,
+                  disabledBackgroundColor: kGold.withOpacity(0.4),
+                  foregroundColor: kBlack,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                ),
+                child: _isSendingOtp
+                    ? SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    valueColor: AlwaysStoppedAnimation<Color>(kBlack),
+                  ),
+                )
+                    : Text(
+                  _isPhoneVerified
+                      ? 'Verified'
+                      : (_otpSent ? 'Resend' : 'Send Code'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        // --- OTP entry, shown after a code has been sent ---
+        if (_otpSent && !_isPhoneVerified) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  style:
+                  TextStyle(color: context.textColor, letterSpacing: 4),
+                  cursorColor: kGold,
+                  decoration: InputDecoration(
+                    counterText: '',
+                    hintText: 'Enter 6-digit code',
+                    hintStyle: TextStyle(color: context.mutedTextColor),
+                    prefixIcon:
+                    Icon(Icons.sms_outlined, color: kGold.withOpacity(0.8)),
+                    filled: true,
+                    fillColor: context.surfaceColor,
+                    contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14, horizontal: 16),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: kGold, width: 1.6),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _isVerifyingOtp ? null : _verifyOtp,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kGold,
+                    disabledBackgroundColor: kGold.withOpacity(0.4),
+                    foregroundColor: kBlack,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  child: _isVerifyingOtp
+                      ? SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.0,
+                      valueColor: AlwaysStoppedAnimation<Color>(kBlack),
+                    ),
+                  )
+                      : const Text(
+                    'Confirm',
+                    style:
+                    TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'This number will also receive your username and a '
+                'temporary password once your account is created — '
+                'you\'ll be asked to change the password after logging in.',
+            style: TextStyle(color: context.mutedTextColor, fontSize: 11.5),
+          ),
+        ],
+
+        // --- Verified status ---
+        if (_isPhoneVerified) ...[
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.check_circle, size: 14, color: Colors.green.shade400),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Verified. Your username and temporary password will '
+                      'be sent to this number.',
+                  style: TextStyle(color: Colors.green.shade400, fontSize: 11.5),
+                ),
+              ),
+              TextButton(
+                onPressed: _resetPhoneVerification,
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 0),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Change',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+
+        if (_phoneVerifyError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _phoneVerifyError!,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+          ),
+        ],
+      ],
     );
   }
 

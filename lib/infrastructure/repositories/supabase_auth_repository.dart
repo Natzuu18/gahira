@@ -23,11 +23,37 @@ class SupabaseAuthRepository implements AuthRepository {
     return _networkHints.any(lower.contains);
   }
 
+  /// Normalizes email input so signup/login always compare the same string
+  /// (avoids "invalid credentials" caused purely by case/whitespace drift).
+  String _normalizeEmail(String email) => email.trim().toLowerCase();
+
+  /// Looks up the role name from the `role` table using the given role_id.
+  /// Returns null if roleId is null or no matching row is found.
+  Future<String?> _fetchRoleName(String? roleId) async {
+    if (roleId == null) return null;
+    final roleRow = await _client
+        .from('role')
+        .select('role')
+        .eq('role_id', roleId)
+        .maybeSingle();
+    return roleRow?['role'] as String?;
+  }
+
   Failure _mapError(Object e) {
     if (e is SocketException) {
       return NetworkFailure('No internet connection: ${e.message}');
     }
     if (e is AuthException) {
+      // Supabase returns this specific message when the account exists
+      // but the email hasn't been confirmed yet. Surface it distinctly
+      // instead of letting it fall through as a generic AuthFailure.
+      final lower = e.message.toLowerCase();
+      if (lower.contains('email not confirmed') ||
+          lower.contains('confirm your email')) {
+        return AuthFailure(
+          'Please confirm your email before logging in. Check your inbox for the confirmation link.',
+        );
+      }
       return _looksLikeNetworkError(e.message)
           ? NetworkFailure(e.message)
           : AuthFailure(e.message);
@@ -49,8 +75,10 @@ class SupabaseAuthRepository implements AuthRepository {
     required String password,
   }) async {
     try {
+      final normalizedEmail = _normalizeEmail(email);
+
       final response = await _client.auth.signInWithPassword(
-        email: email,
+        email: normalizedEmail,
         password: password,
       );
 
@@ -71,7 +99,18 @@ class SupabaseAuthRepository implements AuthRepository {
         );
       }
 
-      return Right(UserModel.fromJson(userData));
+      // Look up the role name from the `role` table using role_id
+      final roleName = await _fetchRoleName(userData['role_id'] as String?);
+
+      print('Fetched User: ${authUser.email}, Role ID: ${userData['role_id']}, Role Name: $roleName');
+
+      // Update the userData to include the role name for the Model/Entity
+      final updatedUserData = Map<String, dynamic>.from(userData);
+      if (roleName != null) {
+        updatedUserData['role'] = roleName;
+      }
+
+      return Right(UserModel.fromJson(updatedUserData));
     } catch (e) {
       return Left(_mapError(e));
     }
@@ -89,8 +128,10 @@ class SupabaseAuthRepository implements AuthRepository {
     required String roleId,
   }) async {
     try {
+      final normalizedEmail = _normalizeEmail(email);
+
       final response = await _client.auth.signUp(
-        email: email,
+        email: normalizedEmail,
         password: password,
       );
 
@@ -105,7 +146,7 @@ class SupabaseAuthRepository implements AuthRepository {
         mname: mname,
         lname: lname,
         address: address,
-        email: email,
+        email: normalizedEmail,
         contactNum: contactNum,
         roleId: roleId,
         status: 'pending',
@@ -118,6 +159,19 @@ class SupabaseAuthRepository implements AuthRepository {
           ServerFailure(
             'Account created but profile setup failed: ${insertError.toString()}. '
                 'Please try logging in or contact support.',
+          ),
+        );
+      }
+
+      // response.session is null when the Supabase project requires email
+      // confirmation. The auth user + profile row both got created, but the
+      // account can't log in yet, so tell the caller explicitly instead of
+      // reporting a plain success that leads to a confusing "invalid
+      // credentials" on the very next login attempt.
+      if (response.session == null) {
+        return const Left(
+          AuthFailure(
+            'Account created. Please check your email to confirm your address before logging in.',
           ),
         );
       }
@@ -152,7 +206,17 @@ class SupabaseAuthRepository implements AuthRepository {
 
       if (userData == null) return const Right(null);
 
-      return Right(UserModel.fromJson(userData));
+      // Look up the role name from the `role` table using role_id
+      final roleName = await _fetchRoleName(userData['role_id'] as String?);
+
+      final updatedUserData = Map<String, dynamic>.from(userData);
+      if (roleName != null) {
+        updatedUserData['role'] = roleName;
+      }
+
+      print('Current User: ${user.email}, Role ID: ${userData['role_id']}, Role Name: $roleName');
+
+      return Right(UserModel.fromJson(updatedUserData));
     } catch (e) {
       return Left(_mapError(e));
     }

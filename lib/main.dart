@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
-
+import './presentation/landing/landing_page.dart';
 import './infrastructure/supabase/supabase_config.dart';
 import './infrastructure/repositories/supabase_auth_repository.dart';
 import './application/services/auth_service.dart';
@@ -35,7 +35,7 @@ class GahiraApp extends StatelessWidget {
           themeMode: mode,
           theme: buildAppTheme(Brightness.light),
           darkTheme: buildAppTheme(Brightness.dark),
-          home: const LoginPage(),
+          home: const LandingPage(),
         );
       },
     );
@@ -140,7 +140,6 @@ class _LoginPageState extends State<LoginPage>
           );
         },
         (userDto) {
-          debugPrint('Login successful: ${userDto.fname} ${userDto.lname} - Role: ${userDto.roleId}');
           _goToDashboard(userDto.roleId, '${userDto.fname} ${userDto.lname}');
         },
       );
@@ -159,7 +158,7 @@ class _LoginPageState extends State<LoginPage>
 
   void _goToDashboard(String role, String name) {
     final String normalizedRole = role.toLowerCase();
-    
+
     if (normalizedRole == 'admin') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => AdminDashboardPage(adminName: name)),

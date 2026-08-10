@@ -1,23 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../components/appColor.dart';
-import '../components/themeToggleButton.dart';
-import '../components/adminDrawer.dart';
+import '../shared_widgets/appColor.dart';
+import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/adminDrawer.dart';
 
-// Gahira Ball Mill Management System - Admin Dashboard
-// Placeholder landing page shown after a successful login.
-// Replace the body with real widgets (mill status, reports, controls) later.
-
-class AdminDashboardPage extends StatefulWidget {
-  const AdminDashboardPage({super.key, this.adminName = 'Admin'});
-
-  final String adminName;
+class ReportPage extends StatefulWidget {
+  const ReportPage({super.key});
 
   @override
-  State<AdminDashboardPage> createState() => _AdminDashboardPageState();
+  State<ReportPage> createState() => _ReportPageState();
 }
 
-class _AdminDashboardPageState extends State<AdminDashboardPage> {
+class _ReportPageState extends State<ReportPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -52,28 +46,20 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           ),
         ],
       ),
-      endDrawer: AdminDrawer(
-        currentMenu: AdminMenu.dashboard,
-        adminName: widget.adminName,
-      ),
+      endDrawer: const AdminDrawer(currentMenu: AdminMenu.report),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.dashboard_customize_rounded,
-                color: kGold.withOpacity(0.8), size: 56),
+            Icon(Icons.bar_chart_rounded, color: kGold.withOpacity(0.8), size: 56),
             const SizedBox(height: 16),
             Text(
-              'Dashboard',
-              style: TextStyle(
-                color: context.textColor,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
+              'Report',
+              style: TextStyle(color: context.textColor, fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
-              'Ball mill status, reports, and controls go here.',
+              'Production and performance reports go here.',
               style: TextStyle(color: context.textColor.withOpacity(0.5)),
             ),
           ],
@@ -91,11 +77,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         border: Border.all(color: kGold, width: 1.6),
         color: context.bgColor,
       ),
-      child: const Icon(
-        Icons.settings_input_component_rounded,
-        color: kGold,
-        size: 16,
-      ),
+      child: const Icon(Icons.settings_input_component_rounded, color: kGold, size: 16),
     );
   }
 }

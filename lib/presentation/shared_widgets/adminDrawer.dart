@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'appColor.dart';
 import 'themeToggleButton.dart';
-import '../main.dart';
+import '../../main.dart';
 import '../admin/admin_dashboard.dart';
 import '../admin/approval_page.dart';
 import '../admin/report_page.dart';

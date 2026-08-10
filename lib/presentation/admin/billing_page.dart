@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../components/appColor.dart';
-import '../components/themeToggleButton.dart';
-import '../components/adminDrawer.dart';
+import '../shared_widgets/appColor.dart';
+import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/adminDrawer.dart';
 
-class ReportPage extends StatefulWidget {
-  const ReportPage({super.key});
+class BillingPage extends StatefulWidget {
+  const BillingPage({super.key});
 
   @override
-  State<ReportPage> createState() => _ReportPageState();
+  State<BillingPage> createState() => _BillingPageState();
 }
 
-class _ReportPageState extends State<ReportPage> {
+class _BillingPageState extends State<BillingPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -46,20 +46,20 @@ class _ReportPageState extends State<ReportPage> {
           ),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.report),
+      endDrawer: const AdminDrawer(currentMenu: AdminMenu.billing),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.bar_chart_rounded, color: kGold.withOpacity(0.8), size: 56),
+            Icon(Icons.receipt_long_outlined, color: kGold.withOpacity(0.8), size: 56),
             const SizedBox(height: 16),
             Text(
-              'Report',
+              'Billing',
               style: TextStyle(color: context.textColor, fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
-              'Production and performance reports go here.',
+              'Invoices and billing details go here.',
               style: TextStyle(color: context.textColor.withOpacity(0.5)),
             ),
           ],

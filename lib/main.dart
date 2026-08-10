@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 
-import './components/appColor.dart';
-import './admin/admin_dashboard.dart';
-import './components/themeToggleButton.dart';
+import './presentation/shared_widgets/appColor.dart';
+import './presentation/admin/admin_dashboard.dart';
+import './presentation/shared_widgets/themeToggleButton.dart';
+
+import './infrastructure/supabase/supabase_config.dart';
 
 // Gahira Ball Mill Management System - Login Page
 // Simple, clean design in gold & black (with light mode support).
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  await SupabaseConfig.init();
+
   runApp(const GahiraApp());
 }
 

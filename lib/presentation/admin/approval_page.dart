@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../components/appColor.dart';
-import '../components/themeToggleButton.dart';
-import '../components/adminDrawer.dart';
+import '../shared_widgets/appColor.dart';
+import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/adminDrawer.dart';
 
-class BillingPage extends StatefulWidget {
-  const BillingPage({super.key});
+class ApprovalPage extends StatefulWidget {
+  const ApprovalPage({super.key});
 
   @override
-  State<BillingPage> createState() => _BillingPageState();
+  State<ApprovalPage> createState() => _ApprovalPageState();
 }
 
-class _BillingPageState extends State<BillingPage> {
+class _ApprovalPageState extends State<ApprovalPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -46,20 +46,20 @@ class _BillingPageState extends State<BillingPage> {
           ),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.billing),
+      endDrawer: const AdminDrawer(currentMenu: AdminMenu.approval),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.receipt_long_outlined, color: kGold.withOpacity(0.8), size: 56),
+            Icon(Icons.fact_check_outlined, color: kGold.withOpacity(0.8), size: 56),
             const SizedBox(height: 16),
             Text(
-              'Billing',
+              'Approval',
               style: TextStyle(color: context.textColor, fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
-              'Invoices and billing details go here.',
+              'Pending approvals will be listed here.',
               style: TextStyle(color: context.textColor.withOpacity(0.5)),
             ),
           ],

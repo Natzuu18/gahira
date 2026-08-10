@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 
-import '../components/appColor.dart';
-import '../components/themeToggleButton.dart';
-import '../components/adminDrawer.dart';
+import '../shared_widgets/appColor.dart';
+import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/adminDrawer.dart';
 
-class ApprovalPage extends StatefulWidget {
-  const ApprovalPage({super.key});
+// Gahira Ball Mill Management System - Admin Dashboard
+// Placeholder landing page shown after a successful login.
+// Replace the body with real widgets (mill status, reports, controls) later.
+
+class AdminDashboardPage extends StatefulWidget {
+  const AdminDashboardPage({super.key, this.adminName = 'Admin'});
+
+  final String adminName;
 
   @override
-  State<ApprovalPage> createState() => _ApprovalPageState();
+  State<AdminDashboardPage> createState() => _AdminDashboardPageState();
 }
 
-class _ApprovalPageState extends State<ApprovalPage> {
+class _AdminDashboardPageState extends State<AdminDashboardPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -46,20 +52,28 @@ class _ApprovalPageState extends State<ApprovalPage> {
           ),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.approval),
+      endDrawer: AdminDrawer(
+        currentMenu: AdminMenu.dashboard,
+        adminName: widget.adminName,
+      ),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.fact_check_outlined, color: kGold.withOpacity(0.8), size: 56),
+            Icon(Icons.dashboard_customize_rounded,
+                color: kGold.withOpacity(0.8), size: 56),
             const SizedBox(height: 16),
             Text(
-              'Approval',
-              style: TextStyle(color: context.textColor, fontSize: 20, fontWeight: FontWeight.w600),
+              'Dashboard',
+              style: TextStyle(
+                color: context.textColor,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Pending approvals will be listed here.',
+              'Ball mill status, reports, and controls go here.',
               style: TextStyle(color: context.textColor.withOpacity(0.5)),
             ),
           ],
@@ -77,7 +91,11 @@ class _ApprovalPageState extends State<ApprovalPage> {
         border: Border.all(color: kGold, width: 1.6),
         color: context.bgColor,
       ),
-      child: const Icon(Icons.settings_input_component_rounded, color: kGold, size: 16),
+      child: const Icon(
+        Icons.settings_input_component_rounded,
+        color: kGold,
+        size: 16,
+      ),
     );
   }
 }

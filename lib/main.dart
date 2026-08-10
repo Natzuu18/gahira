@@ -140,7 +140,8 @@ class _LoginPageState extends State<LoginPage>
           );
         },
         (userDto) {
-          _goToDashboard();
+          debugPrint('Login successful: ${userDto.fname} ${userDto.lname} - Role: ${userDto.roleId}');
+          _goToDashboard(userDto.roleId, '${userDto.fname} ${userDto.lname}');
         },
       );
     }
@@ -152,14 +153,62 @@ class _LoginPageState extends State<LoginPage>
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
       _setLoading(false);
-      _goToDashboard();
+      _goToDashboard('admin', 'OAuth User');
     });
   }
 
-  void _goToDashboard() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const AdminDashboardPage()),
-    );
+  void _goToDashboard(String role, String name) {
+    final String normalizedRole = role.toLowerCase();
+    
+    if (normalizedRole == 'admin') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => AdminDashboardPage(adminName: name)),
+      );
+    } else {
+      // Placeholder for operator, client, etc.
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            backgroundColor: context.bgColor,
+            appBar: AppBar(
+              backgroundColor: context.surfaceColor,
+              title: Text(
+                '${role.toUpperCase()} DASHBOARD',
+                style: const TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2),
+              ),
+              centerTitle: true,
+              iconTheme: const IconThemeData(color: kGold),
+            ),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.construction_rounded, color: kGold, size: 64),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Welcome, $name!',
+                    style: TextStyle(color: context.textColor, fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'The $role dashboard is currently under development.',
+                    style: TextStyle(color: context.mutedTextColor, fontSize: 16),
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: kGold, foregroundColor: kBlack),
+                    child: const Text('LOG OUT'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   @override

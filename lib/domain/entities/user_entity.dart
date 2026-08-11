@@ -19,7 +19,7 @@ class UserEntity extends Equatable {
     required this.lname,
     required this.address,
     required this.email,
-    this.password, // no longer required
+    this.password,
     required this.contactNum,
     required this.roleId,
     required this.status,

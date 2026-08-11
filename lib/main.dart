@@ -53,7 +53,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -71,7 +71,7 @@ class _LoginPageState extends State<LoginPage>
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _spinController.dispose();
     super.dispose();
@@ -94,7 +94,7 @@ class _LoginPageState extends State<LoginPage>
       final authService = AuthService(SupabaseAuthRepository());
       final result = await authService.login(
         LoginRequestDto(
-          email: _usernameController.text.trim(),
+          email: _emailController.text.trim(),
           password: _passwordController.text,
         ),
       );
@@ -141,6 +141,7 @@ class _LoginPageState extends State<LoginPage>
           );
         },
         (userDto) {
+          debugPrint('Login successful: ${userDto.fname} ${userDto.lname} - Role: ${userDto.roleId}');
           _goToDashboard(userDto.roleId, '${userDto.fname} ${userDto.lname}');
         },
       );
@@ -261,7 +262,7 @@ class _LoginPageState extends State<LoginPage>
                         const SizedBox(height: 8),
                         _buildTextField(
                           context,
-                          controller: _usernameController,
+                          controller: _emailController,
                           hint: 'Enter your email',
                           icon: Icons.email_outlined,
                           validator: (v) {

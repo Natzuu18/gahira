@@ -27,18 +27,6 @@ class SupabaseAuthRepository implements AuthRepository {
   /// (avoids "invalid credentials" caused purely by case/whitespace drift).
   String _normalizeEmail(String email) => email.trim().toLowerCase();
 
-  /// Looks up the role name from the `role` table using the given role_id.
-  /// Returns null if roleId is null or no matching row is found.
-  Future<String?> _fetchRoleName(String? roleId) async {
-    if (roleId == null) return null;
-    final roleRow = await _client
-        .from('role')
-        .select('role')
-        .eq('role_id', roleId)
-        .maybeSingle();
-    return roleRow?['role'] as String?;
-  }
-
   Failure _mapError(Object e) {
     if (e is SocketException) {
       return NetworkFailure('No internet connection: ${e.message}');
@@ -89,7 +77,7 @@ class SupabaseAuthRepository implements AuthRepository {
 
       final userData = await _client
           .from('users')
-          .select()
+          .select('*, role:role_id(role)')
           .eq('userId', authUser.id)
           .maybeSingle();
 
@@ -99,15 +87,18 @@ class SupabaseAuthRepository implements AuthRepository {
         );
       }
 
-      // Look up the role name from the `role` table using role_id
-      final roleName = await _fetchRoleName(userData['role_id'] as String?);
+      // Extract the role name from the joined 'role' table
+      final roleData = userData['role'] as Map<String, dynamic>?;
+      final roleName = roleData != null ? roleData['role'] as String? : null;
 
       print('Fetched User: ${authUser.email}, Role ID: ${userData['role_id']}, Role Name: $roleName');
 
       // Update the userData to include the role name for the Model/Entity
+      // We pass the roleName as roleId because the UI logic (main.dart) 
+      // currently checks this field for values like "admin".
       final updatedUserData = Map<String, dynamic>.from(userData);
       if (roleName != null) {
-        updatedUserData['role'] = roleName;
+        updatedUserData['role_id'] = roleName;
       }
 
       return Right(UserModel.fromJson(updatedUserData));
@@ -200,18 +191,19 @@ class SupabaseAuthRepository implements AuthRepository {
 
       final userData = await _client
           .from('users')
-          .select()
+          .select('*, role:role_id(role)')
           .eq('userId', user.id)
           .maybeSingle();
 
       if (userData == null) return const Right(null);
 
-      // Look up the role name from the `role` table using role_id
-      final roleName = await _fetchRoleName(userData['role_id'] as String?);
+      // Extract the role name from the joined 'role' table
+      final roleData = userData['role'] as Map<String, dynamic>?;
+      final roleName = roleData != null ? roleData['role'] as String? : null;
 
       final updatedUserData = Map<String, dynamic>.from(userData);
       if (roleName != null) {
-        updatedUserData['role'] = roleName;
+        updatedUserData['role_id'] = roleName;
       }
 
       print('Current User: ${user.email}, Role ID: ${userData['role_id']}, Role Name: $roleName');

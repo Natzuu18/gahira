@@ -12,8 +12,8 @@ abstract class RegistrationRepository {
   Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber);
 
   /// Verifies the OTP sent to the specified phone number.
-  /// Returns true if the code is valid.
-  Future<Either<Failure, bool>> verifyPhoneOtp({
+  /// Returns the verification token on success.
+  Future<Either<Failure, String>> verifyPhoneOtp({
     required String phoneNumber,
     required String code,
   });

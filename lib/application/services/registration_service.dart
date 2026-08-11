@@ -22,7 +22,7 @@ class RegistrationService {
   }
 
   /// Verifies the OTP sent to the specified phone number.
-  Future<Either<Failure, bool>> verifyPhoneOtp({
+  Future<Either<Failure, String>> verifyPhoneOtp({
     required String phoneNumber,
     required String code,
   }) {

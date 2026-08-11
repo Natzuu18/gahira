@@ -10,6 +10,7 @@ class RegistrationData extends Equatable {
   final String email;
   final String address;
   final UserRole role;
+  final String? phoneVerificationToken;
 
   // Client-specific fields
   final ClientType? clientType;
@@ -30,6 +31,7 @@ class RegistrationData extends Equatable {
     required this.email,
     required this.address,
     required this.role,
+    this.phoneVerificationToken,
     this.clientType,
     this.businessName,
     this.clientDocument,
@@ -48,6 +50,7 @@ class RegistrationData extends Equatable {
         email,
         address,
         role,
+        phoneVerificationToken,
         clientType,
         businessName,
         clientDocument,

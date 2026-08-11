@@ -33,10 +33,10 @@ class UserDto {
       lname: json['lname'] as String,
       address: json['address'] as String,
       email: json['email'] as String,
-      password: json['password'] as String,
-      contactNum: json['contact_Num'] as String,
-      roleId: json['role'] as String,
-      status: json['status'] as String,
+      password: json['password'] as String? ?? '',
+      contactNum: (json['contact_num'] ?? json['contact_Num'] ?? '').toString(),
+      roleId: (json['role_id'] ?? json['role'] ?? '').toString(),
+      status: json['status'] as String? ?? 'pending',
     );
   }
 
@@ -49,8 +49,8 @@ class UserDto {
       'address': address,
       'email': email,
       'password': password,
-      'contact_Num': contactNum,
-      'role': roleId,
+      'contact_num': contactNum,
+      'role_id': roleId,
       'status': status,
     };
   }

@@ -1,5 +1,8 @@
-import 'dart:io';
 import 'dart:math';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
 import 'package:dartz/dartz.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/error/failures.dart';
@@ -13,9 +16,32 @@ import '../supabase/supabase_config.dart';
 class SupabaseRegistrationRepository implements RegistrationRepository {
   final SupabaseClient _client = SupabaseConfig.client;
 
+  // Replace these with your real PhilSMS credentials
+  static const _philsmsToken = '3681|YUG5fYRSWoqGyZb8PWoRoYmmllw7HWvbwkItyOB94c6f0330';
+  static const _philsmsSenderId = 'PhilSMS';
+  static const _philsmsEndpoint = 'https://dashboard.philsms.com/api/v3/sms/send';
+
   @override
   Future<Either<Failure, UserEntity>> register(RegistrationData data) async {
     try {
+      // 0. Confirm phone verification actually happened for this exact phone
+      // and token, server-side.
+      final verification = await _client
+          .from('phone_otp_verifications')
+          .select()
+          .eq('phone', _normalizePhone(data.phone))
+          .eq('verification_token', data.phoneVerificationToken ?? '')
+          .eq('verified', true)
+          .eq('consumed', false)
+          .maybeSingle();
+
+      if (verification == null) {
+        return const Left(AuthFailure('Phone number is not verified'));
+      }
+      if (DateTime.parse(verification['token_expires_at']).isBefore(DateTime.now())) {
+        return const Left(AuthFailure('Phone verification expired, please verify again'));
+      }
+
       // 1. Get the correct role_id from the role table
       // NOTE: table is "role" (singular) per schema, not "roles"
       final roleResult = await _client
@@ -96,14 +122,19 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       }
 
       // 6. Create initial application entry
-      // Schema: applications(application_id, user_id, created_at, response_at, status)
-      // There is no appointment_date column — if you need to persist that,
-      // add the column to the table first.
+      // Schema: applications(application_id, user_id, contact_num, created_at, response_at, status)
       await _client.from('applications').insert({
         'user_id': authUser.id,
+        'contact_num': data.phone,
         'status': 'pending',
         'created_at': DateTime.now().toIso8601String(),
       });
+
+      // Mark the verification token consumed so it can't be replayed.
+      await _client
+          .from('phone_otp_verifications')
+          .update({'consumed': true})
+          .eq('id', verification['id']);
 
       return Right(newUser);
     } on AuthException catch (e) {
@@ -121,10 +152,39 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
   @override
   Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber) async {
     try {
-      await _client.auth.signInWithOtp(
-        phone: phoneNumber,
-        shouldCreateUser: false, // Only verifying number for now
+      final phone = _normalizePhone(phoneNumber);
+      final otp = (100000 + Random().nextInt(900000)).toString();
+      final otpHash = sha256.convert(utf8.encode(otp)).toString();
+
+      // 1. Store the hashed OTP in Supabase
+      await _client.from('phone_otp_verifications').insert({
+        'phone': phone,
+        'otp_hash': otpHash,
+        'otp_expires_at':
+            DateTime.now().add(const Duration(minutes: 5)).toIso8601String(),
+      });
+
+      // 2. Send the OTP via PhilSMS
+      final smsRes = await http.post(
+        Uri.parse(_philsmsEndpoint),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $_philsmsToken',
+        },
+        body: jsonEncode({
+          'recipient': phone,
+          'sender_id': _philsmsSenderId,
+          'type': 'plain',
+          'message': 'Your verification code is $otp. It expires in 5 minutes.',
+        }),
       );
+
+      final smsBody = jsonDecode(smsRes.body) as Map<String, dynamic>;
+      if (smsRes.statusCode >= 300 || smsBody['status'] != 'success') {
+        return Left(ServerFailure(smsBody['message'] ?? 'Failed to send SMS'));
+      }
+
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure('Failed to send OTP: ${e.toString()}'));
@@ -132,21 +192,66 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
   }
 
   @override
-  Future<Either<Failure, bool>> verifyPhoneOtp({
+  Future<Either<Failure, String>> verifyPhoneOtp({
     required String phoneNumber,
     required String code,
   }) async {
     try {
-      final response = await _client.auth.verifyOTP(
-        phone: phoneNumber,
-        token: code,
-        type: OtpType.sms,
-      );
-      return Right(response.user != null || response.session != null);
+      final phone = _normalizePhone(phoneNumber);
+
+      // 1. Look up the most recent unverified row for this phone
+      final List<dynamic> rows = await _client
+          .from('phone_otp_verifications')
+          .select()
+          .eq('phone', phone)
+          .eq('verified', false)
+          .order('created_at', ascending: false)
+          .limit(1);
+
+      if (rows.isEmpty) {
+        return const Left(
+            AuthFailure('No pending verification for this number'));
+      }
+      final row = rows.first as Map<String, dynamic>;
+
+      // 2. Check if code has expired (5 min TTL)
+      final expiresAt = DateTime.parse(row['otp_expires_at'] as String);
+      if (expiresAt.isBefore(DateTime.now())) {
+        return const Left(AuthFailure('Code expired, request a new one'));
+      }
+
+      // 3. Check attempt count (max 5)
+      final attempts = row['attempts'] as int;
+      if (attempts >= 5) {
+        return const Left(
+            AuthFailure('Too many attempts, request a new code'));
+      }
+
+      // 4. Compare hashed input with stored hash
+      final inputHash = sha256.convert(utf8.encode(code)).toString();
+      if (inputHash != row['otp_hash']) {
+        await _client
+            .from('phone_otp_verifications')
+            .update({'attempts': attempts + 1}).eq('id', row['id']);
+        return const Left(AuthFailure('Incorrect code'));
+      }
+
+      // 5. On success: Mark verified, generate token, set token expiry
+      final token = const Uuid().v4().replaceAll('-', '');
+      await _client.from('phone_otp_verifications').update({
+        'verified': true,
+        'verification_token': token,
+        'token_expires_at':
+            DateTime.now().add(const Duration(minutes: 15)).toIso8601String(),
+      }).eq('id', row['id']);
+
+      return Right(token);
     } catch (e) {
-      return const Left(AuthFailure('Invalid or expired OTP code'));
+      return Left(AuthFailure('Verification failed: ${e.toString()}'));
     }
   }
+
+
 
   String _generateRandomPassword() {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$';
@@ -159,5 +264,13 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
   String _bytesToBytea(List<int> bytes) {
     final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     return '\\x$hex';
+  }
+
+  String _normalizePhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.startsWith('63')) return digits;
+    if (digits.startsWith('0')) return '63${digits.substring(1)}';
+    if (digits.startsWith('9')) return '63$digits';
+    return digits;
   }
 }

@@ -11,6 +11,7 @@ class RegistrationDto {
   final String email;
   final String address;
   final String role; // "client" or "operator"
+  final String? phoneVerificationToken;
 
   // Client-specific fields
   final String? clientType; // "individual" or "business"
@@ -31,6 +32,7 @@ class RegistrationDto {
     required this.email,
     required this.address,
     required this.role,
+    this.phoneVerificationToken,
     this.clientType,
     this.businessName,
     this.clientDocumentBase64,
@@ -49,6 +51,7 @@ class RegistrationDto {
       email: entity.email,
       address: entity.address,
       role: entity.role.name,
+      phoneVerificationToken: entity.phoneVerificationToken,
       clientType: entity.clientType?.name,
       businessName: entity.businessName,
       clientDocumentBase64: entity.clientDocument != null
@@ -71,6 +74,7 @@ class RegistrationDto {
       email: email,
       address: address,
       role: UserRole.values.byName(role),
+      phoneVerificationToken: phoneVerificationToken,
       clientType: clientType != null ? ClientType.values.byName(clientType!) : null,
       businessName: businessName,
       clientDocument: clientDocumentBase64 != null
@@ -96,6 +100,7 @@ class RegistrationDto {
       'email': email,
       'address': address,
       'role': role,
+      'phoneVerificationToken': phoneVerificationToken,
       'clientType': clientType,
       'businessName': businessName,
       'clientDocument': clientDocumentBase64,

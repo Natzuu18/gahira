@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../application/dtos/registration_dto.dart';
 import '../../application/services/registration_service.dart';
@@ -60,6 +61,15 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   String? _resumeError;
   DateTime? _appointmentDate;
   String? _appointmentError;
+  String? _viewingMonth;
+  String? _selectedTime;
+
+  final List<Map<String, String>> _availableSlots = [
+    {'date': '2026-08-20', 'time': '09:00 AM', 'address': 'Main Office, 123 Street'},
+    {'date': '2026-08-20', 'time': '11:00 AM', 'address': 'Main Office, 123 Street'},
+    {'date': '2026-08-22', 'time': '02:00 PM', 'address': 'Branch A, 456 Avenue'},
+    {'date': '2026-08-24', 'time': '10:00 AM', 'address': 'Main Office, 123 Street'},
+  ];
 
   bool _isSubmitting = false;
 
@@ -230,58 +240,6 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     });
   }
 
-  Future<void> _pickAppointmentDate() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _appointmentDate ?? today.add(const Duration(days: 1)),
-      firstDate: today,
-      lastDate: today.add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: kGold,
-              onPrimary: kBlack,
-              surface: context.surfaceColor,
-              onSurface: context.textColor,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked == null) return;
-
-    setState(() {
-      _appointmentDate = picked;
-      _appointmentError = null;
-    });
-  }
-
-  void _clearAppointmentDate() {
-    setState(() => _appointmentDate = null);
-  }
-
-  /// Formats a date like "Monday, Aug 10, 2026" without needing the intl
-  /// package.
-  String _formatAppointmentDate(DateTime date) {
-    const weekdays = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-      'Friday', 'Saturday', 'Sunday',
-    ];
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final weekday = weekdays[date.weekday - 1];
-    final month = months[date.month - 1];
-    return '$weekday, $month ${date.day}, ${date.year}';
-  }
-
   Future<void> _handleRegister() async {
     final formValid = _formKey.currentState!.validate();
 
@@ -292,8 +250,8 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           ? 'Please attach your resume'
           : null;
       _appointmentError =
-      (_role == UserRole.operator && _appointmentDate == null)
-          ? 'Please select an appointment date'
+      (_role == UserRole.operator && (_appointmentDate == null || _selectedTime == null))
+          ? 'Please select an interview date and time'
           : null;
       _clientDocumentError =
       (_role == UserRole.client && _clientDocumentFile == null)
@@ -326,7 +284,9 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       clientDocumentName: _clientDocumentFile?.name,
       resumeBase64: _resumeFile?.bytes != null ? base64Encode(_resumeFile!.bytes!) : null,
       resumeName: _resumeFile?.name,
-      appointmentDate: _appointmentDate?.toIso8601String(),
+      appointmentDate: _appointmentDate != null 
+          ? '${DateFormat('yyyy-MM-dd').format(_appointmentDate!)} ${_selectedTime ?? ''}' 
+          : null,
     );
 
     final result = await service.register(registrationDto);
@@ -381,7 +341,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      color: context.surfaceColor.withOpacity(0.4),
+      color: context.surfaceColor.withValues(alpha: 0.4),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 460),
@@ -405,7 +365,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   'Sign up to start managing your mill operations.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: kGold.withOpacity(0.7),
+                    color: kGold.withValues(alpha: 0.7),
                     fontSize: 13,
                   ),
                 ),
@@ -540,7 +500,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   ),
 
                   const SizedBox(height: 18),
-                  _buildLabel('Preferred Appointment Date'),
+                  _buildLabel('Interview Appointment Date'),
                   const SizedBox(height: 8),
                   _buildAppointmentDatePicker(context),
                 ],
@@ -553,7 +513,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                     onPressed: _isSubmitting ? null : _handleRegister,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kGold,
-                      disabledBackgroundColor: kGold.withOpacity(0.6),
+                      disabledBackgroundColor: kGold.withValues(alpha: 0.6),
                       foregroundColor: kBlack,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -625,10 +585,10 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected ? kGold.withOpacity(0.15) : context.surfaceColor,
+          color: isSelected ? kGold.withValues(alpha: 0.15) : context.surfaceColor,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? kGold : kGold.withOpacity(0.25),
+            color: isSelected ? kGold : kGold.withValues(alpha: 0.25),
             width: isSelected ? 1.6 : 1,
           ),
         ),
@@ -636,7 +596,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           children: [
             Icon(
               icon,
-              color: isSelected ? kGold : kGold.withOpacity(0.6),
+              color: isSelected ? kGold : kGold.withValues(alpha: 0.6),
             ),
             const SizedBox(height: 6),
             Text(
@@ -690,10 +650,10 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected ? kGold.withOpacity(0.15) : context.surfaceColor,
+          color: isSelected ? kGold.withValues(alpha: 0.15) : context.surfaceColor,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? kGold : kGold.withOpacity(0.25),
+            color: isSelected ? kGold : kGold.withValues(alpha: 0.25),
             width: isSelected ? 1.6 : 1,
           ),
         ),
@@ -701,7 +661,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           children: [
             Icon(
               icon,
-              color: isSelected ? kGold : kGold.withOpacity(0.6),
+              color: isSelected ? kGold : kGold.withValues(alpha: 0.6),
             ),
             const SizedBox(height: 6),
             Text(
@@ -745,7 +705,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   hintText: 'e.g. 09XXXXXXXXX',
                   hintStyle: TextStyle(color: context.mutedTextColor),
                   prefixIcon:
-                      Icon(Icons.phone_outlined, color: kGold.withOpacity(0.8)),
+                      Icon(Icons.phone_outlined, color: kGold.withValues(alpha: 0.8)),
                   suffixIcon: _isPhoneVerified
                       ? Icon(Icons.verified, color: Colors.green.shade400)
                       : null,
@@ -755,15 +715,15 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                       const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+                    borderSide: BorderSide(color: kGold.withValues(alpha: 0.25)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+                    borderSide: BorderSide(color: kGold.withValues(alpha: 0.25)),
                   ),
                   disabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: kGold.withOpacity(0.15)),
+                    borderSide: BorderSide(color: kGold.withValues(alpha: 0.15)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -784,7 +744,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                     (_isPhoneVerified || _isSendingOtp) ? null : _sendOtp,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kGold,
-                  disabledBackgroundColor: kGold.withOpacity(0.4),
+                  disabledBackgroundColor: kGold.withValues(alpha: 0.4),
                   foregroundColor: kBlack,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -832,18 +792,18 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                     hintText: 'Enter 6-digit code',
                     hintStyle: TextStyle(color: context.mutedTextColor),
                     prefixIcon:
-                        Icon(Icons.sms_outlined, color: kGold.withOpacity(0.8)),
+                        Icon(Icons.sms_outlined, color: kGold.withValues(alpha: 0.8)),
                     filled: true,
                     fillColor: context.surfaceColor,
                     contentPadding: const EdgeInsets.symmetric(
                         vertical: 14, horizontal: 16),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+                      borderSide: BorderSide(color: kGold.withValues(alpha: 0.25)),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+                      borderSide: BorderSide(color: kGold.withValues(alpha: 0.25)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -859,7 +819,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   onPressed: _isVerifyingOtp ? null : _verifyOtp,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kGold,
-                    disabledBackgroundColor: kGold.withOpacity(0.4),
+                    disabledBackgroundColor: kGold.withValues(alpha: 0.4),
                     foregroundColor: kBlack,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -965,12 +925,12 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
               border: Border.all(
                 color: error != null
                     ? Colors.redAccent
-                    : kGold.withOpacity(0.25),
+                    : kGold.withValues(alpha: 0.25),
               ),
             ),
             child: Row(
               children: [
-                Icon(Icons.upload_file_outlined, color: kGold.withOpacity(0.8)),
+                Icon(Icons.upload_file_outlined, color: kGold.withValues(alpha: 0.8)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -985,7 +945,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                 ),
                 if (file != null)
                   IconButton(
-                    icon: Icon(Icons.close, color: kGold.withOpacity(0.7)),
+                    icon: Icon(Icons.close, color: kGold.withValues(alpha: 0.7)),
                     onPressed: onRemove,
                   ),
               ],
@@ -1004,58 +964,292 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   }
 
   Widget _buildAppointmentDatePicker(BuildContext context) {
-    final label = _appointmentDate != null
-        ? _formatAppointmentDate(_appointmentDate!)
-        : 'Tap to select a date';
+    // Group slots by month to show a "Full Calendar" view per month
+    final Map<String, List<Map<String, String>>> groupedSlots = {};
+    final Map<String, DateTime> monthReference = {};
+
+    for (var slot in _availableSlots) {
+      final date = DateFormat('yyyy-MM-dd').parse(slot['date']!);
+      final monthKey = DateFormat('MMMM yyyy').format(date);
+      groupedSlots.putIfAbsent(monthKey, () => []).add(slot);
+      monthReference.putIfAbsent(monthKey, () => DateTime(date.year, date.month));
+    }
+
+    final monthNames = groupedSlots.keys.toList();
+    if (_viewingMonth == null && monthNames.isNotEmpty) {
+      _viewingMonth = monthNames.first;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: _pickAppointmentDate,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+        if (monthNames.isNotEmpty) ...[
+          _buildLabel('Select Month'),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               color: context.surfaceColor,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: _appointmentError != null
-                    ? Colors.redAccent
-                    : kGold.withOpacity(0.25),
+              border: Border.all(color: kGold.withValues(alpha: 0.25)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _viewingMonth,
+                isExpanded: true,
+                dropdownColor: context.surfaceColor,
+                icon: const Icon(Icons.arrow_drop_down, color: kGold),
+                items: monthNames.map((String month) {
+                  return DropdownMenuItem<String>(
+                    value: month,
+                    child: Text(
+                      month,
+                      style: TextStyle(color: context.textColor),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (newValue) {
+                  setState(() {
+                    _viewingMonth = newValue;
+                  });
+                },
               ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (_viewingMonth != null) ...[
+          Builder(builder: (context) {
+            final monthName = _viewingMonth!;
+            final availableSlots = groupedSlots[monthName]!;
+            final refDate = monthReference[monthName]!;
+
+            // Calendar logic
+            final firstDay = DateTime(refDate.year, refDate.month, 1);
+            final daysInMonth = DateTime(refDate.year, refDate.month + 1, 0).day;
+            final offset = firstDay.weekday % 7; // 0 = Sunday, 1 = Monday...
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Day labels
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+                      .map((d) => SizedBox(
+                            width: 40,
+                            child: Text(
+                              d,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: kGold.withValues(alpha: 0.5),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                // Full Calendar Grid
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                  ),
+                  itemCount: daysInMonth + offset,
+                  itemBuilder: (context, index) {
+                    if (index < offset) return const SizedBox.shrink();
+
+                    final day = index - offset + 1;
+                    final currentDate = DateTime(refDate.year, refDate.month, day);
+                    final dateStr = DateFormat('yyyy-MM-dd').format(currentDate);
+
+                    final slot = availableSlots.firstWhere(
+                      (s) => s['date'] == dateStr,
+                      orElse: () => {},
+                    );
+                    final bool isAvailable = slot.isNotEmpty;
+                    final bool isSelected = _appointmentDate != null &&
+                        DateFormat('yyyy-MM-dd').format(_appointmentDate!) ==
+                            dateStr;
+
+                    return InkWell(
+                      onTap: isAvailable
+                          ? () => setState(() {
+                                _appointmentDate = currentDate;
+                                _selectedTime = null; // Reset time when date changes
+                                _appointmentError = null;
+                              })
+                          : null,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? kGold
+                              : (isAvailable
+                                  ? kGold.withValues(alpha: 0.1)
+                                  : Colors.transparent),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected
+                                ? kGold
+                                : (isAvailable
+                                    ? kGold.withValues(alpha: 0.4)
+                                    : Colors.transparent),
+                            width: 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            day.toString(),
+                            style: TextStyle(
+                              color: isSelected
+                                  ? kBlack
+                                  : (isAvailable
+                                      ? context.textColor
+                                      : context.mutedTextColor.withValues(alpha: 0.2)),
+                              fontWeight: isAvailable ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            );
+          }),
+        ],
+        const SizedBox(height: 20),
+        // Time Slots
+        if (_appointmentDate != null) ...[
+          Builder(builder: (context) {
+            final dateStr = DateFormat('yyyy-MM-dd').format(_appointmentDate!);
+            final daySlots = _availableSlots
+                .where((s) => s['date'] == dateStr)
+                .map((s) => s['time']!)
+                .toList();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildLabel('Available Time Slots'),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: daySlots.map((time) {
+                    final isSelected = _selectedTime == time;
+                    return ChoiceChip(
+                      label: Text(
+                        time,
+                        style: TextStyle(
+                          color: isSelected ? kBlack : context.textColor,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 12,
+                        ),
+                      ),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedTime = selected ? time : null;
+                          _appointmentError = null;
+                        });
+                      },
+                      selectedColor: kGold,
+                      backgroundColor: context.surfaceColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(
+                          color: isSelected ? kGold : kGold.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      showCheckmark: false,
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
+              ],
+            );
+          }),
+        ],
+        // Selected Date Address Detail Card
+        if (_appointmentDate != null && _selectedTime != null) ...[
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: kGold.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: kGold.withValues(alpha: 0.3), width: 1.5),
             ),
             child: Row(
               children: [
-                Icon(Icons.calendar_today_outlined,
-                    color: kGold.withOpacity(0.8)),
-                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: kGold.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.location_on, color: kGold, size: 24),
+                ),
+                const SizedBox(width: 16),
                 Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: _appointmentDate != null
-                          ? context.textColor
-                          : context.mutedTextColor,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'INTERVIEW LOCATION & TIME',
+                        style: TextStyle(
+                          color: kGold.withValues(alpha: 0.8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _availableSlots.firstWhere((s) =>
+                            s['date'] == DateFormat('yyyy-MM-dd').format(_appointmentDate!) &&
+                            s['time'] == _selectedTime)['address']!,
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${DateFormat('EEEE, MMMM d, yyyy').format(_appointmentDate!)} at $_selectedTime',
+                        style: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (_appointmentDate != null)
-                  IconButton(
-                    icon: Icon(Icons.close, color: kGold.withOpacity(0.7)),
-                    onPressed: _clearAppointmentDate,
-                  ),
               ],
             ),
           ),
-        ),
+        ],
         if (_appointmentError != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            _appointmentError!,
-            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              _appointmentError!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
           ),
         ],
       ],
@@ -1096,7 +1290,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: context.mutedTextColor),
-        prefixIcon: Icon(icon, color: kGold.withOpacity(0.8)),
+        prefixIcon: Icon(icon, color: kGold.withValues(alpha: 0.8)),
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: context.surfaceColor,
@@ -1104,11 +1298,11 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+          borderSide: BorderSide(color: kGold.withValues(alpha: 0.25)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+          borderSide: BorderSide(color: kGold.withValues(alpha: 0.25)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),

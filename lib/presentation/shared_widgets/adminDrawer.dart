@@ -7,12 +7,13 @@ import '../admin/admin_dashboard.dart';
 import '../admin/approval_page.dart';
 import '../admin/report_page.dart';
 import '../admin/billing_page.dart';
+import '../admin/availability_page.dart';
 
 // Shared drawer menu used across every admin page.
 // Drop <AdminDrawer currentMenu: AdminMenu.xxx> into any page's
 // `endDrawer:` so the menu (and its navigation) stays consistent.
 
-enum AdminMenu { dashboard, approval, report, billing }
+enum AdminMenu { dashboard, approval, report, billing, availability }
 
 class AdminDrawer extends StatelessWidget {
   const AdminDrawer({
@@ -112,6 +113,13 @@ class AdminDrawer extends StatelessWidget {
               label: 'Billing',
               menu: AdminMenu.billing,
               page: const BillingPage(),
+            ),
+            _buildItem(
+              context,
+              icon: Icons.event_available_rounded,
+              label: 'Availability',
+              menu: AdminMenu.availability,
+              page: const AvailabilityPage(),
             ),
 
             const Spacer(),

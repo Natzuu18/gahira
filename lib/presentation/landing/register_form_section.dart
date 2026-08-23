@@ -301,72 +301,115 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
 
     setState(() => _isSubmitting = true);
 
-    final service = RegistrationService(SupabaseRegistrationRepository());
-    final registrationDto = RegistrationDto(
-      firstName: _firstNameController.text.trim(),
-      middleName: _middleNameController.text.trim(),
-      lastName: _lastNameController.text.trim(),
-      phone: _phoneController.text.trim(),
-      email: _emailController.text.trim(),
-      address: _addressController.text.trim(),
-      role: _role.name,
-      phoneVerificationToken: _phoneVerificationToken,
-      clientType: _role == UserRole.client ? _clientType.name : null,
-      businessName: _role == UserRole.client ? _businessNameController.text.trim() : null,
-      clientDocumentBase64: _clientDocumentFile?.bytes != null ? base64Encode(_clientDocumentFile!.bytes!) : null,
-      clientDocumentName: _clientDocumentFile?.name,
-      resumeBase64: _resumeFile?.bytes != null ? base64Encode(_resumeFile!.bytes!) : null,
-      resumeName: _resumeFile?.name,
-      appointmentDate: _appointmentDate != null 
-          ? '${DateFormat('yyyy-MM-dd').format(_appointmentDate!)} ${_selectedTime ?? ''}' 
-          : null,
-    );
+    try {
+      final service = RegistrationService(SupabaseRegistrationRepository());
+      
+      // Format appointment date as proper ISO 8601
+      String? formattedAppointmentDate;
+      if (_appointmentDate != null && _selectedTime != null) {
+        // Parse the display time (e.g., "09:00 AM") and combine with date
+        try {
+          final timeParts = _selectedTime!.split(' ');
+          final hourMin = timeParts[0].split(':');
+          final hour = int.parse(hourMin[0]);
+          final minute = int.parse(hourMin[1]);
+          final isPM = timeParts.length > 1 && timeParts[1].toUpperCase() == 'PM';
+          final adjustedHour = isPM && hour != 12 ? hour + 12 : (hour == 12 && !isPM ? 0 : hour);
+          
+          final appointmentDateTime = DateTime(
+            _appointmentDate!.year,
+            _appointmentDate!.month,
+            _appointmentDate!.day,
+            adjustedHour,
+            minute,
+          );
+          formattedAppointmentDate = appointmentDateTime.toIso8601String();
+        } catch (e) {
+          formattedAppointmentDate = null;
+        }
+      }
+      
+      final registrationDto = RegistrationDto(
+        firstName: _firstNameController.text.trim(),
+        middleName: _middleNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        phone: _phoneController.text.trim(),
+        email: _emailController.text.trim(),
+        address: _addressController.text.trim(),
+        role: _role.name,
+        phoneVerificationToken: _phoneVerificationToken,
+        clientType: _role == UserRole.client ? _clientType.name : null,
+        businessName: _role == UserRole.client ? _businessNameController.text.trim() : null,
+        clientDocumentBase64: _clientDocumentFile?.bytes != null ? base64Encode(_clientDocumentFile!.bytes!) : null,
+        clientDocumentName: _clientDocumentFile?.name,
+        resumeBase64: _resumeFile?.bytes != null ? base64Encode(_resumeFile!.bytes!) : null,
+        resumeName: _resumeFile?.name,
+        appointmentDate: formattedAppointmentDate,
+      );
 
-    final result = await service.register(registrationDto);
+      final result = await service.register(registrationDto);
 
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
 
-    result.fold(
-      (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text(failure.message)),
-              ],
+      result.fold(
+        (failure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(failure.message)),
+                ],
+              ),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      },
-      (userDto) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Account created. Your temporary '
-                        'password was sent by SMS — please change your '
-                        'password after logging in.',
+          );
+        },
+        (userDto) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Account created. Your temporary '
+                          'password was sent by SMS — please change your '
+                          'password after logging in.',
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+              backgroundColor: Colors.green.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            backgroundColor: Colors.green.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Registration failed: ${e.toString()}')),
+            ],
           ),
-        );
-      },
-    );
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   @override

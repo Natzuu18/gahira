@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/adminDrawer.dart';
+import '../../infrastructure/repositories/supabase_approval_repository.dart';
 
 /// -----------------------------------------------------------------------
 /// MODEL
@@ -49,119 +50,152 @@ class PendingAccount {
 
 /// -----------------------------------------------------------------------
 /// SERVICE LAYER
-/// Replace the bodies of these methods with real calls to your backend
-/// (Firebase, REST API, etc.) and your SMS provider (Semaphore, Twilio,
-/// Infobip, etc.). Everything else in this file only depends on these
-/// method signatures, so swapping the implementation is all you need.
+/// Uses Supabase backend for account approval and PhilSMS for notifications
 /// -----------------------------------------------------------------------
 class ApprovalService {
+  final SupabaseApprovalRepository _repository = SupabaseApprovalRepository();
+
   /// Fetch accounts awaiting admin approval.
   Future<List<PendingAccount>> fetchPendingAccounts() async {
-    // TODO: replace with real query, e.g.:
-    // final snap = await FirebaseFirestore.instance
-    //     .collection('users')
-    //     .where('status', isEqualTo: 'pending')
-    //     .get();
-    await Future.delayed(const Duration(milliseconds: 600));
+    final result = await _repository.fetchPendingAccounts();
+    
+    final users = result.fold(
+      (failure) {
+        debugPrint('Error fetching pending accounts: ${failure.message}');
+        return <Map<String, dynamic>>[];
+      },
+      (users) => users,
+    );
+    
+    return await _buildAccountsFromUsers(users);
+  }
 
-    return [
-      PendingAccount(
-        id: '1',
-        fullName: 'Juan Dela Cruz',
-        username: 'juan.delacruz',
-        phoneNumber: '+639171234567',
-        role: AccountRole.client,
-        requestedAt: DateTime.now().subtract(const Duration(hours: 3)),
-        documents: [
-          AccountDocument(
-            id: 'd1',
-            label: 'Valid ID (Front)',
-            url: 'https://example.com/uploads/juan_id_front.jpg',
-            type: DocumentType.image,
-          ),
-          AccountDocument(
-            id: 'd2',
-            label: 'Valid ID (Back)',
-            url: 'https://example.com/uploads/juan_id_back.jpg',
-            type: DocumentType.image,
-          ),
-        ],
-      ),
-      PendingAccount(
-        id: '2',
-        fullName: 'Maria Santos',
-        username: 'maria.santos',
-        phoneNumber: '+639181234567',
-        role: AccountRole.operator,
-        requestedAt: DateTime.now().subtract(const Duration(days: 1)),
-        documents: [
-          AccountDocument(
-            id: 'd3',
-            label: 'Valid ID',
-            url: 'https://example.com/uploads/maria_id.jpg',
-            type: DocumentType.image,
-          ),
-          AccountDocument(
-            id: 'd4',
-            label: 'Business Permit',
-            url: 'https://example.com/uploads/maria_permit.pdf',
-            type: DocumentType.pdf,
-          ),
-          AccountDocument(
-            id: 'd5',
-            label: 'Driver\'s License',
-            url: 'https://example.com/uploads/maria_license.jpg',
-            type: DocumentType.image,
-          ),
-        ],
-      ),
-    ];
+  /// Fetch all registered accounts (for debugging/verification)
+  Future<List<PendingAccount>> fetchAllAccounts() async {
+    final result = await _repository.fetchAllAccounts();
+    
+    final users = result.fold(
+      (failure) {
+        debugPrint('Error fetching all accounts: ${failure.message}');
+        return <Map<String, dynamic>>[];
+      },
+      (users) => users,
+    );
+    
+    return await _buildAccountsFromUsers(users);
+  }
+
+  /// Helper method to build PendingAccount list from user data
+  Future<List<PendingAccount>> _buildAccountsFromUsers(List<Map<String, dynamic>> users) async {
+    final accounts = <PendingAccount>[];
+    for (final user in users) {
+      final roleData = user['role'] as Map<String, dynamic>?;
+      final roleName = roleData != null ? roleData['role'] as String? : 'client';
+      final role = roleName == 'operator' ? AccountRole.operator : AccountRole.client;
+      
+      final applications = user['applications'] as List<dynamic>?;
+      final application = applications != null && applications.isNotEmpty 
+          ? applications.first as Map<String, dynamic> 
+          : null;
+      
+      final personalDetails = user['personal_details'] as List<dynamic>?;
+      
+      // Build documents list from personal_details
+      final documents = <AccountDocument>[];
+      if (personalDetails != null) {
+        for (final detail in personalDetails) {
+          final detailMap = detail as Map<String, dynamic>;
+          final documentId = detailMap['document_id'] as String?;
+          if (documentId != null) {
+            // Try to get document URL
+            final urlResult = await _repository.getDocumentUrl(
+              userId: user['user_id'] as String,
+              documentId: documentId,
+            );
+            urlResult.fold(
+              (failure) {
+                debugPrint('Error getting document URL: ${failure.message}');
+              },
+              (url) {
+                documents.add(AccountDocument(
+                  id: documentId,
+                  label: role == AccountRole.operator ? 'Resume' : 'Valid ID',
+                  url: url,
+                  type: DocumentType.other, // Would need file extension check for accurate type
+                ));
+              },
+            );
+          }
+        }
+      }
+
+      accounts.add(PendingAccount(
+        id: user['user_id'] as String,
+        fullName: '${user['fname']} ${user['mname'] != null ? '${user['mname']} ' : ''}${user['lname']}',
+        username: user['email'] as String,
+        phoneNumber: user['contact_num'] as String,
+        role: role,
+        requestedAt: application != null 
+            ? DateTime.parse(application['created_at'] as String)
+            : DateTime.parse(user['created_at'] as String),
+        documents: documents,
+      ));
+    }
+    return accounts;
   }
 
   /// Marks the account as approved and stores the temp password
-  /// (hashed, with a mustChangePassword flag) in your backend.
   Future<void> approveAccount({
     required PendingAccount account,
     required String temporaryPassword,
   }) async {
-    // TODO: replace with real update, e.g.:
-    // await FirebaseFirestore.instance.collection('users').doc(account.id).update({
-    //   'status': 'approved',
-    //   'password': hash(temporaryPassword),
-    //   'mustChangePassword': true,
-    //   'approvedAt': FieldValue.serverTimestamp(),
-    // });
-    await Future.delayed(const Duration(milliseconds: 500));
+    final result = await _repository.approveAccount(
+      userId: account.id,
+      temporaryPassword: temporaryPassword,
+    );
+    
+    result.fold(
+      (failure) {
+        debugPrint('Error approving account: ${failure.message}');
+        throw Exception(failure.message);
+      },
+      (_) {},
+    );
   }
 
   Future<void> rejectAccount(PendingAccount account) async {
-    // TODO: replace with real update (status: 'rejected')
-    await Future.delayed(const Duration(milliseconds: 400));
+    final result = await _repository.rejectAccount(userId: account.id);
+    
+    result.fold(
+      (failure) {
+        debugPrint('Error rejecting account: ${failure.message}');
+        throw Exception(failure.message);
+      },
+      (_) {},
+    );
   }
 
   /// Sends the approval SMS containing username + temporary password.
-  /// Wire this up to your SMS gateway of choice.
   Future<void> sendApprovalSms({
     required String phoneNumber,
     required String username,
     required String temporaryPassword,
   }) async {
-    final message = 'Your GAHIRA account has been approved.\n'
-        'Username: $username\n'
-        'Temporary Password: $temporaryPassword\n'
-        'Please log in and change your password immediately.';
-
-    // TODO: replace with your SMS provider call, e.g.:
-    // await http.post(
-    //   Uri.parse('https://api.semaphore.co/api/v4/messages'),
-    //   body: {
-    //     'apikey': SMS_API_KEY,
-    //     'number': phoneNumber,
-    //     'message': message,
-    //   },
-    // );
-    await Future.delayed(const Duration(milliseconds: 500));
-    debugPrint('SMS -> $phoneNumber: $message');
+    final result = await _repository.sendApprovalSms(
+      phoneNumber: phoneNumber,
+      username: username,
+      temporaryPassword: temporaryPassword,
+    );
+    
+    result.fold(
+      (failure) {
+        debugPrint('Error sending SMS: ${failure.message}');
+        throw Exception(failure.message);
+      },
+      (_) {
+        debugPrint('SMS sent successfully to $phoneNumber');
+      },
+    );
   }
 }
 

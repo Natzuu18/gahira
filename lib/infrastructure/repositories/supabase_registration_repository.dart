@@ -19,7 +19,7 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
   // Replace these with your real PhilSMS credentials
   static const _philsmsToken = '3681|YUG5fYRSWoqGyZb8PWoRoYmmllw7HWvbwkItyOB94c6f0330';
   static const _philsmsSenderId = 'PhilSMS';
-  static const _philsmsEndpoint = 'https://dash board.philsms.com/api/v3/sms/send';
+  static const _philsmsEndpoint = 'https://dashboard.philsms.com/api/v3/sms/send';
 
   @override
   Future<Either<Failure, UserEntity>> register(RegistrationData data) async {
@@ -122,10 +122,9 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       }
 
       // 6. Create initial application entry
-      // Schema: applications(application_id, user_id, contact_num, created_at, response_at, status)
+      // Schema: applications(application_id, user_id, created_at, response_at, status)
       await _client.from('applications').insert({
         'user_id': authUser.id,
-        'contact_num': data.phone,
         'status': 'pending',
         'created_at': DateTime.now().toIso8601String(),
       });

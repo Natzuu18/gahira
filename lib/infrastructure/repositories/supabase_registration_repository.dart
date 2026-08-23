@@ -19,7 +19,7 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
   // Replace these with your real PhilSMS credentials
   static const _philsmsToken = '3681|YUG5fYRSWoqGyZb8PWoRoYmmllw7HWvbwkItyOB94c6f0330';
   static const _philsmsSenderId = 'PhilSMS';
-  static const _philsmsEndpoint = 'https://dashboard.philsms.com/api/v3/sms/send';
+  static const _philsmsEndpoint = 'https://dash board.philsms.com/api/v3/sms/send';
 
   @override
   Future<Either<Failure, UserEntity>> register(RegistrationData data) async {
@@ -251,7 +251,20 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> getAvailableSlots() async {
+    try {
+      final response = await _client
+          .from('appointment_availability')
+          .select()
+          .eq('status', 'open')
+          .order('date', ascending: true);
 
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(ServerFailure('Failed to fetch availability: ${e.toString()}'));
+    }
+  }
 
   String _generateRandomPassword() {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$';

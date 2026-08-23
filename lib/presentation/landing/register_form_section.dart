@@ -64,18 +64,15 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   String? _viewingMonth;
   String? _selectedTime;
 
-  final List<Map<String, String>> _availableSlots = [
-    {'date': '2026-08-20', 'time': '09:00 AM', 'address': 'Main Office, 123 Street'},
-    {'date': '2026-08-20', 'time': '11:00 AM', 'address': 'Main Office, 123 Street'},
-    {'date': '2026-08-22', 'time': '02:00 PM', 'address': 'Branch A, 456 Avenue'},
-    {'date': '2026-08-24', 'time': '10:00 AM', 'address': 'Main Office, 123 Street'},
-  ];
+  List<Map<String, String>> _availableSlots = [];
+  bool _isLoadingSlots = true;
 
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
+    _fetchAvailableSlots();
     // If the person edits the phone number after sending a code or getting
     // verified, that code/verification no longer applies to the new number.
     _phoneController.addListener(() {
@@ -238,6 +235,42 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       _otpController.clear();
       _phoneVerifyError = null;
     });
+  }
+
+  Future<void> _fetchAvailableSlots() async {
+    setState(() => _isLoadingSlots = true);
+    final service = RegistrationService(SupabaseRegistrationRepository());
+    final result = await service.getAvailableSlots();
+
+    if (!mounted) return;
+
+    result.fold(
+      (failure) {
+        setState(() => _isLoadingSlots = false);
+      },
+      (slots) {
+        setState(() {
+          _availableSlots = slots.map((s) {
+            return {
+              'date': s['date'].toString(),
+              'time': _displayTime(s['start_time'].toString()),
+              'address': s['address'].toString(),
+            };
+          }).toList();
+          _isLoadingSlots = false;
+        });
+      },
+    );
+  }
+
+  String _displayTime(String timeStr) {
+    try {
+      // Expecting HH:mm:ss from DB
+      final dt = DateFormat('HH:mm:ss').parse(timeStr);
+      return DateFormat('hh:mm a').format(dt);
+    } catch (e) {
+      return timeStr;
+    }
   }
 
   Future<void> _handleRegister() async {
@@ -502,7 +535,14 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   const SizedBox(height: 18),
                   _buildLabel('Interview Appointment Date'),
                   const SizedBox(height: 8),
-                  _buildAppointmentDatePicker(context),
+                  _isLoadingSlots
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: CircularProgressIndicator(color: kGold),
+                          ),
+                        )
+                      : _buildAppointmentDatePicker(context),
                 ],
 
                 const SizedBox(height: 26),

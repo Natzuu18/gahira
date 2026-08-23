@@ -56,28 +56,331 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         currentMenu: AdminMenu.dashboard,
         adminName: widget.adminName,
       ),
-      body: Center(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {},
+        backgroundColor: kGold,
+        foregroundColor: kBlack,
+        child: const Icon(Icons.add_rounded),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.dashboard_customize_rounded,
-                color: kGold.withOpacity(0.8), size: 56),
-            const SizedBox(height: 16),
+            // Welcome section
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Welcome back,',
+                      style: TextStyle(
+                        color: context.mutedTextColor,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      widget.adminName,
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: kGold.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: kGold.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.circle, color: Colors.green, size: 8),
+                      const SizedBox(width: 8),
+                      Text(
+                        'System Live',
+                        style: TextStyle(
+                          color: kGold,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // Metrics Summary Cards
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 1.5,
+              children: [
+                _buildMetricCard(
+                  'Total Mills',
+                  '12',
+                  Icons.settings_input_component_rounded,
+                  kGold,
+                ),
+                _buildMetricCard(
+                  'Active',
+                  '08',
+                  Icons.play_circle_outline_rounded,
+                  Colors.green,
+                ),
+                _buildMetricCard(
+                  'Maintenance',
+                  '02',
+                  Icons.build_circle_outlined,
+                  Colors.orange,
+                ),
+                _buildMetricCard(
+                  'Efficiency',
+                  '94%',
+                  Icons.bar_chart_rounded,
+                  Colors.blue,
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // Mill Status List Section
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Mill Status',
+                  style: TextStyle(
+                    color: context.textColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('View All', style: TextStyle(color: kGold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildMillStatusItem('Mill #01 - Primary', 'Running', 45.2, 0.85),
+            _buildMillStatusItem('Mill #02 - Secondary', 'Running', 42.8, 0.78),
+            _buildMillStatusItem('Mill #03 - Tertiary', 'Stopped', 0.0, 0.0),
+            _buildMillStatusItem('Mill #04 - Auxiliary', 'Maintenance', 12.5, 0.30),
+
+            const SizedBox(height: 32),
+
+            // Recent Activity
             Text(
-              'Dashboard',
+              'Recent Activity',
               style: TextStyle(
                 color: context.textColor,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Ball mill status, reports, and controls go here.',
-              style: TextStyle(color: context.textColor.withOpacity(0.5)),
-            ),
+            const SizedBox(height: 16),
+            _buildActivityLog('Maintenance scheduled for Mill #03', '2 hours ago'),
+            _buildActivityLog('Shift report generated by Operator John', '4 hours ago'),
+            _buildActivityLog('System update completed', 'Yesterday'),
+            const SizedBox(height: 80), // Space for FAB
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kGold.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Icon(icon, color: color, size: 24),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: context.textColor,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                title,
+                style: TextStyle(
+                  color: context.mutedTextColor,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMillStatusItem(String name, String status, double rpm, double load) {
+    final bool isRunning = status == 'Running';
+    final Color statusColor = status == 'Running'
+        ? Colors.green
+        : (status == 'Maintenance' ? Colors.orange : Colors.red);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kGold.withOpacity(0.05)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.settings_input_component_rounded,
+                  color: statusColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Status: $status',
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: context.mutedTextColor),
+            ],
+          ),
+          if (isRunning) ...[
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildMiniStat('RPM', '$rpm'),
+                const SizedBox(width: 24),
+                _buildMiniStat('Load', '${(load * 100).toInt()}%'),
+                const Spacer(),
+                SizedBox(
+                  width: 60,
+                  child: LinearProgressIndicator(
+                    value: load,
+                    backgroundColor: kGold.withOpacity(0.1),
+                    color: kGold,
+                    minHeight: 4,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStat(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: context.mutedTextColor, fontSize: 10),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: context.textColor,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActivityLog(String message, String time) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: kGold,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message,
+                  style: TextStyle(
+                    color: context.textColor,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  time,
+                  style: TextStyle(
+                    color: context.mutedTextColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

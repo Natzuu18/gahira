@@ -17,4 +17,7 @@ abstract class RegistrationRepository {
     required String phoneNumber,
     required String code,
   });
+
+  /// Fetches available appointment slots from the database.
+  Future<Either<Failure, List<Map<String, dynamic>>>> getAvailableSlots();
 }

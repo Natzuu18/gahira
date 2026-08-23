@@ -9,6 +9,11 @@ class RegistrationService {
 
   RegistrationService(this.repository);
 
+  /// Fetches available appointment slots from the database.
+  Future<Either<Failure, List<Map<String, dynamic>>>> getAvailableSlots() {
+    return repository.getAvailableSlots();
+  }
+
   /// Submits the registration DTO to the repository.
   /// Maps the resulting UserEntity to a UserDto.
   Future<Either<Failure, UserDto>> register(RegistrationDto registrationDto) async {

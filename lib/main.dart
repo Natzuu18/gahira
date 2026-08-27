@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_dashboard.dart';
 import './presentation/operator/operator_dashboard.dart';
+import './presentation/client/client_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
 
@@ -170,8 +171,12 @@ class _LoginPageState extends State<LoginPage>
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => OperatorDashboardPage(operatorName: name)),
       );
+    } else if (normalizedRole == 'client') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => ClientDashboardPage(clientName: name)),
+      );
     } else {
-      // Placeholder for other roles (client, etc.)
+      // Placeholder for other roles
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => Scaffold(

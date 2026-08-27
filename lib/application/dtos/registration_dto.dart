@@ -66,6 +66,15 @@ class RegistrationDto {
   }
 
   RegistrationData toEntity() {
+    DateTime? parsedAppointmentDate;
+    if (appointmentDate != null && appointmentDate!.isNotEmpty) {
+      try {
+        parsedAppointmentDate = DateTime.parse(appointmentDate!);
+      } catch (e) {
+        parsedAppointmentDate = null;
+      }
+    }
+    
     return RegistrationData(
       firstName: firstName,
       middleName: middleName,
@@ -85,9 +94,7 @@ class RegistrationDto {
           ? Uint8List.fromList(base64Decode(resumeBase64!))
           : null,
       resumeName: resumeName,
-      appointmentDate: appointmentDate != null
-          ? DateTime.parse(appointmentDate!)
-          : null,
+      appointmentDate: parsedAppointmentDate,
     );
   }
 

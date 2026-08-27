@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_dashboard.dart';
+import './presentation/operator/operator_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
 
@@ -165,8 +166,12 @@ class _LoginPageState extends State<LoginPage>
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => AdminDashboardPage(adminName: name)),
       );
+    } else if (normalizedRole == 'operator') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => OperatorDashboardPage(operatorName: name)),
+      );
     } else {
-      // Placeholder for operator, client, etc.
+      // Placeholder for other roles (client, etc.)
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => Scaffold(

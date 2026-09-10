@@ -141,12 +141,12 @@ class LandingPage extends StatelessWidget {
                 ElevatedButton(
                   // Also opens the sign-up form, consistent with the top CTA.
                   onPressed: () => _goToRegister(context),
-                  child: const Text('SIGN UP'),
+                  child: const Text('APPLY NOW'),
                 ),
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () => _goToLogin(context),
-                  child: const Text('Already have an account? Log in'),
+                  child: const Text('Already applied? Log in'),
                 ),
                 const SizedBox(height: 16),
                 const Divider(),

@@ -3,17 +3,16 @@ import 'package:dartz/dartz.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:math';
 
 import '../../core/error/failures.dart';
 import '../supabase/supabase_config.dart';
+import '../../core/config/env_config.dart';
 
 class SupabaseApprovalRepository {
   final SupabaseClient _client = SupabaseConfig.client;
 
-  // PhilSMS credentials for sending approval SMS
-  static const _philsmsToken = '3681|YUG5fYRSWoqGyZb8PWoRoYmmllw7HWvbwkItyOB94c6f0330';
-  static const _philsmsSenderId = 'PhilSMS';
-  static const _philsmsEndpoint = 'https://dashboard.philsms.com/api/v3/sms/send';
+  SupabaseClient get client => _client;
 
   static const _networkHints = [
     'network',
@@ -54,6 +53,176 @@ class SupabaseApprovalRepository {
     if (digits.startsWith('0')) return '63${digits.substring(1)}';
     if (digits.startsWith('9')) return '63$digits';
     return digits;
+  }
+
+  /// Fetches all pending applications joined with user and availability info
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchPendingApplications() async {
+    try {
+      final response = await _client
+          .from('applications')
+          .select('''
+            application_id,
+            created_at,
+            status,
+            temp_pass,
+            document_id,
+            appointment_date,
+            appointment_status,
+            appointment_remarks,
+            user:user_id (
+              userId,
+              fname,
+              mname,
+              lname,
+              email,
+              contact_num,
+              role:role_id (role)
+            ),
+            availability:availability_id (
+              date,
+              start_time,
+              end_time,
+              address
+            )
+          ''')
+          .eq('status', 'pending')
+          .order('created_at', ascending: false);
+
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(_mapError(e));
+    }
+  }
+
+  /// Consolidates approval logic via backend to ensure SMS and DB consistency
+  Future<Either<Failure, void>> approveApplication({
+    required String applicationId,
+    required String userId,
+  }) async {
+    try {
+      // 1. Fetch the temporary password generated during registration
+      final appData = await _client
+          .from('applications')
+          .select('temp_pass, user:user_id(contact_num)')
+          .eq('application_id', applicationId)
+          .single();
+      
+      final tempPassword = appData['temp_pass'] as String?;
+      if (tempPassword == null) {
+        return const Left(ServerFailure('Temporary password not found for this application.'));
+      }
+
+      final user = appData['user'] as Map<String, dynamic>?;
+      final phone = _normalizePhone(user?['contact_num'] ?? '');
+
+      // 2. Update application and user status in Supabase to 'approved'
+      await _client
+          .from('applications')
+          .update({
+            'status': 'approved',
+            'response_at': DateTime.now().toIso8601String(),
+          })
+          .eq('application_id', applicationId);
+
+      await _client
+          .from('users')
+          .update({'status': 'approved'})
+          .eq('userId', userId);
+
+      // 4. Send the approval SMS via PhilSMS
+      final response = await http.post(
+        Uri.parse(EnvConfig.philsmsEndpoint),
+        headers: {
+          'Authorization': 'Bearer ${EnvConfig.philsmsApiKey.trim()}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'recipient': phone,
+          'sender_id': EnvConfig.philsmsSenderId,
+          'message': 'Gahira: Welcome! Access your profile with this temporary pass: $tempPassword',
+        }),
+      );
+
+      if (response.statusCode >= 300) {
+        // ROLLBACK: Revert status back to pending if SMS delivery fails
+        await _client
+            .from('applications')
+            .update({
+              'status': 'pending',
+              'response_at': null,
+            })
+            .eq('application_id', applicationId);
+
+        await _client
+            .from('users')
+            .update({'status': 'pending'})
+            .eq('userId', userId);
+
+        String errMsg = 'Failed to send SMS via PhilSMS.';
+        try {
+          final body = jsonDecode(response.body);
+          if (body['message'] != null) {
+            errMsg = 'PhilSMS Error: ${body['message']}';
+          }
+        } catch (_) {}
+        return Left(ServerFailure('Rollback performed: $errMsg'));
+      }
+
+      return const Right(null);
+    } catch (e) {
+      // Rollback on unexpected exception
+      try {
+        await _client
+            .from('applications')
+            .update({
+              'status': 'pending',
+              'response_at': null,
+            })
+            .eq('application_id', applicationId);
+
+        await _client
+            .from('users')
+            .update({'status': 'pending'})
+            .eq('userId', userId);
+      } catch (_) {}
+
+      return Left(ServerFailure('Approval process failed: ${e.toString()}'));
+    }
+  }
+
+  /// Updates application status and optionally user status
+  Future<Either<Failure, void>> updateApplicationStatus({
+    required String applicationId,
+    required String userId,
+    required String status,
+  }) async {
+    try {
+      // If approving, we route through the backend to handle SMS and Auth update securely
+      if (status == 'approved') {
+        return approveApplication(applicationId: applicationId, userId: userId);
+      }
+
+      // For other statuses (like 'rejected'), we can still update DB directly or 
+      // create a backend route if complex logic is needed.
+      // Update application status
+      await _client
+          .from('applications')
+          .update({
+            'status': status,
+            'response_at': DateTime.now().toIso8601String(),
+          })
+          .eq('application_id', applicationId);
+
+      // Also update user status to match
+      await _client
+          .from('users')
+          .update({'status': status})
+          .eq('userId', userId);
+
+      return const Right(null);
+    } catch (e) {
+      return Left(_mapError(e));
+    }
   }
 
   /// Fetches all pending accounts (users with status 'pending')
@@ -181,45 +350,6 @@ class SupabaseApprovalRepository {
       return const Right(null);
     } catch (e) {
       return Left(_mapError(e));
-    }
-  }
-
-  /// Sends approval SMS with username and temporary password
-  Future<Either<Failure, void>> sendApprovalSms({
-    required String phoneNumber,
-    required String username,
-    required String temporaryPassword,
-  }) async {
-    try {
-      final normalizedPhone = _normalizePhone(phoneNumber);
-      final message = 'Your GAHIRA account has been approved.\n'
-          'Username: $username\n'
-          'Temporary Password: $temporaryPassword\n'
-          'Please log in and change your password immediately.';
-
-      final smsRes = await http.post(
-        Uri.parse(_philsmsEndpoint),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $_philsmsToken',
-        },
-        body: jsonEncode({
-          'recipient': normalizedPhone,
-          'sender_id': _philsmsSenderId,
-          'type': 'plain',
-          'message': message,
-        }),
-      );
-
-      final smsBody = jsonDecode(smsRes.body) as Map<String, dynamic>;
-      if (smsRes.statusCode >= 300 || smsBody['status'] != 'success') {
-        return Left(ServerFailure(smsBody['message'] ?? 'Failed to send SMS'));
-      }
-
-      return const Right(null);
-    } catch (e) {
-      return Left(ServerFailure('Failed to send SMS: ${e.toString()}'));
     }
   }
 

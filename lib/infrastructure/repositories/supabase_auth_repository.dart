@@ -87,6 +87,21 @@ class SupabaseAuthRepository implements AuthRepository {
         );
       }
 
+      // Check if account is still pending approval
+      if (userData['status'] == 'pending') {
+        await _client.auth.signOut();
+        return const Left(
+          AuthFailure('Your application is still pending. Please wait for admin to response.'),
+        );
+      }
+
+      if (userData['status'] == 'rejected') {
+        await _client.auth.signOut();
+        return const Left(
+          AuthFailure('Your application was rejected. Please contact support for more information.'),
+        );
+      }
+
       // Extract the role name from the joined 'role' table
       final roleData = userData['role'] as Map<String, dynamic>?;
       final roleName = roleData != null ? roleData['role'] as String? : null;
@@ -148,8 +163,8 @@ class SupabaseAuthRepository implements AuthRepository {
       } catch (insertError) {
         return Left(
           ServerFailure(
-            'Account created but profile setup failed: ${insertError.toString()}. '
-                'Please try logging in or contact support.',
+            'Application submitted but profile setup failed: ${insertError.toString()}. '
+                'Please contact support.',
           ),
         );
       }
@@ -162,7 +177,7 @@ class SupabaseAuthRepository implements AuthRepository {
       if (response.session == null) {
         return const Left(
           AuthFailure(
-            'Account created. Please check your email to confirm your address before logging in.',
+            'Application submitted. Please check your email to confirm your address, then wait for admin response.',
           ),
         );
       }

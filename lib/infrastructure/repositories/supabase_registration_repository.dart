@@ -10,16 +10,12 @@ import '../../domain/entities/registration_data.dart';
 import '../../domain/entities/registration_enums.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/registration_repository.dart';
+import '../../core/config/env_config.dart';
 import '../models/user_model.dart';
 import '../supabase/supabase_config.dart';
 
 class SupabaseRegistrationRepository implements RegistrationRepository {
   final SupabaseClient _client = SupabaseConfig.client;
-
-  // Replace these with your real PhilSMS credentials
-  static const _philsmsToken = '3681|YUG5fYRSWoqGyZb8PWoRoYmmllw7HWvbwkItyOB94c6f0330';
-  static const _philsmsSenderId = 'PhilSMS';
-  static const _philsmsEndpoint = 'https://dashboard.philsms.com/api/v3/sms/send';
 
   @override
   Future<Either<Failure, UserEntity>> register(RegistrationData data) async {
@@ -88,15 +84,13 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       await _client.from('users').insert(newUser.toJson());
 
       // 5. Handle File Uploads & Personal Details
-      // Schema: personal_details(document_id uuid PK, user_id uuid, document bytea, uploaded_at timestamptz)
-      // The table has NO "document_path" column — files are kept in Storage for
-      // retrieval, but the actual bytes must still be written into the
-      // "document" bytea column to satisfy the schema. document_id is left
-      // out so the DB can generate it (uuid PK).
+      String? documentPath;
       if (data.role == UserRole.client && data.clientDocument != null) {
-        final fileName = 'doc_${authUser.id}_${DateTime.now().millisecondsSinceEpoch}';
+        final extension = data.clientDocumentName?.split('.').last ?? 'bin';
+        documentPath = 'doc_${authUser.id}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+        
         await _client.storage.from('userFiles').uploadBinary(
-          fileName,
+          documentPath,
           data.clientDocument!,
           fileOptions: const FileOptions(contentType: 'application/octet-stream'),
         );
@@ -107,9 +101,11 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
           'uploaded_at': DateTime.now().toIso8601String(),
         });
       } else if (data.role == UserRole.operator && data.resume != null) {
-        final fileName = 'resume_${authUser.id}_${DateTime.now().millisecondsSinceEpoch}';
+        final extension = data.resumeName?.split('.').last ?? 'bin';
+        documentPath = 'resume_${authUser.id}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+
         await _client.storage.from('userFiles').uploadBinary(
-          fileName,
+          documentPath,
           data.resume!,
           fileOptions: const FileOptions(contentType: 'application/octet-stream'),
         );
@@ -122,12 +118,20 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       }
 
       // 6. Create initial application entry
-      // Schema: applications(application_id, user_id, created_at, response_at, status)
-      await _client.from('applications').insert({
-        'user_id': authUser.id,
-        'status': 'pending',
-        'created_at': DateTime.now().toIso8601String(),
-      });
+      try {
+        await _client.from('applications').insert({
+          'user_id': authUser.id,
+          'status': 'pending',
+          'temp_pass': tempPassword,
+          'document_id': documentPath, // Path to file in userFiles bucket
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        // Rollback: delete the user if the application record fails
+        await _client.from('users').delete().eq('userId', authUser.id);
+        // Note: we can't easily delete from Supabase Auth without service role
+        rethrow;
+      }
 
       // Mark the verification token consumed so it can't be replayed.
       await _client
@@ -137,7 +141,11 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
 
       return Right(newUser);
     } on AuthException catch (e) {
-      return Left(AuthFailure(e.message));
+      String message = e.message;
+      if (message.toLowerCase().contains('account created')) {
+        message = 'Registered successfully. Wait for the admin response';
+      }
+      return Left(AuthFailure(message));
     } on PostgrestException catch (e) {
       return Left(ServerFailure('Database error: ${e.message}'));
     } catch (e) {
@@ -150,43 +158,67 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
 
   @override
   Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber) async {
+    String? insertedId;
     try {
       final phone = _normalizePhone(phoneNumber);
-      final otp = (100000 + Random().nextInt(900000)).toString();
-      final otpHash = sha256.convert(utf8.encode(otp)).toString();
 
-      // 1. Store the hashed OTP in Supabase
-      await _client.from('phone_otp_verifications').insert({
+      // 1. Generate a random 6-digit PIN
+      final pin = (100000 + Random().nextInt(900000)).toString();
+
+      // 2. Hash the PIN using SHA-256 for secure storage
+      final pinHash = sha256.convert(utf8.encode(pin)).toString();
+
+      // 3. Store the hashed PIN in the 'phone_otp_verifications' table
+      // We select the ID so we can rollback (delete) if the SMS fails.
+      final insertResponse = await _client.from('phone_otp_verifications').insert({
         'phone': phone,
-        'otp_hash': otpHash,
+        'otp_hash': pinHash,
         'otp_expires_at':
             DateTime.now().add(const Duration(minutes: 5)).toIso8601String(),
-      });
+        'attempts': 0,
+        'verified': false,
+        'consumed': false,
+      }).select('id').single();
+      
+      insertedId = insertResponse['id'].toString();
 
-      // 2. Send the OTP via PhilSMS
-      final smsRes = await http.post(
-        Uri.parse(_philsmsEndpoint),
+      // 4. Send the raw PIN to the user via PhilSMS
+      final response = await http.post(
+        Uri.parse(EnvConfig.philsmsEndpoint),
         headers: {
+          'Authorization': 'Bearer ${EnvConfig.philsmsApiKey.trim()}',
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $_philsmsToken',
         },
         body: jsonEncode({
           'recipient': phone,
-          'sender_id': _philsmsSenderId,
-          'type': 'plain',
-          'message': 'Your verification code is $otp. It expires in 5 minutes.',
+          'sender_id': EnvConfig.philsmsSenderId,
+          'message': 'Gahira: $pin is your confirmation code. Valid for 5 mins.',
         }),
       );
 
-      final smsBody = jsonDecode(smsRes.body) as Map<String, dynamic>;
-      if (smsRes.statusCode >= 300 || smsBody['status'] != 'success') {
-        return Left(ServerFailure(smsBody['message'] ?? 'Failed to send SMS'));
+      if (response.statusCode >= 300) {
+        // ROLLBACK: Delete the verification record since SMS failed
+        if (insertedId != null) {
+          await _client.from('phone_otp_verifications').delete().eq('id', insertedId);
+        }
+
+        String errMsg = 'Failed to send SMS via PhilSMS.';
+        try {
+          final body = jsonDecode(response.body);
+          if (body['message'] != null) {
+            errMsg = 'PhilSMS Error: ${body['message']}';
+          }
+        } catch (_) {}
+        return Left(ServerFailure(errMsg));
       }
 
       return const Right(null);
     } catch (e) {
-      return Left(ServerFailure('Failed to send OTP: ${e.toString()}'));
+      // ROLLBACK on unexpected error
+      if (insertedId != null) {
+        await _client.from('phone_otp_verifications').delete().eq('id', insertedId);
+      }
+      return Left(ServerFailure('OTP process failed: ${e.toString()}'));
     }
   }
 

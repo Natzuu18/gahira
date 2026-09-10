@@ -8,8 +8,10 @@ import '../../application/services/registration_service.dart';
 import '../../domain/entities/registration_enums.dart';
 import '../../infrastructure/repositories/supabase_registration_repository.dart';
 import '../shared_widgets/appColor.dart';
+import '../operator/operator_dashboard.dart';
+import '../admin/admin_dashboard.dart';
 
-/// A self-contained "Create your account" form section, meant to be
+/// A self-contained "Submit your application" form section, meant to be
 /// embedded directly inside another page's scrollable Column, e.g.:
 ///
 /// Column(
@@ -378,9 +380,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Account created. Your temporary '
-                          'password was sent by SMS — please change your '
-                          'password after logging in.',
+                      'Registered successfully. Wait for the admin response',
                     ),
                   ),
                 ],
@@ -390,6 +390,10 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
           );
+
+          // For new registrations (clients/operators), we don't log them in yet 
+          // because their status is 'pending'. We go back to landing or login.
+          Navigator.of(context).pop();
         },
       );
     } catch (e) {
@@ -427,7 +431,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'CREATE YOUR ACCOUNT',
+                  'START YOUR APPLICATION',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: kGold,
@@ -931,7 +935,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           const SizedBox(height: 6),
           Text(
             'This number will also receive your '
-            'temporary password once your account is created — '
+            'temporary password once your application is approved — '
             'you\'ll be asked to change the password after logging in.',
             style: TextStyle(color: context.mutedTextColor, fontSize: 11.5),
           ),
@@ -1047,172 +1051,140 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   }
 
   Widget _buildAppointmentDatePicker(BuildContext context) {
-    // Group slots by month to show a "Full Calendar" view per month
-    final Map<String, List<Map<String, String>>> groupedSlots = {};
-    final Map<String, DateTime> monthReference = {};
-
-    for (var slot in _availableSlots) {
+    final now = DateTime.now();
+    final currentMonthKey = DateFormat('MMMM yyyy').format(now);
+    
+    // Filter available slots to ONLY show the current month
+    final List<Map<String, String>> currentMonthSlots = _availableSlots.where((slot) {
       final date = DateFormat('yyyy-MM-dd').parse(slot['date']!);
-      final monthKey = DateFormat('MMMM yyyy').format(date);
-      groupedSlots.putIfAbsent(monthKey, () => []).add(slot);
-      monthReference.putIfAbsent(monthKey, () => DateTime(date.year, date.month));
+      return DateFormat('MMMM yyyy').format(date) == currentMonthKey;
+    }).toList();
+
+    if (currentMonthSlots.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          'No interview dates scheduled for ${DateFormat('MMMM').format(now)}.',
+          style: TextStyle(color: context.mutedTextColor, fontStyle: FontStyle.italic),
+          textAlign: TextAlign.center,
+        ),
+      );
     }
 
-    final monthNames = groupedSlots.keys.toList();
-    if (_viewingMonth == null && monthNames.isNotEmpty) {
-      _viewingMonth = monthNames.first;
-    }
+    // Calendar logic for the current month
+    final firstDay = DateTime(now.year, now.month, 1);
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    final offset = firstDay.weekday % 7; // 0 = Sunday, 1 = Monday...
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (monthNames.isNotEmpty) ...[
-          _buildLabel('Select Month'),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: context.surfaceColor,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: kGold.withValues(alpha: 0.25)),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _viewingMonth,
-                isExpanded: true,
-                dropdownColor: context.surfaceColor,
-                icon: const Icon(Icons.arrow_drop_down, color: kGold),
-                items: monthNames.map((String month) {
-                  return DropdownMenuItem<String>(
-                    value: month,
-                    child: Text(
-                      month,
-                      style: TextStyle(color: context.textColor),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (newValue) {
-                  setState(() {
-                    _viewingMonth = newValue;
-                  });
-                },
-              ),
+        Center(
+          child: Text(
+            currentMonthKey.toUpperCase(),
+            style: const TextStyle(
+              color: kGold,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              letterSpacing: 1.2,
             ),
           ),
-          const SizedBox(height: 16),
-        ],
-        if (_viewingMonth != null) ...[
-          Builder(builder: (context) {
-            final monthName = _viewingMonth!;
-            final availableSlots = groupedSlots[monthName]!;
-            final refDate = monthReference[monthName]!;
-
-            // Calendar logic
-            final firstDay = DateTime(refDate.year, refDate.month, 1);
-            final daysInMonth = DateTime(refDate.year, refDate.month + 1, 0).day;
-            final offset = firstDay.weekday % 7; // 0 = Sunday, 1 = Monday...
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Day labels
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-                      .map((d) => SizedBox(
-                            width: 40,
-                            child: Text(
-                              d,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: kGold.withValues(alpha: 0.5),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ))
-                      .toList(),
-                ),
-                const SizedBox(height: 8),
-                // Full Calendar Grid
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 7,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                  ),
-                  itemCount: daysInMonth + offset,
-                  itemBuilder: (context, index) {
-                    if (index < offset) return const SizedBox.shrink();
-
-                    final day = index - offset + 1;
-                    final currentDate = DateTime(refDate.year, refDate.month, day);
-                    final dateStr = DateFormat('yyyy-MM-dd').format(currentDate);
-
-                    final slot = availableSlots.firstWhere(
-                      (s) => s['date'] == dateStr,
-                      orElse: () => {},
-                    );
-                    final bool isAvailable = slot.isNotEmpty;
-                    final bool isSelected = _appointmentDate != null &&
-                        DateFormat('yyyy-MM-dd').format(_appointmentDate!) ==
-                            dateStr;
-
-                    return InkWell(
-                      onTap: isAvailable
-                          ? () => setState(() {
-                                _appointmentDate = currentDate;
-                                _selectedTime = null; // Reset time when date changes
-                                _appointmentError = null;
-                              })
-                          : null,
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? kGold
-                              : (isAvailable
-                                  ? kGold.withValues(alpha: 0.1)
-                                  : Colors.transparent),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isSelected
-                                ? kGold
-                                : (isAvailable
-                                    ? kGold.withValues(alpha: 0.4)
-                                    : Colors.transparent),
-                            width: 1,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            day.toString(),
-                            style: TextStyle(
-                              color: isSelected
-                                  ? kBlack
-                                  : (isAvailable
-                                      ? context.textColor
-                                      : context.mutedTextColor.withValues(alpha: 0.2)),
-                              fontWeight: isAvailable ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ),
+        ),
+        const SizedBox(height: 16),
+        // Day labels
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+              .map((d) => SizedBox(
+                    width: 40,
+                    child: Text(
+                      d,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: kGold.withValues(alpha: 0.5),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
                       ),
-                    );
-                  },
-                ),
-              ],
+                    ),
+                  ))
+              .toList(),
+        ),
+        const SizedBox(height: 8),
+        // Full Calendar Grid
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+          ),
+          itemCount: daysInMonth + offset,
+          itemBuilder: (context, index) {
+            if (index < offset) return const SizedBox.shrink();
+
+            final day = index - offset + 1;
+            final currentDate = DateTime(now.year, now.month, day);
+            final dateStr = DateFormat('yyyy-MM-dd').format(currentDate);
+
+            final slot = currentMonthSlots.firstWhere(
+              (s) => s['date'] == dateStr,
+              orElse: () => {},
             );
-          }),
-        ],
+            final bool isAvailable = slot.isNotEmpty;
+            final bool isSelected = _appointmentDate != null &&
+                DateFormat('yyyy-MM-dd').format(_appointmentDate!) ==
+                    dateStr;
+
+            return InkWell(
+              onTap: isAvailable
+                  ? () => setState(() {
+                        _appointmentDate = currentDate;
+                        _selectedTime = null; // Reset time when date changes
+                        _appointmentError = null;
+                      })
+                  : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? kGold
+                      : (isAvailable
+                          ? kGold.withValues(alpha: 0.1)
+                          : Colors.transparent),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected
+                        ? kGold
+                        : (isAvailable
+                            ? kGold.withValues(alpha: 0.4)
+                            : Colors.transparent),
+                    width: 1,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    day.toString(),
+                    style: TextStyle(
+                      color: isSelected
+                          ? kBlack
+                          : (isAvailable
+                              ? context.textColor
+                              : context.mutedTextColor.withValues(alpha: 0.2)),
+                      fontWeight: isAvailable ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
         const SizedBox(height: 20),
         // Time Slots
         if (_appointmentDate != null) ...[
           Builder(builder: (context) {
             final dateStr = DateFormat('yyyy-MM-dd').format(_appointmentDate!);
-            final daySlots = _availableSlots
+            final daySlots = currentMonthSlots
                 .where((s) => s['date'] == dateStr)
                 .map((s) => s['time']!)
                 .toList();
@@ -1297,7 +1269,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        _availableSlots.firstWhere((s) =>
+                        currentMonthSlots.firstWhere((s) =>
                             s['date'] == DateFormat('yyyy-MM-dd').format(_appointmentDate!) &&
                             s['time'] == _selectedTime)['address']!,
                         style: TextStyle(

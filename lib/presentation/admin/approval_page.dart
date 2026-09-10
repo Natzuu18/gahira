@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
@@ -17,7 +18,7 @@ enum DocumentType { image, pdf, other }
 class AccountDocument {
   final String id;
   final String label; // e.g. "Valid ID", "Business Permit"
-  final String url; // network URL (or local file path if you store locally)
+  final String url; // network URL
   final DocumentType type;
 
   AccountDocument({
@@ -29,172 +30,148 @@ class AccountDocument {
 }
 
 class PendingAccount {
-  final String id;
+  final String userId;
+  final String applicationId;
   final String fullName;
   final String username;
-  final String phoneNumber; // must be in a format your SMS provider accepts
+  final String phoneNumber;
   final AccountRole role;
   final DateTime requestedAt;
   final List<AccountDocument> documents;
 
+  // Appointment info
+  final DateTime? appointmentDate;
+  final String? startTime;
+  final String? endTime;
+  final String? address;
+  final String appointmentStatus;
+  final String status;
+
   PendingAccount({
-    required this.id,
+    required this.userId,
+    required this.applicationId,
     required this.fullName,
     required this.username,
     required this.phoneNumber,
     required this.role,
     required this.requestedAt,
     this.documents = const [],
+    this.appointmentDate,
+    this.startTime,
+    this.endTime,
+    this.address,
+    required this.appointmentStatus,
+    required this.status,
   });
 }
 
 /// -----------------------------------------------------------------------
 /// SERVICE LAYER
-/// Uses Supabase backend for account approval and PhilSMS for notifications
 /// -----------------------------------------------------------------------
 class ApprovalService {
   final SupabaseApprovalRepository _repository = SupabaseApprovalRepository();
 
-  /// Fetch accounts awaiting admin approval.
+  /// Fetch applications awaiting admin approval.
   Future<List<PendingAccount>> fetchPendingAccounts() async {
-    final result = await _repository.fetchPendingAccounts();
+    final result = await _repository.fetchPendingApplications();
     
-    final users = result.fold(
+    final applications = result.fold(
       (failure) {
-        debugPrint('Error fetching pending accounts: ${failure.message}');
-        return <Map<String, dynamic>>[];
+        debugPrint('Error fetching pending applications: ${failure.message}');
+        throw Exception(failure.message);
       },
-      (users) => users,
+      (apps) => apps,
     );
     
-    return await _buildAccountsFromUsers(users);
-  }
-
-  /// Fetch all registered accounts (for debugging/verification)
-  Future<List<PendingAccount>> fetchAllAccounts() async {
-    final result = await _repository.fetchAllAccounts();
-    
-    final users = result.fold(
-      (failure) {
-        debugPrint('Error fetching all accounts: ${failure.message}');
-        return <Map<String, dynamic>>[];
-      },
-      (users) => users,
-    );
-    
-    return await _buildAccountsFromUsers(users);
-  }
-
-  /// Helper method to build PendingAccount list from user data
-  Future<List<PendingAccount>> _buildAccountsFromUsers(List<Map<String, dynamic>> users) async {
     final accounts = <PendingAccount>[];
-    for (final user in users) {
+    for (final app in applications) {
+      final user = app['user'] as Map<String, dynamic>?;
+      if (user == null) continue;
+
       final roleData = user['role'] as Map<String, dynamic>?;
       final roleName = roleData != null ? roleData['role'] as String? : 'client';
       final role = roleName == 'operator' ? AccountRole.operator : AccountRole.client;
       
-      final applications = user['applications'] as List<dynamic>?;
-      final application = applications != null && applications.isNotEmpty 
-          ? applications.first as Map<String, dynamic> 
-          : null;
+      final availability = app['availability'] as Map<String, dynamic>?;
       
-      final personalDetails = user['personal_details'] as List<dynamic>?;
-      
-      // Build documents list from personal_details
+      // Fetch the document path directly from the applications table column
       final documents = <AccountDocument>[];
-      if (personalDetails != null) {
-        for (final detail in personalDetails) {
-          final detailMap = detail as Map<String, dynamic>;
-          final documentId = detailMap['document_id'] as String?;
-          if (documentId != null) {
-            // Try to get document URL
-            final urlResult = await _repository.getDocumentUrl(
-              userId: user['user_id'] as String,
-              documentId: documentId,
-            );
-            urlResult.fold(
-              (failure) {
-                debugPrint('Error getting document URL: ${failure.message}');
-              },
-              (url) {
-                documents.add(AccountDocument(
-                  id: documentId,
-                  label: role == AccountRole.operator ? 'Resume' : 'Valid ID',
-                  url: url,
-                  type: DocumentType.other, // Would need file extension check for accurate type
-                ));
-              },
-            );
+      final String? docPath = app['document_id'] as String?;
+      
+      if (docPath != null) {
+        try {
+          final url = _repository.client.storage.from('userFiles').getPublicUrl(docPath);
+          final lowerPath = docPath.toLowerCase();
+          
+          String label = 'Document';
+          DocumentType type = DocumentType.other;
+
+          if (lowerPath.endsWith('.png') || lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
+            label = 'Valid ID';
+            type = DocumentType.image;
+          } else if (lowerPath.endsWith('.pdf')) {
+            label = 'Document';
+            type = DocumentType.pdf;
+          } else if (lowerPath.endsWith('.docx') || lowerPath.endsWith('.doc')) {
+            label = 'Document';
+            type = DocumentType.other;
           }
+
+          documents.add(AccountDocument(
+            id: docPath,
+            label: label,
+            url: url,
+            type: type,
+          ));
+        } catch (e) {
+          debugPrint('Error generating public URL: $e');
         }
       }
 
       accounts.add(PendingAccount(
-        id: user['user_id'] as String,
+        userId: user['userId'] as String,
+        applicationId: app['application_id'] as String,
         fullName: '${user['fname']} ${user['mname'] != null ? '${user['mname']} ' : ''}${user['lname']}',
         username: user['email'] as String,
         phoneNumber: user['contact_num'] as String,
         role: role,
-        requestedAt: application != null 
-            ? DateTime.parse(application['created_at'] as String)
-            : DateTime.parse(user['created_at'] as String),
+        requestedAt: DateTime.parse(app['created_at'] as String),
         documents: documents,
+        appointmentDate: availability != null ? DateTime.parse(availability['date'] as String) : null,
+        startTime: availability?['start_time'],
+        endTime: availability?['end_time'],
+        address: availability?['address'],
+        appointmentStatus: app['appointment_status'] ?? 'pending',
+        status: app['status'] ?? 'pending',
       ));
     }
     return accounts;
   }
 
-  /// Marks the account as approved and stores the temp password
   Future<void> approveAccount({
     required PendingAccount account,
-    required String temporaryPassword,
   }) async {
-    final result = await _repository.approveAccount(
-      userId: account.id,
-      temporaryPassword: temporaryPassword,
+    final result = await _repository.approveApplication(
+      applicationId: account.applicationId,
+      userId: account.userId,
     );
     
     result.fold(
-      (failure) {
-        debugPrint('Error approving account: ${failure.message}');
-        throw Exception(failure.message);
-      },
+      (failure) => throw Exception(failure.message),
       (_) {},
     );
   }
 
   Future<void> rejectAccount(PendingAccount account) async {
-    final result = await _repository.rejectAccount(userId: account.id);
+    final result = await _repository.updateApplicationStatus(
+      applicationId: account.applicationId,
+      userId: account.userId,
+      status: 'rejected',
+    );
     
     result.fold(
-      (failure) {
-        debugPrint('Error rejecting account: ${failure.message}');
-        throw Exception(failure.message);
-      },
+      (failure) => throw Exception(failure.message),
       (_) {},
-    );
-  }
-
-  /// Sends the approval SMS containing username + temporary password.
-  Future<void> sendApprovalSms({
-    required String phoneNumber,
-    required String username,
-    required String temporaryPassword,
-  }) async {
-    final result = await _repository.sendApprovalSms(
-      phoneNumber: phoneNumber,
-      username: username,
-      temporaryPassword: temporaryPassword,
-    );
-    
-    result.fold(
-      (failure) {
-        debugPrint('Error sending SMS: ${failure.message}');
-        throw Exception(failure.message);
-      },
-      (_) {
-        debugPrint('SMS sent successfully to $phoneNumber');
-      },
     );
   }
 }
@@ -214,9 +191,10 @@ class _ApprovalPageState extends State<ApprovalPage> {
   final ApprovalService _service = ApprovalService();
 
   bool _loading = true;
+  String? _errorMessage;
   List<PendingAccount> _accounts = [];
-  final Set<String> _processingIds = {}; // ids currently being approved/rejected
-  AccountRole? _filter; // null = show all
+  final Set<String> _processingIds = {}; // applicationId
+  AccountRole? _filter;
 
   @override
   void initState() {
@@ -225,21 +203,25 @@ class _ApprovalPageState extends State<ApprovalPage> {
   }
 
   Future<void> _loadAccounts() async {
-    setState(() => _loading = true);
-    final accounts = await _service.fetchPendingAccounts();
     if (!mounted) return;
     setState(() {
-      _accounts = accounts;
-      _loading = false;
+      _loading = true;
+      _errorMessage = null;
     });
-  }
-
-  String _generateTemporaryPassword({int length = 10}) {
-    const chars =
-        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#';
-    final rand = Random.secure();
-    return List.generate(length, (_) => chars[rand.nextInt(chars.length)])
-        .join();
+    try {
+      final accounts = await _service.fetchPendingAccounts();
+      if (!mounted) return;
+      setState(() {
+        _accounts = accounts;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   Future<void> _confirmAndApprove(PendingAccount account) async {
@@ -269,41 +251,36 @@ class _ApprovalPageState extends State<ApprovalPage> {
   }
 
   Future<void> _approveAccount(PendingAccount account) async {
-    setState(() => _processingIds.add(account.id));
+    if (_processingIds.contains(account.applicationId)) return; // Protection
+    setState(() => _processingIds.add(account.applicationId));
 
     try {
-      final tempPassword = _generateTemporaryPassword();
-
-      await _service.approveAccount(
-        account: account,
-        temporaryPassword: tempPassword,
-      );
-
-      await _service.sendApprovalSms(
-        phoneNumber: account.phoneNumber,
-        username: account.username,
-        temporaryPassword: tempPassword,
-      );
+      await _service.approveAccount(account: account);
 
       if (!mounted) return;
       setState(() {
-        _accounts.removeWhere((a) => a.id == account.id);
-        _processingIds.remove(account.id);
+        _accounts.removeWhere((a) => a.applicationId == account.applicationId);
+        _processingIds.remove(account.applicationId);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${account.fullName} approved. SMS sent.'),
+          content: Text('${account.fullName} approved. Temporary password sent via SMS.'),
           backgroundColor: Colors.green.shade600,
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _processingIds.remove(account.id));
+      setState(() => _processingIds.remove(account.applicationId));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to approve ${account.fullName}: $e'),
           backgroundColor: Colors.red.shade600,
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _approveAccount(account),
+          ),
         ),
       );
     }
@@ -331,20 +308,26 @@ class _ApprovalPageState extends State<ApprovalPage> {
 
     if (confirmed != true) return;
 
-    setState(() => _processingIds.add(account.id));
+    setState(() => _processingIds.add(account.applicationId));
     try {
       await _service.rejectAccount(account);
       if (!mounted) return;
       setState(() {
-        _accounts.removeWhere((a) => a.id == account.id);
-        _processingIds.remove(account.id);
+        _accounts.removeWhere((a) => a.applicationId == account.applicationId);
+        _processingIds.remove(account.applicationId);
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${account.fullName} rejected.')),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _processingIds.remove(account.id));
+      setState(() => _processingIds.remove(account.applicationId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to reject: $e'),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
     }
   }
 
@@ -396,17 +379,19 @@ class _ApprovalPageState extends State<ApprovalPage> {
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: kGold))
-                  : _filteredAccounts.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                itemCount: _filteredAccounts.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final account = _filteredAccounts[index];
-                  return _buildAccountCard(account);
-                },
-              ),
+                  : _errorMessage != null
+                      ? _buildErrorState()
+                      : _filteredAccounts.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              itemCount: _filteredAccounts.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 10),
+                              itemBuilder: (context, index) {
+                                final account = _filteredAccounts[index];
+                                return _buildAccountCard(account);
+                              },
+                            ),
             ),
           ],
         ),
@@ -497,8 +482,43 @@ class _ApprovalPageState extends State<ApprovalPage> {
     );
   }
 
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline_rounded, color: Colors.redAccent.withOpacity(0.6), size: 48),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load applications',
+              style: TextStyle(color: context.textColor, fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage ?? 'Unknown error occurred.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textColor.withOpacity(0.5), fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadAccounts,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kGold,
+                foregroundColor: Colors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAccountCard(PendingAccount account) {
-    final isProcessing = _processingIds.contains(account.id);
+    final isProcessing = _processingIds.contains(account.applicationId);
     final isOperator = account.role == AccountRole.operator;
 
     return Container(
@@ -535,7 +555,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
                       ),
                     ),
                     Text(
-                      '@${account.username} · ${account.phoneNumber}',
+                      '${account.username} · ${account.phoneNumber}',
                       style: TextStyle(color: context.textColor.withOpacity(0.55), fontSize: 12),
                     ),
                   ],
@@ -554,6 +574,34 @@ class _ApprovalPageState extends State<ApprovalPage> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          
+          // Appointment info for operators
+          if (account.appointmentDate != null) ...[
+             _buildInfoRow(
+               Icons.event_available_rounded, 
+               'Appointment: ${DateFormat('MMM dd, yyyy').format(account.appointmentDate!)}',
+             ),
+             _buildInfoRow(
+               Icons.access_time_rounded, 
+               'Time: ${_formatDisplayTime(account.startTime)} - ${_formatDisplayTime(account.endTime)}',
+             ),
+             _buildInfoRow(
+               Icons.location_on_outlined, 
+               'Address: ${account.address ?? 'N/A'}',
+             ),
+             const SizedBox(height: 8),
+          ],
+
+          Row(
+            children: [
+              _buildBadge('Status: ${account.status.toUpperCase()}', Colors.blueGrey),
+              const SizedBox(width: 8),
+              if (account.appointmentDate != null)
+                _buildBadge('Appt: ${account.appointmentStatus.toUpperCase()}', _getApptStatusColor(account.appointmentStatus)),
+            ],
+          ),
+
           if (account.documents.isNotEmpty) ...[
             const SizedBox(height: 12),
             _buildDocumentsPreview(account),
@@ -592,6 +640,58 @@ class _ApprovalPageState extends State<ApprovalPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: kGold.withOpacity(0.7)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: context.textColor.withOpacity(0.8), fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Color _getApptStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending': return Colors.orange;
+      case 'confirmed': return Colors.green;
+      case 'cancelled': return Colors.red;
+      default: return Colors.grey;
+    }
+  }
+
+  String _formatDisplayTime(String? timeStr) {
+    if (timeStr == null) return 'N/A';
+    try {
+      final dt = DateFormat('HH:mm:ss').parse(timeStr);
+      return DateFormat('hh:mm a').format(dt);
+    } catch (e) {
+      return timeStr;
+    }
   }
 
   /// Small horizontal strip of thumbnails shown on the card, tap any of it
@@ -749,7 +849,9 @@ class _ApprovalPageState extends State<ApprovalPage> {
                           style: TextStyle(color: context.textColor, fontWeight: FontWeight.w500),
                         ),
                         subtitle: Text(
-                          doc.type == DocumentType.pdf ? 'PDF document' : 'Image',
+                          doc.type == DocumentType.image 
+                            ? 'Image' 
+                            : (doc.type == DocumentType.pdf ? 'PDF document' : 'Word document'),
                           style: TextStyle(color: context.textColor.withOpacity(0.5), fontSize: 12),
                         ),
                         trailing: Icon(Icons.open_in_new, color: context.textColor.withOpacity(0.5), size: 18),
@@ -766,11 +868,22 @@ class _ApprovalPageState extends State<ApprovalPage> {
     );
   }
 
-  /// Full-screen viewer. Images render inline; PDFs and other file types
-  /// show a placeholder — hook in a PDF viewer package (e.g. `pdfx` or
-  /// `syncfusion_flutter_pdfviewer`) or launch the URL externally via
-  /// `url_launcher` if you'd rather open it outside the app.
+  /// Full-screen viewer.
   void _openDocumentViewer(AccountDocument doc) {
+    final bool isPdf = doc.type == DocumentType.pdf;
+    final bool isDoc = doc.url.toLowerCase().contains('.doc');
+    
+    IconData displayIcon = Icons.insert_drive_file_outlined;
+    String typeLabel = 'Document';
+    
+    if (isPdf) {
+      displayIcon = Icons.picture_as_pdf_outlined;
+      typeLabel = 'PDF';
+    } else if (isDoc) {
+      displayIcon = Icons.description_outlined;
+      typeLabel = 'Word Document';
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -795,23 +908,45 @@ class _ApprovalPageState extends State<ApprovalPage> {
                 ),
               ),
             )
-                : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.picture_as_pdf_outlined, color: Colors.white70, size: 64),
-                const SizedBox(height: 12),
-                const Text(
-                  'PDF preview not wired up yet.',
-                  style: TextStyle(color: Colors.white70),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Integrate a PDF viewer package or open:\n${doc.url}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-              ],
-            ),
+                : Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(displayIcon, color: kGold.withOpacity(0.8), size: 80),
+                        const SizedBox(height: 20),
+                        Text(
+                          '$typeLabel Preview',
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Direct preview for $typeLabel files is not available in-app.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          child: SelectableText(
+                            doc.url,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: kGold, fontSize: 11, fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Copy the link above to view the document.',
+                          style: TextStyle(color: Colors.white38, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
           ),
         ),
       ),

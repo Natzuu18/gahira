@@ -1,8 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/config/env_config.dart';
 
 class SupabaseConfig {
-  static const String url = 'https://opsxwnjmcbvplrrtgqvj.supabase.co';
-  static const String anonKey = 'sb_publishable_G-5YWyaY1cbW4EXZFCBGIQ_FnILc7ox';
+  static String get url => EnvConfig.supabaseUrl;
+  static String get anonKey => EnvConfig.supabaseAnonKey;
 
   static Future<void> init() async {
     await Supabase.initialize(

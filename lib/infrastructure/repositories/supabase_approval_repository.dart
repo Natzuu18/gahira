@@ -100,92 +100,26 @@ class SupabaseApprovalRepository {
     required String userId,
   }) async {
     try {
-      // 1. Fetch the temporary password generated during registration
-      final appData = await _client
-          .from('applications')
-          .select('temp_pass, user:user_id(contact_num)')
-          .eq('application_id', applicationId)
-          .single();
-      
-      final tempPassword = appData['temp_pass'] as String?;
-      if (tempPassword == null) {
-        return const Left(ServerFailure('Temporary password not found for this application.'));
-      }
+      // 1. Generate the temporary password NOW (during approval)
+      final tempPassword = _generateRandomPassword();
 
-      final user = appData['user'] as Map<String, dynamic>?;
-      final phone = _normalizePhone(user?['contact_num'] ?? '');
-
-      // 2. Update application and user status in Supabase to 'approved'
-      await _client
-          .from('applications')
-          .update({
-            'status': 'approved',
-            'response_at': DateTime.now().toIso8601String(),
-          })
-          .eq('application_id', applicationId);
-
-      await _client
-          .from('users')
-          .update({'status': 'approved'})
-          .eq('userId', userId);
-
-      // 4. Send the approval SMS via PhilSMS
-      final response = await http.post(
-        Uri.parse(EnvConfig.philsmsEndpoint),
-        headers: {
-          'Authorization': 'Bearer ${EnvConfig.philsmsApiKey.trim()}',
-          'Content-Type': 'application/json',
+      // 2. Call the RPC to update Auth, DB, and send SMS in one transaction.
+      // This ensures that the account is "created" (password set/status updated) 
+      // and the role is effectively active only upon this admin action.
+      await _client.rpc(
+        'approve_application_with_pass',
+        params: {
+          'app_id': applicationId,
+          'u_id': userId,
+          'new_pass': tempPassword,
         },
-        body: jsonEncode({
-          'recipient': phone,
-          'sender_id': EnvConfig.philsmsSenderId,
-          'message': 'Gahira: Welcome! Access your profile with this temporary pass: $tempPassword',
-        }),
       );
 
-      if (response.statusCode >= 300) {
-        // ROLLBACK: Revert status back to pending if SMS delivery fails
-        await _client
-            .from('applications')
-            .update({
-              'status': 'pending',
-              'response_at': null,
-            })
-            .eq('application_id', applicationId);
-
-        await _client
-            .from('users')
-            .update({'status': 'pending'})
-            .eq('userId', userId);
-
-        String errMsg = 'Failed to send SMS via PhilSMS.';
-        try {
-          final body = jsonDecode(response.body);
-          if (body['message'] != null) {
-            errMsg = 'PhilSMS Error: ${body['message']}';
-          }
-        } catch (_) {}
-        return Left(ServerFailure('Rollback performed: $errMsg'));
-      }
-
       return const Right(null);
+    } on PostgrestException catch (e) {
+      // The Postgres function handles the rollback via RAISE EXCEPTION if SMS fails
+      return Left(ServerFailure(e.message));
     } catch (e) {
-      // Rollback on unexpected exception
-      try {
-        await _client
-            .from('applications')
-            .update({
-              'status': 'pending',
-              'response_at': null,
-            })
-            .eq('application_id', applicationId);
-
-        await _client
-            .from('users')
-            .update({'status': 'pending'})
-            .eq('userId', userId);
-      } catch (_) {}
-
       return Left(ServerFailure('Approval process failed: ${e.toString()}'));
     }
   }
@@ -401,5 +335,10 @@ class SupabaseApprovalRepository {
     } catch (e) {
       return Left(_mapError(e));
     }
+  }
+
+  String _generateRandomPassword() {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return List.generate(10, (index) => chars[Random().nextInt(chars.length)]).join();
   }
 }

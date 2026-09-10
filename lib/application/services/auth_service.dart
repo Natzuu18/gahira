@@ -28,6 +28,10 @@ class AuthService {
     return result.map((entity) => UserDto.fromEntity(entity));
   }
 
+  Future<Either<Failure, void>> updatePassword(String newPassword) {
+    return repository.updatePassword(newPassword);
+  }
+
   Future<Either<Failure, void>> logout() => repository.logout();
 
   Future<Either<Failure, UserDto?>> getCurrentUser() async {

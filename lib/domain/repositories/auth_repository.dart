@@ -25,6 +25,9 @@ abstract class AuthRepository {
   /// Optional but commonly paired with login/signup — logs the current user out.
   Future<Either<Failure, void>> logout();
 
+  /// Updates the password of the currently logged-in user.
+  Future<Either<Failure, void>> updatePassword(String newPassword);
+
   /// Optional — checks if a user session already exists (auto-login on app start).
   Future<Either<Failure, UserEntity?>> getCurrentUser();
 }

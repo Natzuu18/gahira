@@ -102,19 +102,21 @@ class SupabaseAuthRepository implements AuthRepository {
         );
       }
 
-      // Extract the role name from the joined 'role' table
-      final roleData = userData['role'] as Map<String, dynamic>?;
-      final roleName = roleData != null ? roleData['role'] as String? : null;
-
-      print('Fetched User: ${authUser.email}, Role ID: ${userData['role_id']}, Role Name: $roleName');
-
-      // Update the userData to include the role name for the Model/Entity
-      // We pass the roleName as roleId because the UI logic (main.dart) 
-      // currently checks this field for values like "admin".
       final updatedUserData = Map<String, dynamic>.from(userData);
-      if (roleName != null) {
-        updatedUserData['role_id'] = roleName;
+      
+      // Check if password change is required (first login after approval)
+      if (userData['status'] == 'approved') {
+        updatedUserData['role_id'] = 'change_password_required';
+      } else {
+        // Extract the role name from the joined 'role' table for normal users
+        final roleData = userData['role'] as Map<String, dynamic>?;
+        final roleName = roleData != null ? roleData['role'] as String? : null;
+        if (roleName != null) {
+          updatedUserData['role_id'] = roleName;
+        }
       }
+
+      print('Fetched User: ${authUser.email}, Status: ${userData['status']}, Role Assigned: ${updatedUserData['role_id']}');
 
       return Right(UserModel.fromJson(updatedUserData));
     } catch (e) {
@@ -183,6 +185,28 @@ class SupabaseAuthRepository implements AuthRepository {
       }
 
       return Right(newUser);
+    } catch (e) {
+      return Left(_mapError(e));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updatePassword(String newPassword) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) return const Left(AuthFailure('No user logged in.'));
+
+      // 1. Update the password in Supabase Auth
+      await _client.auth.updateUser(UserAttributes(password: newPassword));
+
+      // 2. Update status to 'active' in public.users table
+      // This marks the "1st login/change password" as completed.
+      await _client
+          .from('users')
+          .update({'status': 'active'})
+          .eq('userId', user.id);
+
+      return const Right(null);
     } catch (e) {
       return Left(_mapError(e));
     }

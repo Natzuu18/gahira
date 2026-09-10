@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
@@ -851,7 +852,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
                         subtitle: Text(
                           doc.type == DocumentType.image 
                             ? 'Image' 
-                            : (doc.type == DocumentType.pdf ? 'PDF document' : 'Word document'),
+                            : (doc.type == DocumentType.pdf ? 'PDF document (Opens in browser)' : 'Word document (Opens in browser)'),
                           style: TextStyle(color: context.textColor.withOpacity(0.5), fontSize: 12),
                         ),
                         trailing: Icon(Icons.open_in_new, color: context.textColor.withOpacity(0.5), size: 18),
@@ -869,7 +870,23 @@ class _ApprovalPageState extends State<ApprovalPage> {
   }
 
   /// Full-screen viewer.
-  void _openDocumentViewer(AccountDocument doc) {
+  void _openDocumentViewer(AccountDocument doc) async {
+    if (doc.type != DocumentType.image) {
+      final Uri url = Uri.parse(doc.url);
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+        return;
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open document in browser.')),
+          );
+        }
+      }
+    }
+
+    if (!mounted) return;
+    
     final bool isPdf = doc.type == DocumentType.pdf;
     final bool isDoc = doc.url.toLowerCase().contains('.doc');
     
@@ -925,24 +942,21 @@ class _ApprovalPageState extends State<ApprovalPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
                         ),
-                        const SizedBox(height: 24),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white.withOpacity(0.1)),
+                        const SizedBox(height: 32),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final Uri uri = Uri.parse(doc.url);
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          icon: const Icon(Icons.open_in_browser_rounded),
+                          label: const Text('OPEN IN BROWSER'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kGold,
+                            foregroundColor: kBlack,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                           ),
-                          child: SelectableText(
-                            doc.url,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: kGold, fontSize: 11, fontStyle: FontStyle.italic),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Copy the link above to view the document.',
-                          style: TextStyle(color: Colors.white38, fontSize: 12),
                         ),
                       ],
                     ),

@@ -6,6 +6,7 @@ import './presentation/operator/operator_dashboard.dart';
 import './presentation/client/client_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
+import './presentation/landing/change_password_page.dart';
 
 import './infrastructure/supabase/supabase_config.dart';
 import './infrastructure/repositories/supabase_auth_repository.dart';
@@ -162,6 +163,13 @@ class _LoginPageState extends State<LoginPage>
 
   void _goToDashboard(String role, String name) {
     final String normalizedRole = role.toLowerCase();
+
+    if (normalizedRole == 'change_password_required') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ChangePasswordPage()),
+      );
+      return;
+    }
 
     if (normalizedRole == 'admin') {
       Navigator.of(context).pushReplacement(

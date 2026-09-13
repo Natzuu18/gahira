@@ -126,7 +126,7 @@ class SupabaseApprovalRepository {
 
   /// Updates application status and optionally user status
   Future<Either<Failure, void>> updateApplicationStatus({
-    required String applicationId,
+    required String applicationId,  
     required String userId,
     required String status,
   }) async {

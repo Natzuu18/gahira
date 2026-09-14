@@ -16,7 +16,7 @@ class SupabaseUserRepository implements UserRepository {
     try {
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
           .order('fname', ascending: true);
 
       final List<UserEntity> users = (response as List)
@@ -42,7 +42,7 @@ class SupabaseUserRepository implements UserRepository {
       
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
           .or('status.eq.approved,status.eq.active,status.eq.inactive')
           .inFilter('role_id', [
             '5ef69f93-cb07-4052-989e-9e6ca48c4360', // miner
@@ -69,7 +69,7 @@ class SupabaseUserRepository implements UserRepository {
     try {
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
           .eq('status', 'inactive')
           .order('fname', ascending: true);
 
@@ -160,7 +160,7 @@ class SupabaseUserRepository implements UserRepository {
     try {
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
           .eq('userId', userId)
           .single();
 
@@ -193,7 +193,7 @@ class SupabaseUserRepository implements UserRepository {
           .from('users')
           .update(data)
           .eq('userId', user.userId)
-          .select('*, role:role_id(role)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
           .single();
 
       final updatedData = Map<String, dynamic>.from(response);

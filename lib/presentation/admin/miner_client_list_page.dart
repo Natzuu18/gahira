@@ -68,6 +68,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> {
             _buildDetailRow('Contact', user.contactNum),
             _buildDetailRow('Role', user.roleId.toUpperCase()),
             _buildDetailRow('Status', user.status.toUpperCase()),
+            _buildDetailRow('Associated Unit', user.miningUnitName ?? 'Not set up'),
             _buildDetailRow('Address', user.address),
           ],
         ),
@@ -570,6 +571,21 @@ class _MinerClientListPageState extends State<MinerClientListPage> {
                     Text(
                       user.email,
                       style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.foundation_outlined, size: 12, color: kGold.withOpacity(0.7)),
+                        const SizedBox(width: 4),
+                        Text(
+                          user.miningUnitName ?? 'Unit: Not set up',
+                          style: TextStyle(
+                            color: user.miningUnitName != null ? context.textColor.withOpacity(0.8) : Colors.orangeAccent,
+                            fontSize: 11,
+                            fontWeight: user.miningUnitName != null ? FontWeight.w500 : FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

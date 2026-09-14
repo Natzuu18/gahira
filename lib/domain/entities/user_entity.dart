@@ -11,6 +11,7 @@ class UserEntity extends Equatable {
   final String contactNum;
   final String roleId; // FK -> RoleEntity
   final String status; // e.g. active / inactive / pending
+  final String? miningUnitId; // FK -> MiningUnit
 
   const UserEntity({
     required this.userId,
@@ -23,6 +24,7 @@ class UserEntity extends Equatable {
     required this.contactNum,
     required this.roleId,
     required this.status,
+    this.miningUnitId,
   });
 
   @override
@@ -37,5 +39,6 @@ class UserEntity extends Equatable {
     contactNum,
     roleId,
     status,
+    miningUnitId,
   ];
 }

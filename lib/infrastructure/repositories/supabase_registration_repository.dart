@@ -79,6 +79,7 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
         contactNum: data.phone,
         roleId: roleId.toString(),
         status: 'pending',
+        miningUnitId: data.miningUnitId,
       );
 
       await _client.from('users').insert(newUser.toJson());
@@ -294,6 +295,38 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       return Right(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       return Left(ServerFailure('Failed to fetch availability: ${e.toString()}'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> getMiningUnits() async {
+    try {
+      final response = await _client
+          .from('mining_units')
+          .select()
+          .order('name', ascending: true);
+
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(ServerFailure('Failed to fetch units: ${e.toString()}'));
+    }
+  }
+
+  /// Creates a new mining unit and returns its ID.
+  Future<Either<Failure, String>> createMiningUnit(String name) async {
+    try {
+      final response = await _client
+          .from('mining_units')
+          .insert({
+            'name': name,
+            'type': 'Ball Mill', // Default type for new units created via registration
+          })
+          .select('id')
+          .single();
+      
+      return Right(response['id'].toString());
+    } catch (e) {
+      return Left(ServerFailure('Failed to create unit: ${e.toString()}'));
     }
   }
 

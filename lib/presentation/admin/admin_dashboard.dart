@@ -34,11 +34,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           child: _buildLogoMark(),
         ),
         title: const Text(
-          'GAHIRA',
+          'DASHBOARD',
           style: TextStyle(
             color: kGold,
             fontWeight: FontWeight.bold,
-            letterSpacing: 3,
+            letterSpacing: 2,
             fontSize: 16,
           ),
         ),
@@ -56,329 +56,224 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         currentMenu: AdminMenu.dashboard,
         adminName: widget.adminName,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: kGold,
-        foregroundColor: kBlack,
-        child: const Icon(Icons.add_rounded),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome section
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Welcome back,',
-                      style: TextStyle(
-                        color: context.mutedTextColor,
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      widget.adminName,
-                      style: TextStyle(
-                        color: context.textColor,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: kGold.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: kGold.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.circle, color: Colors.green, size: 8),
-                      const SizedBox(width: 8),
-                      Text(
-                        'System Live',
-                        style: TextStyle(
-                          color: kGold,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
+      body: RefreshIndicator(
+        onRefresh: () async => await Future.delayed(const Duration(seconds: 1)),
+        color: kGold,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Welcome section
+              _buildHeader(),
+              const SizedBox(height: 24),
 
-            // Metrics Summary Cards
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.5,
-              children: [
-                _buildMetricCard(
-                  'Total Mills',
-                  '12',
-                  Icons.settings_input_component_rounded,
-                  kGold,
-                ),
-                _buildMetricCard(
-                  'Active',
-                  '08',
-                  Icons.play_circle_outline_rounded,
-                  Colors.green,
-                ),
-                _buildMetricCard(
-                  'Maintenance',
-                  '02',
-                  Icons.build_circle_outlined,
-                  Colors.orange,
-                ),
-                _buildMetricCard(
-                  'Efficiency',
-                  '94%',
-                  Icons.bar_chart_rounded,
-                  Colors.blue,
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
+              // --- EMERGENCY ALERTS ---
+              _buildSectionTitle('Security & Alerts', Icons.warning_amber_rounded, Colors.redAccent),
+              _buildAlertCard('Emergency stop triggered at Drum #02', 'Operator: John Doe', '10 mins ago'),
+              const SizedBox(height: 24),
 
-            // Mill Status List Section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Mill Status',
-                  style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('View All', style: TextStyle(color: kGold)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildMillStatusItem('Mill #01 - Primary', 'Running', 45.2, 0.85),
-            _buildMillStatusItem('Mill #02 - Secondary', 'Running', 42.8, 0.78),
-            _buildMillStatusItem('Mill #03 - Tertiary', 'Stopped', 0.0, 0.0),
-            _buildMillStatusItem('Mill #04 - Auxiliary', 'Maintenance', 12.5, 0.30),
-
-            const SizedBox(height: 32),
-
-            // Recent Activity
-            Text(
-              'Recent Activity',
-              style: TextStyle(
-                color: context.textColor,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+              // --- REQUESTS & REVIEWS ---
+              _buildSectionTitle('Requests & Reviews', Icons.pending_actions_rounded),
+              Row(
+                children: [
+                  Expanded(child: _buildStatCard('Pending Services', '05', Colors.orange)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildStatCard('Owner Reviews', '03', kGold)),
+                ],
               ),
-            ),
-            const SizedBox(height: 16),
-            _buildActivityLog('Maintenance scheduled for Mill #03', '2 hours ago'),
-            _buildActivityLog('Shift report generated by Operator John', '4 hours ago'),
-            _buildActivityLog('System update completed', 'Yesterday'),
-            const SizedBox(height: 80), // Space for FAB
-          ],
+              const SizedBox(height: 24),
+
+              // --- OPERATIONS ---
+              _buildSectionTitle('Operations', Icons.settings_input_component_rounded),
+              Row(
+                children: [
+                  Expanded(child: _buildStatCard('Scheduled', '12', Colors.blue)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildStatCard('Active Now', '08', Colors.green)),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // --- RESOURCES ---
+              _buildSectionTitle('Resources', Icons.engineering_outlined),
+              Row(
+                children: [
+                  Expanded(child: _buildStatCard('Avail. Operators', '04', Colors.teal)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildStatCard('Equip. Avail.', '85%', Colors.deepPurpleAccent)),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // --- FINANCIALS ---
+              _buildSectionTitle('Financials', Icons.account_balance_wallet_outlined),
+              _buildFinancialItem('Payment Verifications', '02 awaiting', kGold, Icons.fact_check_outlined),
+              _buildFinancialItem('Pending Billing', '04 invoices', Colors.orange, Icons.receipt_long_outlined),
+              _buildFinancialItem('Unpaid/Partial Bills', '₱45,200.00', Colors.redAccent, Icons.money_off_csred_rounded),
+              const SizedBox(height: 24),
+
+              // --- RECENT ACTIVITIES ---
+              _buildSectionTitle('Recent Activities', Icons.history_rounded),
+              _buildActivityItem('Service Request #SR-102 approved', '30 mins ago'),
+              _buildActivityItem('Drum #05 maintenance completed', '2 hours ago'),
+              _buildActivityItem('Payment received from Miner: Mark', '4 hours ago'),
+              _buildActivityItem('New operator application: Sarah', 'Yesterday'),
+
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Icon(icon, color: color, size: 24),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  color: context.textColor,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                title,
-                style: TextStyle(
-                  color: context.mutedTextColor,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMillStatusItem(String name, String status, double rpm, double load) {
-    final bool isRunning = status == 'Running';
-    final Color statusColor = status == 'Running'
-        ? Colors.green
-        : (status == 'Maintenance' ? Colors.orange : Colors.red);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kGold.withOpacity(0.05)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.settings_input_component_rounded,
-                  color: statusColor,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        color: context.textColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      'Status: $status',
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: context.mutedTextColor),
-            ],
-          ),
-          if (isRunning) ...[
-            const SizedBox(height: 16),
-            const Divider(height: 1),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _buildMiniStat('RPM', '$rpm'),
-                const SizedBox(width: 24),
-                _buildMiniStat('Load', '${(load * 100).toInt()}%'),
-                const Spacer(),
-                SizedBox(
-                  width: 60,
-                  child: LinearProgressIndicator(
-                    value: load,
-                    backgroundColor: kGold.withOpacity(0.1),
-                    color: kGold,
-                    minHeight: 4,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMiniStat(String label, String value) {
+  Widget _buildHeader() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          label,
-          style: TextStyle(color: context.mutedTextColor, fontSize: 10),
+          'Welcome back,',
+          style: TextStyle(color: context.mutedTextColor, fontSize: 14),
         ),
         Text(
-          value,
-          style: TextStyle(
-            color: context.textColor,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
+          widget.adminName,
+          style: TextStyle(color: context.textColor, fontSize: 24, fontWeight: FontWeight.bold),
         ),
       ],
     );
   }
 
-  Widget _buildActivityLog(String message, String time) {
+  Widget _buildSectionTitle(String title, IconData icon, [Color color = kGold]) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: kGold,
-              shape: BoxShape.circle,
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              color: context.textColor.withOpacity(0.8),
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.1,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 11, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlertCard(String title, String subtitle, String time) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.emergency_share_rounded, color: Colors.redAccent, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  message,
-                  style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 14,
-                  ),
+                  title,
+                  style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 14),
                 ),
                 Text(
-                  time,
-                  style: TextStyle(
-                    color: context.mutedTextColor,
-                    fontSize: 12,
-                  ),
+                  subtitle,
+                  style: TextStyle(color: context.mutedTextColor, fontSize: 12),
                 ),
               ],
             ),
+          ),
+          Text(
+            time,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinancialItem(String label, String value, Color color, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.textColor.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color.withOpacity(0.7)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityItem(String message, String time) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(color: kGold, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: context.textColor.withOpacity(0.9), fontSize: 13),
+            ),
+          ),
+          Text(
+            time,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 11),
           ),
         ],
       ),
@@ -394,11 +289,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         border: Border.all(color: kGold, width: 1.6),
         color: context.bgColor,
       ),
-      child: const Icon(
-        Icons.settings_input_component_rounded,
-        color: kGold,
-        size: 16,
-      ),
+      child: const Icon(Icons.settings_input_component_rounded, color: kGold, size: 16),
     );
   }
 }

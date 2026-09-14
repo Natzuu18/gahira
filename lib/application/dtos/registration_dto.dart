@@ -14,8 +14,7 @@ class RegistrationDto {
   final String? phoneVerificationToken;
 
   // Client-specific fields
-  final String? clientType; // "individual" or "business"
-  final String? businessName;
+  final String? miningUnitId;
   final String? clientDocumentBase64;
   final String? clientDocumentName;
 
@@ -33,8 +32,7 @@ class RegistrationDto {
     required this.address,
     required this.role,
     this.phoneVerificationToken,
-    this.clientType,
-    this.businessName,
+    this.miningUnitId,
     this.clientDocumentBase64,
     this.clientDocumentName,
     this.resumeBase64,
@@ -52,8 +50,7 @@ class RegistrationDto {
       address: entity.address,
       role: entity.role.name,
       phoneVerificationToken: entity.phoneVerificationToken,
-      clientType: entity.clientType?.name,
-      businessName: entity.businessName,
+      miningUnitId: entity.miningUnitId,
       clientDocumentBase64: entity.clientDocument != null
           ? base64Encode(entity.clientDocument!)
           : null,
@@ -84,8 +81,7 @@ class RegistrationDto {
       address: address,
       role: UserRole.values.byName(role),
       phoneVerificationToken: phoneVerificationToken,
-      clientType: clientType != null ? ClientType.values.byName(clientType!) : null,
-      businessName: businessName,
+      miningUnitId: miningUnitId,
       clientDocument: clientDocumentBase64 != null
           ? Uint8List.fromList(base64Decode(clientDocumentBase64!))
           : null,
@@ -108,8 +104,7 @@ class RegistrationDto {
       'address': address,
       'role': role,
       'phoneVerificationToken': phoneVerificationToken,
-      'clientType': clientType,
-      'businessName': businessName,
+      'miningUnitId': miningUnitId,
       'clientDocument': clientDocumentBase64,
       'clientDocumentName': clientDocumentName,
       'resume': resumeBase64,

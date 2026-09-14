@@ -20,4 +20,7 @@ abstract class RegistrationRepository {
 
   /// Fetches available appointment slots from the database.
   Future<Either<Failure, List<Map<String, dynamic>>>> getAvailableSlots();
+
+  /// Fetches the list of available mining units (Ball Mill, Plant, Tunnel).
+  Future<Either<Failure, List<Map<String, dynamic>>>> getMiningUnits();
 }

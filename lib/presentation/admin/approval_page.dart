@@ -369,7 +369,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
           ),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.approval),
+      endDrawer: const AdminDrawer(currentMenu: AdminMenu.registrationRequests),
       body: RefreshIndicator(
         onRefresh: _loadAccounts,
         child: Column(

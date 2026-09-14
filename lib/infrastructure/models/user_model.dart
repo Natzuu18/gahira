@@ -12,6 +12,7 @@ class UserModel extends UserEntity {
     required super.contactNum,
     required super.roleId,
     required super.status,
+    super.miningUnitId,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -26,6 +27,7 @@ class UserModel extends UserEntity {
       contactNum: json['contact_num'] ?? '',
       roleId: (json['role_id'] ?? json['role'] ?? '').toString(),
       status: json['status'] ?? '',
+      miningUnitId: json['mining_unit_id'],
     );
   }
 
@@ -43,6 +45,7 @@ class UserModel extends UserEntity {
       'contact_num': contactNum,
       'role_id': roleId,
       'status': status,
+      'mining_unit_id': miningUnitId,
     };
   }
 
@@ -58,6 +61,7 @@ class UserModel extends UserEntity {
       contactNum: entity.contactNum,
       roleId: entity.roleId,
       status: entity.status,
+      miningUnitId: entity.miningUnitId,
     );
   }
 }

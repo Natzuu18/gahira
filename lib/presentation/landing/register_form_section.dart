@@ -37,7 +37,6 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _addressController = TextEditingController();
-  final _businessNameController = TextEditingController();
   final _otpController = TextEditingController();
 
   UserRole _role = UserRole.client;
@@ -54,7 +53,9 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   String? _phoneVerifyError;
 
   // Client-only fields.
-  ClientType _clientType = ClientType.individual;
+  final _miningUnitController = TextEditingController();
+  String? _selectedMiningUnitId;
+  String? _miningUnitError;
   PlatformFile? _clientDocumentFile;
   String? _clientDocumentError;
 
@@ -67,7 +68,9 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   String? _selectedTime;
 
   List<Map<String, String>> _availableSlots = [];
+  List<Map<String, dynamic>> _miningUnits = [];
   bool _isLoadingSlots = true;
+  bool _isLoadingUnits = true;
 
   bool _isSubmitting = false;
 
@@ -75,6 +78,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   void initState() {
     super.initState();
     _fetchAvailableSlots();
+    _fetchMiningUnits();
     // If the person edits the phone number after sending a code or getting
     // verified, that code/verification no longer applies to the new number.
     _phoneController.addListener(() {
@@ -92,8 +96,8 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     _phoneController.dispose();
     _emailController.dispose();
     _addressController.dispose();
-    _businessNameController.dispose();
     _otpController.dispose();
+    _miningUnitController.dispose();
     super.dispose();
   }
 
@@ -265,6 +269,24 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     );
   }
 
+  Future<void> _fetchMiningUnits() async {
+    setState(() => _isLoadingUnits = true);
+    try {
+      final repository = SupabaseRegistrationRepository();
+      // We will implement this method in the repository
+      final result = await repository.getMiningUnits();
+      result.fold(
+        (failure) => setState(() => _isLoadingUnits = false),
+        (units) => setState(() {
+          _miningUnits = units;
+          _isLoadingUnits = false;
+        }),
+      );
+    } catch (e) {
+      setState(() => _isLoadingUnits = false);
+    }
+  }
+
   String _displayTime(String timeStr) {
     try {
       // Expecting HH:mm:ss from DB
@@ -288,6 +310,10 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       (_role == UserRole.operator && (_appointmentDate == null || _selectedTime == null))
           ? 'Please select an interview date and time'
           : null;
+      _miningUnitError = 
+      (_role == UserRole.client && _selectedMiningUnitId == null)
+          ? 'Please select an associated unit'
+          : null;
       _clientDocumentError =
       (_role == UserRole.client && _clientDocumentFile == null)
           ? 'Please attach a valid ID or business document'
@@ -297,6 +323,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     if (!formValid ||
         _resumeError != null ||
         _appointmentError != null ||
+        _miningUnitError != null ||
         _clientDocumentError != null) {
       return;
     }
@@ -304,7 +331,19 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     setState(() => _isSubmitting = true);
 
     try {
-      final service = RegistrationService(SupabaseRegistrationRepository());
+      final repository = SupabaseRegistrationRepository();
+      
+      // Handle Mining Unit creation if it's a new name
+      String? finalMiningUnitId = _selectedMiningUnitId;
+      if (_role == UserRole.client && finalMiningUnitId == null && _miningUnitController.text.isNotEmpty) {
+        final createResult = await repository.createMiningUnit(_miningUnitController.text.trim());
+        createResult.fold(
+          (failure) => throw Exception(failure.message),
+          (unitId) => finalMiningUnitId = unitId,
+        );
+      }
+
+      final service = RegistrationService(repository);
       
       // Format appointment date as proper ISO 8601
       String? formattedAppointmentDate;
@@ -340,8 +379,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         address: _addressController.text.trim(),
         role: _role.name,
         phoneVerificationToken: _phoneVerificationToken,
-        clientType: _role == UserRole.client ? _clientType.name : null,
-        businessName: _role == UserRole.client ? _businessNameController.text.trim() : null,
+        miningUnitId: _role == UserRole.client ? finalMiningUnitId : null,
         clientDocumentBase64: _clientDocumentFile?.bytes != null ? base64Encode(_clientDocumentFile!.bytes!) : null,
         clientDocumentName: _clientDocumentFile?.name,
         resumeBase64: _resumeFile?.bytes != null ? base64Encode(_resumeFile!.bytes!) : null,
@@ -533,24 +571,12 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                       : null,
                 ),
 
-                // --- Client-only fields: client type, business name, document ---
+                // --- Client-only fields: associated unit, business name, document ---
                 if (_role == UserRole.client) ...[
                   const SizedBox(height: 18),
-                  _buildLabel('Client Type'),
+                  _buildLabel('Associated Ball Mill / Processing Plant or Tunnel'),
                   const SizedBox(height: 8),
-                  _buildClientTypeSelector(context),
-
-                  if (_clientType == ClientType.business) ...[
-                    const SizedBox(height: 18),
-                    _buildLabel('Business Name (optional)'),
-                    const SizedBox(height: 8),
-                    _buildTextField(
-                      context,
-                      controller: _businessNameController,
-                      hint: 'Enter your business name',
-                      icon: Icons.storefront_outlined,
-                    ),
-                  ],
+                  _buildMiningUnitSelector(context),
 
                   const SizedBox(height: 18),
                   _buildLabel('Upload Valid ID or Business Document'),
@@ -700,68 +726,127 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     );
   }
 
-  Widget _buildClientTypeSelector(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildClientTypeOption(
-            context,
-            type: ClientType.individual,
-            label: 'Individual',
-            icon: Icons.person_outline,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildClientTypeOption(
-            context,
-            type: ClientType.business,
-            label: 'Business',
-            icon: Icons.storefront_outlined,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildMiningUnitSelector(BuildContext context) {
+    // Filter logic for suggestions
+    final query = _miningUnitController.text.toLowerCase();
+    
+    // We check if query is not empty to show recommendations
+    final suggestions = query.isEmpty 
+        ? [] 
+        : _miningUnits.where((u) {
+            final name = u['name']?.toString().toLowerCase() ?? '';
+            return name.contains(query);
+          }).toList();
 
-  Widget _buildClientTypeOption(
-      BuildContext context, {
-        required ClientType type,
-        required String label,
-        required IconData icon,
-      }) {
-    final isSelected = _clientType == type;
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () => setState(() => _clientType = type),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected ? kGold.withValues(alpha: 0.15) : context.surfaceColor,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? kGold : kGold.withValues(alpha: 0.25),
-            width: isSelected ? 1.6 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? kGold : kGold.withValues(alpha: 0.6),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _miningUnitController,
+          style: TextStyle(color: context.textColor),
+          cursorColor: kGold,
+          decoration: InputDecoration(
+            hintText: 'Enter mill, plant, or tunnel name',
+            hintStyle: TextStyle(color: context.mutedTextColor),
+            prefixIcon: Icon(Icons.foundation_outlined, color: kGold.withValues(alpha: 0.8)),
+            filled: true,
+            fillColor: context.surfaceColor,
+            contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: kGold.withValues(alpha: 0.25)),
             ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? kGold : context.mutedTextColor,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                fontSize: 13,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: kGold.withValues(alpha: 0.25)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: kGold, width: 1.6),
+            ),
+          ),
+          onChanged: (val) {
+            setState(() {
+              _selectedMiningUnitId = null; 
+              _miningUnitError = null;
+            });
+          },
+        ),
+        if (suggestions.isNotEmpty && _selectedMiningUnitId == null) ...[
+          const SizedBox(height: 4),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: kGold.withValues(alpha: 0.3)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: suggestions.length,
+                separatorBuilder: (_, __) => Divider(height: 1, color: kGold.withOpacity(0.1)),
+                itemBuilder: (context, index) {
+                  final unit = suggestions[index];
+                  return ListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    title: Text(
+                      unit['name'] ?? '', 
+                      style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.w600)
+                    ),
+                    subtitle: Text(
+                      unit['type'] ?? 'Mining Unit', 
+                      style: TextStyle(color: context.mutedTextColor, fontSize: 11)
+                    ),
+                    trailing: const Icon(Icons.north_west_rounded, size: 14, color: kGold),
+                    onTap: () {
+                      setState(() {
+                        _miningUnitController.text = unit['name'] ?? '';
+                        _selectedMiningUnitId = unit['id']?.toString();
+                      });
+                      FocusScope.of(context).unfocus();
+                    },
+                  );
+                },
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        ],
+        if (_miningUnitError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              _miningUnitError!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
+          ),
+        if (_miningUnitController.text.isNotEmpty && suggestions.isEmpty && _selectedMiningUnitId == null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, left: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.add_circle_outline_rounded, size: 14, color: kGold),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'New unit "${_miningUnitController.text}" will be created upon signup.',
+                    style: TextStyle(color: kGold.withValues(alpha: 0.8), fontSize: 11, fontStyle: FontStyle.italic),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -1332,6 +1417,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         int maxLines = 1,
         TextInputType? keyboardType,
         Widget? suffixIcon,
+        void Function(String)? onChanged,
         String? Function(String?)? validator,
       }) {
     return TextFormField(
@@ -1368,6 +1454,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           borderSide: const BorderSide(color: Colors.redAccent),
         ),
       ),
+      onChanged: onChanged,
     );
   }
 }

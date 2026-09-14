@@ -47,7 +47,7 @@ class _ReportPageState extends State<ReportPage> {
           ),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.report),
+      endDrawer: const AdminDrawer(currentMenu: AdminMenu.reports),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(

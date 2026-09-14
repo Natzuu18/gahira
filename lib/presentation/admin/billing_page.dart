@@ -295,7 +295,7 @@ class _BillingPageState extends State<BillingPage> {
           ),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.billing),
+      endDrawer: const AdminDrawer(currentMenu: AdminMenu.bills),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(

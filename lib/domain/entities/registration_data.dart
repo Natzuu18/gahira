@@ -13,8 +13,7 @@ class RegistrationData extends Equatable {
   final String? phoneVerificationToken;
 
   // Client-specific fields
-  final ClientType? clientType;
-  final String? businessName;
+  final String? miningUnitId;
   final Uint8List? clientDocument;
   final String? clientDocumentName;
 
@@ -32,8 +31,7 @@ class RegistrationData extends Equatable {
     required this.address,
     required this.role,
     this.phoneVerificationToken,
-    this.clientType,
-    this.businessName,
+    this.miningUnitId,
     this.clientDocument,
     this.clientDocumentName,
     this.resume,
@@ -51,8 +49,7 @@ class RegistrationData extends Equatable {
         address,
         role,
         phoneVerificationToken,
-        clientType,
-        businessName,
+        miningUnitId,
         clientDocument,
         clientDocumentName,
         resume,

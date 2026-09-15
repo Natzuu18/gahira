@@ -1036,7 +1036,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  'Verified. Your temporary password will '
+                      'Verified. Your temporary password will '
                   'be sent to this number.',
                   style: TextStyle(color: Colors.green.shade400, fontSize: 11.5),
                 ),

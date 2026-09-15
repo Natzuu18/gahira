@@ -3,7 +3,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:dartz/dartz.dart' hide State;
 
+import '../../core/error/failures.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/adminDrawer.dart';
@@ -73,106 +75,97 @@ class ApprovalService {
   final SupabaseApprovalRepository _repository = SupabaseApprovalRepository();
 
   /// Fetch applications awaiting admin approval.
-  Future<List<PendingAccount>> fetchPendingAccounts() async {
+  Future<Either<Failure, List<PendingAccount>>> fetchPendingAccounts() async {
     final result = await _repository.fetchPendingApplications();
     
-    final applications = result.fold(
-      (failure) {
-        debugPrint('Error fetching pending applications: ${failure.message}');
-        throw Exception(failure.message);
-      },
-      (apps) => apps,
-    );
-    
-    final accounts = <PendingAccount>[];
-    for (final app in applications) {
-      final user = app['user'] as Map<String, dynamic>?;
-      if (user == null) continue;
+    return result.fold(
+      (failure) => Left(failure),
+      (applications) async {
+        final accounts = <PendingAccount>[];
+        for (final app in applications) {
+          final user = app['user'] as Map<String, dynamic>?;
+          if (user == null) continue;
 
-      final roleData = user['role'] as Map<String, dynamic>?;
-      final roleName = roleData != null ? roleData['role'] as String? : 'client';
-      final role = roleName == 'operator' ? AccountRole.operator : AccountRole.client;
-      
-      final availability = app['availability'] as Map<String, dynamic>?;
-      
-      // Fetch the document path directly from the applications table column
-      final documents = <AccountDocument>[];
-      final String? docPath = app['document_id'] as String?;
-      
-      if (docPath != null) {
-        try {
-          final url = _repository.client.storage.from('userFiles').getPublicUrl(docPath);
-          final lowerPath = docPath.toLowerCase();
+          final roleData = user['role'] as Map<String, dynamic>?;
+          final roleName = roleData != null ? roleData['role'] as String? : 'client';
+          final role = roleName == 'operator' ? AccountRole.operator : AccountRole.client;
           
-          String label = 'Document';
-          DocumentType type = DocumentType.other;
+          final availability = app['availability'] as Map<String, dynamic>?;
+          
+          final String? docPath = app['document_id'] as String?;
+          final documents = <AccountDocument>[];
+          
+          if (docPath != null) {
+            try {
+              final url = _repository.client.storage.from('userFiles').getPublicUrl(docPath);
+              final lowerPath = docPath.toLowerCase();
+              String label = 'Document';
+              DocumentType type = DocumentType.other;
 
-          if (lowerPath.endsWith('.png') || lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
-            label = 'Valid ID';
-            type = DocumentType.image;
-          } else if (lowerPath.endsWith('.pdf')) {
-            label = 'Document';
-            type = DocumentType.pdf;
-          } else if (lowerPath.endsWith('.docx') || lowerPath.endsWith('.doc')) {
-            label = 'Document';
-            type = DocumentType.other;
+              if (lowerPath.endsWith('.png') || lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
+                label = 'Valid ID';
+                type = DocumentType.image;
+              } else if (lowerPath.endsWith('.pdf')) {
+                label = 'Document';
+                type = DocumentType.pdf;
+              }
+
+              documents.add(AccountDocument(
+                id: docPath,
+                label: label,
+                url: url,
+                type: type,
+              ));
+            } catch (e) {
+              debugPrint('Error generating public URL: $e');
+            }
           }
 
-          documents.add(AccountDocument(
-            id: docPath,
-            label: label,
-            url: url,
-            type: type,
+          accounts.add(PendingAccount(
+            userId: user['userId'] as String,
+            applicationId: app['application_id'] as String,
+            fullName: '${user['fname']} ${user['mname'] != null ? '${user['mname']} ' : ''}${user['lname']}',
+            username: user['email'] as String,
+            phoneNumber: user['contact_num'] as String,
+            role: role,
+            requestedAt: DateTime.parse(app['created_at'] as String),
+            documents: documents,
+            appointmentDate: availability != null ? DateTime.parse(availability['date'] as String) : null,
+            startTime: availability?['start_time'],
+            endTime: availability?['end_time'],
+            address: availability?['address'],
+            appointmentStatus: app['appointment_status'] ?? 'pending',
+            status: app['status'] ?? 'pending',
           ));
-        } catch (e) {
-          debugPrint('Error generating public URL: $e');
         }
-      }
-
-      accounts.add(PendingAccount(
-        userId: user['userId'] as String,
-        applicationId: app['application_id'] as String,
-        fullName: '${user['fname']} ${user['mname'] != null ? '${user['mname']} ' : ''}${user['lname']}',
-        username: user['email'] as String,
-        phoneNumber: user['contact_num'] as String,
-        role: role,
-        requestedAt: DateTime.parse(app['created_at'] as String),
-        documents: documents,
-        appointmentDate: availability != null ? DateTime.parse(availability['date'] as String) : null,
-        startTime: availability?['start_time'],
-        endTime: availability?['end_time'],
-        address: availability?['address'],
-        appointmentStatus: app['appointment_status'] ?? 'pending',
-        status: app['status'] ?? 'pending',
-      ));
-    }
-    return accounts;
+        return Right(accounts);
+      },
+    );
   }
 
-  Future<void> approveAccount({
+  Future<void> editPhoneNumber(PendingAccount account, String newPhone) async {
+    final result = await _repository.client
+        .from('users')
+        .update({'contact_num': newPhone})
+        .eq('userId', account.userId);
+    
+    // Refresh local list if needed, or caller handles it
+  }
+
+  Future<Either<Failure, void>> approveAccount({
     required PendingAccount account,
   }) async {
-    final result = await _repository.approveApplication(
+    return _repository.approveApplication(
       applicationId: account.applicationId,
       userId: account.userId,
     );
-    
-    result.fold(
-      (failure) => throw Exception(failure.message),
-      (_) {},
-    );
   }
 
-  Future<void> rejectAccount(PendingAccount account) async {
-    final result = await _repository.updateApplicationStatus(
+  Future<Either<Failure, void>> rejectAccount(PendingAccount account) async {
+    return _repository.updateApplicationStatus(
       applicationId: account.applicationId,
       userId: account.userId,
       status: 'rejected',
-    );
-    
-    result.fold(
-      (failure) => throw Exception(failure.message),
-      (_) {},
     );
   }
 }
@@ -209,19 +202,67 @@ class _ApprovalPageState extends State<ApprovalPage> {
       _loading = true;
       _errorMessage = null;
     });
-    try {
-      final accounts = await _service.fetchPendingAccounts();
-      if (!mounted) return;
-      setState(() {
-        _accounts = accounts;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
-      });
+    
+    final result = await _service.fetchPendingAccounts();
+    
+    if (!mounted) return;
+    
+    result.fold(
+      (failure) {
+        setState(() {
+          _loading = false;
+          _errorMessage = failure.message;
+        });
+      },
+      (accounts) {
+        setState(() {
+          _accounts = accounts;
+          _loading = false;
+        });
+      },
+    );
+  }
+
+  Future<void> _showEditPhoneDialog(PendingAccount account) async {
+    final controller = TextEditingController(text: account.phoneNumber);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update Phone Number'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(
+            labelText: 'Phone Number',
+            hintText: '09123456789',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim().isNotEmpty),
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _service.editPhoneNumber(account, controller.text.trim());
+        await _loadAccounts(); // Refresh
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Phone number updated.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
     }
   }
 
@@ -255,36 +296,38 @@ class _ApprovalPageState extends State<ApprovalPage> {
     if (_processingIds.contains(account.applicationId)) return; // Protection
     setState(() => _processingIds.add(account.applicationId));
 
-    try {
-      await _service.approveAccount(account: account);
+    final result = await _service.approveAccount(account: account);
 
-      if (!mounted) return;
-      setState(() {
-        _accounts.removeWhere((a) => a.applicationId == account.applicationId);
-        _processingIds.remove(account.applicationId);
-      });
+    if (!mounted) return;
+    setState(() => _processingIds.remove(account.applicationId));
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${account.fullName} approved. Temporary password sent via SMS.'),
-          backgroundColor: Colors.green.shade600,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _processingIds.remove(account.applicationId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to approve ${account.fullName}: $e'),
-          backgroundColor: Colors.red.shade600,
-          action: SnackBarAction(
-            label: 'Retry',
-            textColor: Colors.white,
-            onPressed: () => _approveAccount(account),
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to approve ${account.fullName}: ${failure.message}'),
+            backgroundColor: Colors.red.shade600,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _approveAccount(account),
+            ),
           ),
-        ),
-      );
-    }
+        );
+      },
+      (_) {
+        setState(() {
+          _accounts.removeWhere((a) => a.applicationId == account.applicationId);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${account.fullName} approved. Temporary password sent via SMS.'),
+            backgroundColor: Colors.green.shade600,
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _confirmAndReject(PendingAccount account) async {
@@ -310,26 +353,30 @@ class _ApprovalPageState extends State<ApprovalPage> {
     if (confirmed != true) return;
 
     setState(() => _processingIds.add(account.applicationId));
-    try {
-      await _service.rejectAccount(account);
-      if (!mounted) return;
-      setState(() {
-        _accounts.removeWhere((a) => a.applicationId == account.applicationId);
-        _processingIds.remove(account.applicationId);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${account.fullName} rejected.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _processingIds.remove(account.applicationId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to reject: $e'),
-          backgroundColor: Colors.red.shade600,
-        ),
-      );
-    }
+    
+    final result = await _service.rejectAccount(account);
+    
+    if (!mounted) return;
+    setState(() => _processingIds.remove(account.applicationId));
+    
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to reject: ${failure.message}'),
+            backgroundColor: Colors.red.shade600,
+          ),
+        );
+      },
+      (_) {
+        setState(() {
+          _accounts.removeWhere((a) => a.applicationId == account.applicationId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${account.fullName} rejected.')),
+        );
+      },
+    );
   }
 
   List<PendingAccount> get _filteredAccounts {
@@ -561,6 +608,11 @@ class _ApprovalPageState extends State<ApprovalPage> {
                     ),
                   ],
                 ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 18, color: kGold),
+                tooltip: 'Edit Phone',
+                onPressed: () => _showEditPhoneDialog(account),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:dartz/dartz.dart' hide State;
+import '../../core/error/failures.dart';
+import '../../application/services/service_request_service.dart';
+import '../../domain/entities/service_request_entity.dart';
+import '../../domain/entities/user_entity.dart';
+import '../../infrastructure/repositories/supabase_service_request_repository.dart';
+import '../../infrastructure/repositories/supabase_user_repository.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/adminDrawer.dart';
 import '../shared_widgets/themeToggleButton.dart';
-
-import '../../../infrastructure/repositories/supabase_service_request_repository.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../shared_widgets/audit_trail_viewer.dart';
 
 class ServiceRequestPage extends StatefulWidget {
   const ServiceRequestPage({super.key});
@@ -16,79 +20,32 @@ class ServiceRequestPage extends StatefulWidget {
 
 class _ServiceRequestPageState extends State<ServiceRequestPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final _repository = SupabaseServiceRequestRepository();
-  String _filterStatus = 'All';
-  List<Map<String, dynamic>> _requests = [];
+  final SupabaseServiceRequestRepository _repository = SupabaseServiceRequestRepository();
+  late final ServiceRequestService _service;
+  final SupabaseUserRepository _userRepository = SupabaseUserRepository();
+
+  List<ServiceRequestEntity> _requests = [];
+  List<UserEntity> _operators = [];
   bool _isLoading = true;
+  String _filterStatus = 'All';
 
   @override
   void initState() {
     super.initState();
-    _fetchRequests();
+    _service = ServiceRequestService(_repository);
+    _loadData();
   }
 
-  Future<void> _fetchRequests() async {
+  Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final result = await _repository.getServiceRequests();
+    final requestsResult = await _repository.getServiceRequests();
+    final usersResult = await _userRepository.getMinersAndClients();
     
-    if (!mounted) return;
-
-    result.fold(
-      (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message)));
-        setState(() => _isLoading = false);
-      },
-      (list) {
-        // Map backend data to UI expected format
-        final mapped = list.map((r) {
-          final user = r['user'] as Map<String, dynamic>?;
-          return {
-            'id': r['service_request_id'],
-            'raw_id': r['service_request_id'],
-            'minerName': user != null ? '${user['fname']} ${user['lname']}' : 'Unknown Miner',
-            'type': r['service_type'] ?? 'Standard',
-            'material': r['purpose'] ?? 'Unspecified Material',
-            'weight': '${r['quantity'] ?? 0} kg',
-            'estimatedTime': 'TBD', // This can be calculated later
-            'status': r['status'] ?? 'Pending',
-            'operatorVerified': r['approved_at'] != null,
-            'operatorName': 'System', // Placeholder
-            'createdAt': DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(r['created_at'])),
-            'participatingMiners': [user != null ? '${user['fname']} ${user['lname']}' : 'Miner'],
-            'remarks': r['remarks'] ?? '',
-          };
-        }).toList();
-
-        setState(() {
-          _requests = mapped;
-          _isLoading = false;
-        });
-      },
-    );
-  }
-
-  List<Map<String, dynamic>> get _filteredRequests {
-    if (_filterStatus == 'All') return _requests;
-    return _requests.where((r) => r['status'] == _filterStatus).toList();
-  }
-
-  Future<void> _updateStatus(String requestId, String newStatus) async {
-    final adminId = Supabase.instance.client.auth.currentUser?.id;
-    if (adminId == null) return;
-
-    final result = await _repository.updateRequestStatus(
-      requestId: requestId,
-      status: newStatus,
-      adminId: adminId,
-    );
-
-    result.fold(
-      (failure) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message))),
-      (_) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Request $newStatus')));
-        _fetchRequests();
-      },
-    );
+    setState(() {
+      _requests = requestsResult.getOrElse(() => []);
+      _operators = usersResult.getOrElse(() => []).where((u) => u.roleId == 'operator').toList();
+      _isLoading = false;
+    });
   }
 
   @override
@@ -99,46 +56,36 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
         elevation: 0,
-        leadingWidth: 64,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: _buildLogoMark(),
-        ),
-        title: const Text(
-          'SERVICE REQUESTS',
-          style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 16),
-        ),
+        title: const Text('MANAGE REQUESTS', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2)),
         actions: [
           const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
+          IconButton(icon: const Icon(Icons.menu_rounded, color: kGold), onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
         ],
       ),
       endDrawer: const AdminDrawer(currentMenu: AdminMenu.serviceRequest),
-      body: Column(
-        children: [
-          _buildFilterBar(),
-          Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator(color: kGold))
-              : RefreshIndicator(
-                  onRefresh: _fetchRequests,
-                  color: kGold,
-                  child: _filteredRequests.isEmpty 
-                    ? const Center(child: Text('No service requests found'))
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _filteredRequests.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 16),
-                        itemBuilder: (context, index) => _buildRequestCard(_filteredRequests[index]),
-                      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: kGold))
+          : Column(
+              children: [
+                _buildFilterBar(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _loadData,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _filteredRequests.length,
+                      itemBuilder: (context, index) => _buildRequestCard(_filteredRequests[index]),
+                    ),
+                  ),
                 ),
-          ),
-        ],
-      ),
+              ],
+            ),
     );
+  }
+
+  List<ServiceRequestEntity> get _filteredRequests {
+    if (_filterStatus == 'All') return _requests;
+    return _requests.where((r) => r.status.name.toLowerCase() == _filterStatus.toLowerCase()).toList();
   }
 
   Widget _buildFilterBar() {
@@ -148,7 +95,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: ['All', 'Awaiting Review', 'Pending Verification', 'Approved', 'Rejected'].map((status) {
+          children: ['All', 'Verified', 'Scheduled', 'Processing', 'ProcessingCompleted'].map((status) {
             final isSelected = _filterStatus == status;
             return Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -166,196 +113,129 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
     );
   }
 
-  Widget _buildRequestCard(Map<String, dynamic> request) {
-    return Container(
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.textColor.withOpacity(0.05)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildRequestCard(ServiceRequestEntity request) {
+    return Card(
+      color: context.surfaceColor,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: kGold.withOpacity(0.1))),
+      child: ExpansionTile(
+        title: Text('Request ID: ${request.id.substring(0, 8)}', style: const TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+        subtitle: Text('Status: ${request.status.name}', style: TextStyle(color: _getStatusColor(request.status))),
+        childrenPadding: const EdgeInsets.all(16),
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(request['id'], style: const TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 13)),
-                    Text(request['createdAt'], style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
-                  ],
-                ),
-                _buildStatusBadge(request['status']),
-              ],
+          _buildDetailRow('Material', '${request.materialDetails.type} (${request.materialDetails.weight} kg)'),
+          if (request.materialDetails.actualWeight != null)
+            _buildDetailRow('Verified Weight', '${request.materialDetails.actualWeight} kg'),
+          _buildDetailRow('Est. Time', request.processingDetails.estimatedTime ?? 'N/A'),
+          const Divider(),
+          if (request.status == ServiceRequestStatus.verified || request.status == ServiceRequestStatus.accepted)
+            ElevatedButton(
+              onPressed: () => _showScheduleDialog(request),
+              style: ElevatedButton.styleFrom(backgroundColor: kGold, minimumSize: const Size(double.infinity, 45)),
+              child: const Text('Schedule & Assign Operators', style: TextStyle(color: kBlack)),
             ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _buildInfoRow(Icons.person_outline, 'Primary Miner', request['minerName']),
-                _buildInfoRow(Icons.category_outlined, 'Request Type', request['type']),
-                _buildInfoRow(Icons.layers_outlined, 'Material', '${request['material']} (${request['weight']})'),
-                _buildInfoRow(Icons.timer_outlined, 'Est. Processing', request['estimatedTime']),
-                _buildInfoRow(
-                  Icons.verified_user_outlined, 
-                  'Verification', 
-                  request['operatorVerified'] ? 'Verified by ${request['operatorName']}' : 'Awaiting Operator',
-                  valueColor: request['operatorVerified'] ? Colors.green : Colors.orange
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _showRequestDetails(request),
-                    style: OutlinedButton.styleFrom(side: BorderSide(color: kGold.withOpacity(0.5))),
-                    child: const Text('VIEW DETAILS', style: TextStyle(color: kGold, fontSize: 12)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                if (request['status'] == 'Pending' || request['status'] == 'Awaiting Review')
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _showProceedDialog(request),
-                      style: ElevatedButton.styleFrom(backgroundColor: kGold),
-                      child: const Text('PROCEED TO SCHEDULE', style: TextStyle(color: kBlack, fontSize: 11, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-              ],
-            ),
+          const SizedBox(height: 16),
+          const Text('Audit Trail', style: TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          FutureBuilder<Either<Failure, List<Map<String, dynamic>>>>(
+            future: _repository.getAuditTrails(request.id),
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                return snapshot.data!.fold((l) => const Text('Error loading history'), (trails) => AuditTrailViewer(auditTrails: trails));
+              }
+              return const CircularProgressIndicator();
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: kGold.withOpacity(0.7)),
-          const SizedBox(width: 12),
-          Text('$label:', style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
-          const SizedBox(width: 8),
-          Expanded(child: Text(value, style: TextStyle(color: valueColor ?? context.textColor, fontSize: 12, fontWeight: FontWeight.w500))),
-        ],
-      ),
-    );
-  }
+  void _showScheduleDialog(ServiceRequestEntity request) {
+    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+    List<String> assignedOperators = [];
 
-  Widget _buildStatusBadge(String status) {
-    Color color = Colors.blue;
-    if (status == 'Awaiting Review' || status == 'Pending') color = kGold;
-    if (status == 'Approved') color = Colors.green;
-    if (status == 'Rejected') color = Colors.red;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.5))),
-      child: Text(status.toUpperCase(), style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
-    );
-  }
-
-  void _showRequestDetails(Map<String, dynamic> request) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: context.surfaceColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        expand: false,
-        builder: (_, controller) => SingleChildScrollView(
-          controller: controller,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Full Request Details', style: TextStyle(color: kGold, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              _buildDetailSection('PARTICIPATING MINERS', (request['participatingMiners'] as List).join(', ')),
-              _buildDetailSection('MATERIAL ANALYSIS', 'Visual inspection passed. Purpose: ${request['material']}'),
-              _buildDetailSection('OPERATOR REMARKS', request['remarks'] ?? 'No remarks provided.'),
-              _buildDetailSection('HISTORY', 'Created: ${request['createdAt']}'),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('CLOSE', style: TextStyle(color: Colors.grey)),
-                    ),
-                  ),
-                  if (request['status'] == 'Pending' || request['status'] == 'Awaiting Review')
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _updateStatus(request['raw_id'], 'Rejected');
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                        child: const Text('REJECT REQUEST', style: TextStyle(color: Colors.white)),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      backgroundColor: context.bgColor,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Schedule Processing', style: TextStyle(color: kGold, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                ListTile(
+                  title: Text('Date: ${selectedDate.toLocal().toString().split(' ')[0]}', style: TextStyle(color: context.textColor)),
+                  trailing: const Icon(Icons.calendar_today, color: kGold),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 90)),
+                    );
+                    if (picked != null) setModalState(() => selectedDate = picked);
+                  },
+                ),
+                const SizedBox(height: 16),
+                const Text('Assign Operators', style: TextStyle(color: kGold, fontWeight: FontWeight.w500)),
+                ..._operators.map((op) => CheckboxListTile(
+                  title: Text('${op.fname} ${op.lname}', style: TextStyle(color: context.textColor)),
+                  value: assignedOperators.contains(op.userId),
+                  onChanged: (v) => setModalState(() => v! ? assignedOperators.add(op.userId) : assignedOperators.remove(op.userId)),
+                  activeColor: kGold,
+                )),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: assignedOperators.isEmpty ? null : () async {
+                    final result = await _service.ownerScheduleAndAssign(
+                      requestId: request.id,
+                      ownerId: 'CURRENT_OWNER_ID', // TODO
+                      scheduledDate: selectedDate,
+                      assignedOperatorIds: assignedOperators,
+                      currentStatus: request.status.name,
+                    );
+                    Navigator.pop(context);
+                    result.fold(
+                      (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+                      (_) => _loadData(),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: kGold, minimumSize: const Size(double.infinity, 50)),
+                  child: const Text('Confirm Schedule', style: TextStyle(color: kBlack)),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildDetailSection(String title, String content) {
+  Widget _buildDetailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(color: kGold.withOpacity(0.7), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-          const SizedBox(height: 8),
-          Text(content, style: TextStyle(color: context.textColor, fontSize: 14, height: 1.5)),
+          Text(label, style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
+          Text(value, style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 
-  void _showProceedDialog(Map<String, dynamic> request) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Approve for Scheduling'),
-        content: Text('Confirming ${request['id']} will move it to the Processing Schedule. Proceed?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () {
-              Navigator.pop(context);
-              _updateStatus(request['raw_id'], 'Approved');
-            },
-            child: const Text('Approve'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogoMark() {
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: kGold, width: 1.6), color: context.bgColor),
-      child: const Icon(Icons.settings_input_component_rounded, color: kGold, size: 16),
-    );
+  Color _getStatusColor(ServiceRequestStatus status) {
+    switch (status) {
+      case ServiceRequestStatus.completed: return Colors.green;
+      case ServiceRequestStatus.processing: return Colors.blue;
+      case ServiceRequestStatus.returnedToMiner: return Colors.red;
+      default: return kGold;
+    }
   }
 }

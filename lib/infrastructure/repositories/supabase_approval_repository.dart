@@ -37,6 +37,9 @@ class SupabaseApprovalRepository {
           : AuthFailure(e.message);
     }
     if (e is PostgrestException) {
+      if (e.message.contains('SMS Delivery Failed')) {
+        return ServerFailure('SMS Delivery Failed: The request was rolled back. Please check the recipient\'s number or try again later.');
+      }
       return _looksLikeNetworkError(e.message)
           ? NetworkFailure(e.message)
           : ServerFailure('Database error: ${e.message}');
@@ -100,12 +103,33 @@ class SupabaseApprovalRepository {
     required String userId,
   }) async {
     try {
-      // 1. Generate the temporary password NOW (during approval)
+      // 1. Fetch user to get phone number and verify format
+      final userResponse = await _client
+          .from('users')
+          .select('contact_num')
+          .eq('userId', userId)
+          .single();
+      
+      String phone = userResponse['contact_num'] ?? '';
+      String normalizedPhone = _normalizePhone(phone);
+      
+      // PhilSMS requires a valid 12-digit number starting with 639
+      if (normalizedPhone.length < 12) {
+        return Left(ServerFailure('Invalid phone number: "$phone". SMS cannot be sent. Please update the user\'s contact info to a valid format (e.g., 09123456789) first.'));
+      }
+
+      // 2. Update the phone number in the DB to the normalized version to ensure PhilSMS success
+      if (normalizedPhone != phone) {
+        await _client
+            .from('users')
+            .update({'contact_num': normalizedPhone})
+            .eq('userId', userId);
+      }
+
+      // 3. Generate the temporary password NOW (during approval)
       final tempPassword = _generateRandomPassword();
 
-      // 2. Call the RPC to update Auth, DB, and send SMS in one transaction.
-      // This ensures that the account is "created" (password set/status updated) 
-      // and the role is effectively active only upon this admin action.
+      // 4. Call the RPC to update Auth, DB, and send SMS in one transaction.
       await _client.rpc(
         'approve_application_with_pass',
         params: {
@@ -116,11 +140,8 @@ class SupabaseApprovalRepository {
       );
 
       return const Right(null);
-    } on PostgrestException catch (e) {
-      // The Postgres function handles the rollback via RAISE EXCEPTION if SMS fails
-      return Left(ServerFailure(e.message));
     } catch (e) {
-      return Left(ServerFailure('Approval process failed: ${e.toString()}'));
+      return Left(_mapError(e));
     }
   }
 

@@ -39,14 +39,15 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       }
 
       // 1. Get the correct role_id from the role table
-      // NOTE: table is "role" (singular) per schema, not "roles"
-      final roleResult = await _client
+      final List<dynamic> roles = await _client
           .from('role')
           .select('role_id')
-          .eq('role', data.role.name)
-          .single();
-
-      final roleId = roleResult['role_id'];
+          .eq('role', data.role.name);
+      
+      if (roles.isEmpty) {
+        return Left(ServerFailure('Role ${data.role.name} not found in database'));
+      }
+      final roleId = roles.first['role_id'];
 
       // 2. Generate a temporary password (since Supabase Auth requires one)
       final tempPassword = _generateRandomPassword();
@@ -86,7 +87,7 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
 
       // 5. Handle File Uploads & Personal Details
       String? documentPath;
-      if (data.role == UserRole.client && data.clientDocument != null) {
+      if (data.role == UserRole.miner && data.clientDocument != null) {
         final extension = data.clientDocumentName?.split('.').last ?? 'bin';
         documentPath = 'doc_${authUser.id}_${DateTime.now().millisecondsSinceEpoch}.$extension';
         
@@ -179,8 +180,11 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
         'attempts': 0,
         'verified': false,
         'consumed': false,
-      }).select('id').single();
+      }).select('id').maybeSingle();
       
+      if (insertResponse == null) {
+        return const Left(ServerFailure('Failed to generate verification record.'));
+      }
       insertedId = insertResponse['id'].toString();
 
       // 4. Send the raw PIN to the user via PhilSMS
@@ -312,21 +316,39 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
     }
   }
 
-  /// Creates a new mining unit and returns its ID.
+  /// Creates a new mining unit or returns existing one's ID.
   Future<Either<Failure, String>> createMiningUnit(String name) async {
     try {
+      final trimmedName = name.trim();
+      
+      // 1. Check if it already exists (case-insensitive search)
+      final existing = await _client
+          .from('mining_units')
+          .select('id')
+          .ilike('name', trimmedName)
+          .maybeSingle();
+
+      if (existing != null) {
+        return Right(existing['id'].toString());
+      }
+
+      // 2. If not, create it
       final response = await _client
           .from('mining_units')
           .insert({
-            'name': name,
-            'type': 'Ball Mill', // Default type for new units created via registration
+            'name': trimmedName,
+            'type': 'Ball Mill', 
           })
           .select('id')
-          .single();
+          .maybeSingle();
+      
+      if (response == null) {
+        return const Left(ServerFailure('Failed to retrieve ID after unit creation.'));
+      }
       
       return Right(response['id'].toString());
     } catch (e) {
-      return Left(ServerFailure('Failed to create unit: ${e.toString()}'));
+      return Left(ServerFailure('Failed to handle unit creation: ${e.toString()}'));
     }
   }
 

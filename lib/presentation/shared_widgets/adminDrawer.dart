@@ -11,6 +11,13 @@ import '../admin/availability_page.dart';
 import '../admin/miner_client_list_page.dart';
 import '../admin/add_miner_page.dart';
 import '../admin/service_request_page.dart';
+import '../admin/processing/schedule_assignment_page.dart';
+import '../admin/processing/processing_calendar_page.dart';
+import '../admin/processing/active_processing_page.dart';
+import '../admin/processing/completed_processing_page.dart';
+import '../admin/equipment/machine_page.dart';
+import '../admin/equipment/drum_page.dart';
+import '../admin/equipment/maintenance_page.dart';
 
 // Shared drawer menu used across every admin page.
 // Drop <AdminDrawer currentMenu: AdminMenu.xxx> into any page's
@@ -197,28 +204,28 @@ class AdminDrawer extends StatelessWidget {
                           icon: Icons.assignment_ind_outlined,
                           label: 'Schedule & Assignment',
                           menu: AdminMenu.scheduleAssignment,
-                          page: _PlaceholderPage(title: 'Schedule & Assignment'),
+                          page: const ScheduleAssignmentPage(),
                         ),
                         _buildSubItem(
                           context,
                           icon: Icons.calendar_today_outlined,
                           label: 'Calendar',
                           menu: AdminMenu.calendar,
-                          page: _PlaceholderPage(title: 'Calendar'),
+                          page: const ProcessingCalendarPage(),
                         ),
                         _buildSubItem(
                           context,
                           icon: Icons.play_circle_outline_rounded,
                           label: 'Active Processing',
                           menu: AdminMenu.activeProcessing,
-                          page: _PlaceholderPage(title: 'Active Processing'),
+                          page: const ActiveProcessingPage(),
                         ),
                         _buildSubItem(
                           context,
                           icon: Icons.check_circle_outline_rounded,
                           label: 'Completed Processing',
                           menu: AdminMenu.completedProcessing,
-                          page: _PlaceholderPage(title: 'Completed Processing'),
+                          page: const CompletedProcessingPage(),
                         ),
                       ],
                     ),
@@ -235,21 +242,21 @@ class AdminDrawer extends StatelessWidget {
                           icon: Icons.precision_manufacturing_outlined,
                           label: 'Machines',
                           menu: AdminMenu.machines,
-                          page: _PlaceholderPage(title: 'Machines'),
+                          page: const MachinePage(),
                         ),
                         _buildSubItem(
                           context,
                           icon: Icons.reorder_rounded,
                           label: 'Drums',
                           menu: AdminMenu.drums,
-                          page: _PlaceholderPage(title: 'Drums'),
+                          page: const DrumPage(),
                         ),
                         _buildSubItem(
                           context,
                           icon: Icons.build_circle_outlined,
                           label: 'Maintenance',
                           menu: AdminMenu.maintenance,
-                          page: _PlaceholderPage(title: 'Maintenance'),
+                          page: const MaintenancePage(),
                         ),
                       ],
                     ),

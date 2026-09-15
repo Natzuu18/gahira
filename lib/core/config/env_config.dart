@@ -9,6 +9,6 @@ class EnvConfig {
 
   /// PhilSMS Configuration
   static const String philsmsEndpoint = 'https://dashboard.philsms.com/api/v3/sms/send';
-  static const String philsmsApiKey = '3681|YUG5fYRSWoqGyZb8PWoRoYmmllw7HWvbwkItyOB94c6f0330';
-  static const String philsmsSenderId = 'PhilSMS'; // Or your approved Sender ID
+  static const String philsmsApiKey = '4353|WiUWMX8UBolKHp5BrRsE14MvAT9H3bdE4UrY3g612eaaf318';
+  static const String philsmsSenderId = 'PhilSMS';
 }

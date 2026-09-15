@@ -39,7 +39,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   final _addressController = TextEditingController();
   final _otpController = TextEditingController();
 
-  UserRole _role = UserRole.client;
+  UserRole _role = UserRole.miner;
 
   // Phone verification (required for both roles). The phone number must be
   // confirmed via a one-time SMS code before the form can be submitted.
@@ -311,11 +311,11 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           ? 'Please select an interview date and time'
           : null;
       _miningUnitError = 
-      (_role == UserRole.client && _selectedMiningUnitId == null)
-          ? 'Please select an associated unit'
+      (_role == UserRole.miner && _selectedMiningUnitId == null && _miningUnitController.text.trim().isEmpty)
+          ? 'Please enter or select an associated unit'
           : null;
       _clientDocumentError =
-      (_role == UserRole.client && _clientDocumentFile == null)
+      (_role == UserRole.miner && _clientDocumentFile == null)
           ? 'Please attach a valid ID or business document'
           : null;
     });
@@ -335,7 +335,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       
       // Handle Mining Unit creation if it's a new name
       String? finalMiningUnitId = _selectedMiningUnitId;
-      if (_role == UserRole.client && finalMiningUnitId == null && _miningUnitController.text.isNotEmpty) {
+      if (_role == UserRole.miner && finalMiningUnitId == null && _miningUnitController.text.isNotEmpty) {
         final createResult = await repository.createMiningUnit(_miningUnitController.text.trim());
         createResult.fold(
           (failure) => throw Exception(failure.message),
@@ -379,7 +379,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         address: _addressController.text.trim(),
         role: _role.name,
         phoneVerificationToken: _phoneVerificationToken,
-        miningUnitId: _role == UserRole.client ? finalMiningUnitId : null,
+        miningUnitId: _role == UserRole.miner ? finalMiningUnitId : null,
         clientDocumentBase64: _clientDocumentFile?.bytes != null ? base64Encode(_clientDocumentFile!.bytes!) : null,
         clientDocumentName: _clientDocumentFile?.name,
         resumeBase64: _resumeFile?.bytes != null ? base64Encode(_resumeFile!.bytes!) : null,
@@ -571,8 +571,8 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                       : null,
                 ),
 
-                // --- Client-only fields: associated unit, business name, document ---
-                if (_role == UserRole.client) ...[
+                // --- Miner-only fields: associated unit, business name, document ---
+                if (_role == UserRole.miner) ...[
                   const SizedBox(height: 18),
                   _buildLabel('Associated Ball Mill / Processing Plant or Tunnel'),
                   const SizedBox(height: 8),
@@ -667,8 +667,8 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         Expanded(
           child: _buildRoleOption(
             context,
-            role: UserRole.client,
-            label: 'Client',
+            role: UserRole.miner,
+            label: 'Miner',
             icon: Icons.person_outline,
           ),
         ),

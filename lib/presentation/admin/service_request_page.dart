@@ -4,6 +4,9 @@ import '../shared_widgets/appColor.dart';
 import '../shared_widgets/adminDrawer.dart';
 import '../shared_widgets/themeToggleButton.dart';
 
+import '../../../infrastructure/repositories/supabase_service_request_repository.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 class ServiceRequestPage extends StatefulWidget {
   const ServiceRequestPage({super.key});
 
@@ -13,41 +16,79 @@ class ServiceRequestPage extends StatefulWidget {
 
 class _ServiceRequestPageState extends State<ServiceRequestPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _repository = SupabaseServiceRequestRepository();
   String _filterStatus = 'All';
+  List<Map<String, dynamic>> _requests = [];
+  bool _isLoading = true;
 
-  // Sample Mock Data
-  final List<Map<String, dynamic>> _mockRequests = [
-    {
-      'id': 'SR-2024-001',
-      'minerName': 'Juan Dela Cruz',
-      'type': 'Miner-Created',
-      'material': 'Gold Ore (High Grade)',
-      'weight': '500 kg',
-      'estimatedTime': '18 Hours',
-      'status': 'Awaiting Review',
-      'operatorVerified': true,
-      'operatorName': 'Operator Mike',
-      'createdAt': '2024-08-27 09:00 AM',
-      'participatingMiners': ['Juan Dela Cruz', 'Pedro Penduko'],
-    },
-    {
-      'id': 'SR-2024-002',
-      'minerName': 'Mark Santos',
-      'type': 'Operator-Assisted',
-      'material': 'Raw Quartz',
-      'weight': '1.2 Tons',
-      'estimatedTime': '36 Hours',
-      'status': 'Pending Verification',
-      'operatorVerified': false,
-      'operatorName': 'N/A',
-      'createdAt': '2024-08-28 02:30 PM',
-      'participatingMiners': ['Mark Santos'],
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchRequests();
+  }
+
+  Future<void> _fetchRequests() async {
+    setState(() => _isLoading = true);
+    final result = await _repository.getServiceRequests();
+    
+    if (!mounted) return;
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message)));
+        setState(() => _isLoading = false);
+      },
+      (list) {
+        // Map backend data to UI expected format
+        final mapped = list.map((r) {
+          final user = r['user'] as Map<String, dynamic>?;
+          return {
+            'id': r['service_request_id'],
+            'raw_id': r['service_request_id'],
+            'minerName': user != null ? '${user['fname']} ${user['lname']}' : 'Unknown Miner',
+            'type': r['service_type'] ?? 'Standard',
+            'material': r['purpose'] ?? 'Unspecified Material',
+            'weight': '${r['quantity'] ?? 0} kg',
+            'estimatedTime': 'TBD', // This can be calculated later
+            'status': r['status'] ?? 'Pending',
+            'operatorVerified': r['approved_at'] != null,
+            'operatorName': 'System', // Placeholder
+            'createdAt': DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(r['created_at'])),
+            'participatingMiners': [user != null ? '${user['fname']} ${user['lname']}' : 'Miner'],
+            'remarks': r['remarks'] ?? '',
+          };
+        }).toList();
+
+        setState(() {
+          _requests = mapped;
+          _isLoading = false;
+        });
+      },
+    );
+  }
 
   List<Map<String, dynamic>> get _filteredRequests {
-    if (_filterStatus == 'All') return _mockRequests;
-    return _mockRequests.where((r) => r['status'] == _filterStatus).toList();
+    if (_filterStatus == 'All') return _requests;
+    return _requests.where((r) => r['status'] == _filterStatus).toList();
+  }
+
+  Future<void> _updateStatus(String requestId, String newStatus) async {
+    final adminId = Supabase.instance.client.auth.currentUser?.id;
+    if (adminId == null) return;
+
+    final result = await _repository.updateRequestStatus(
+      requestId: requestId,
+      status: newStatus,
+      adminId: adminId,
+    );
+
+    result.fold(
+      (failure) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message))),
+      (_) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Request $newStatus')));
+        _fetchRequests();
+      },
+    );
   }
 
   @override
@@ -80,12 +121,20 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
         children: [
           _buildFilterBar(),
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: _filteredRequests.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (context, index) => _buildRequestCard(_filteredRequests[index]),
-            ),
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator(color: kGold))
+              : RefreshIndicator(
+                  onRefresh: _fetchRequests,
+                  color: kGold,
+                  child: _filteredRequests.isEmpty 
+                    ? const Center(child: Text('No service requests found'))
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _filteredRequests.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) => _buildRequestCard(_filteredRequests[index]),
+                      ),
+                ),
           ),
         ],
       ),
@@ -173,7 +222,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                if (request['status'] == 'Awaiting Review')
+                if (request['status'] == 'Pending' || request['status'] == 'Awaiting Review')
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => _showProceedDialog(request),
@@ -206,8 +255,9 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
 
   Widget _buildStatusBadge(String status) {
     Color color = Colors.blue;
-    if (status == 'Awaiting Review') color = kGold;
+    if (status == 'Awaiting Review' || status == 'Pending') color = kGold;
     if (status == 'Approved') color = Colors.green;
+    if (status == 'Rejected') color = Colors.red;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.5))),
@@ -233,9 +283,9 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
               const Text('Full Request Details', style: TextStyle(color: kGold, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
               _buildDetailSection('PARTICIPATING MINERS', (request['participatingMiners'] as List).join(', ')),
-              _buildDetailSection('MATERIAL ANALYSIS', 'Visual inspection passed. Moister content: Low. Processing type: Standard Grinding.'),
-              _buildDetailSection('OPERATOR REMARKS', 'Material weighed in front of client. No issues found during initial verification.'),
-              _buildDetailSection('HISTORY', 'Created: ${request['createdAt']}\nVerified: 2024-08-28 10:00 AM by Operator Mike'),
+              _buildDetailSection('MATERIAL ANALYSIS', 'Visual inspection passed. Purpose: ${request['material']}'),
+              _buildDetailSection('OPERATOR REMARKS', request['remarks'] ?? 'No remarks provided.'),
+              _buildDetailSection('HISTORY', 'Created: ${request['createdAt']}'),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -245,13 +295,17 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                       child: const Text('CLOSE', style: TextStyle(color: Colors.grey)),
                     ),
                   ),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                      child: const Text('REJECT REQUEST', style: TextStyle(color: Colors.white)),
+                  if (request['status'] == 'Pending' || request['status'] == 'Awaiting Review')
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _updateStatus(request['raw_id'], 'Rejected');
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                        child: const Text('REJECT REQUEST', style: TextStyle(color: Colors.white)),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],
@@ -285,7 +339,10 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context);
+              _updateStatus(request['raw_id'], 'Approved');
+            },
             child: const Text('Approve'),
           ),
         ],

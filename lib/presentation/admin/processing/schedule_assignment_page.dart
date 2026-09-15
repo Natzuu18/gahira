@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:dartz/dartz.dart' hide State;
+import '../../../core/error/failures.dart';
+import '../../../domain/entities/service_request_entity.dart';
+import '../../../infrastructure/models/service_request_model.dart';
 import '../../../infrastructure/repositories/supabase_processing_repository.dart';
 import '../../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../../infrastructure/repositories/supabase_equipment_repository.dart';
@@ -23,7 +27,7 @@ class _ScheduleAssignmentPageState extends State<ScheduleAssignmentPage> {
   final _userRepo = SupabaseUserRepository();
 
   List<Map<String, dynamic>> _tasks = [];
-  List<Map<String, dynamic>> _approvedRequests = [];
+  List<ServiceRequestModel> _approvedRequests = [];
   List<Map<String, dynamic>> _machines = [];
   List<Map<String, dynamic>> _drums = [];
   List<dynamic> _operators = [];
@@ -45,7 +49,7 @@ class _ScheduleAssignmentPageState extends State<ScheduleAssignmentPage> {
     final usersRes = await _userRepo.getAllUsers(); // Filter for Operators
 
     tasksRes.fold((f) => null, (list) => _tasks = list);
-    requestsRes.fold((f) => null, (list) => _approvedRequests = list.where((r) => r['status'] == 'Approved').toList());
+    requestsRes.fold((f) => null, (list) => _approvedRequests = list.where((r) => r.status.name == 'approved' || r.status.name == 'verified').toList());
     machinesRes.fold((f) => null, (list) => _machines = list);
     drumsRes.fold((f) => null, (list) => _drums = list);
     usersRes.fold((f) => null, (list) => _operators = list.where((u) => u.roleId == 'operator').toList());
@@ -76,8 +80,8 @@ class _ScheduleAssignmentPageState extends State<ScheduleAssignmentPage> {
                   dropdownColor: context.surfaceColor,
                   decoration: const InputDecoration(labelText: 'Approved Request'),
                   items: _approvedRequests.map((r) => DropdownMenuItem(
-                    value: r['service_request_id'].toString(), 
-                    child: Text('${r['id'] ?? 'SR'} - ${r['minerName'] ?? 'Miner'}', style: TextStyle(color: context.textColor, fontSize: 12))
+                    value: r.id.toString(), 
+                    child: Text('${r.id.substring(0, 8)} - ${r.materialDetails.type}', style: TextStyle(color: context.textColor, fontSize: 12))
                   )).toList(),
                   onChanged: (v) => setDialogState(() => selectedRequestId = v),
                 ),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../application/services/service_request_service.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import '../shared_widgets/audit_trail_viewer.dart';
 import 'operator_drawer.dart';
 
 class ProcessingWorkflowPage extends StatefulWidget {
@@ -16,7 +16,8 @@ class ProcessingWorkflowPage extends StatefulWidget {
 
 class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final SupabaseServiceRequestRepository _repository = SupabaseServiceRequestRepository();
+  final SupabaseServiceRequestRepository _repository =
+      SupabaseServiceRequestRepository();
   late final ServiceRequestService _service;
 
   List<ServiceRequestEntity> _requests = [];
@@ -40,8 +41,14 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   @override
   Widget build(BuildContext context) {
-    final assignedTasks = _requests.where((r) => r.status == ServiceRequestStatus.scheduled || r.status == ServiceRequestStatus.assigned).toList();
-    final activeProcessing = _requests.where((r) => r.status == ServiceRequestStatus.processing).toList();
+    final assignedTasks = _requests
+        .where((r) =>
+            r.status == ServiceRequestStatus.scheduled ||
+            r.status == ServiceRequestStatus.assigned)
+        .toList();
+    final activeProcessing = _requests
+        .where((r) => r.status == ServiceRequestStatus.processing)
+        .toList();
 
     return Scaffold(
       key: _scaffoldKey,
@@ -49,43 +56,85 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
         elevation: 0,
-        title: const Text('PROCESSING', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2)),
+        title: const Text('MY TASKS',
+            style: TextStyle(
+                color: kGold,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+                fontSize: 18)),
+        iconTheme: const IconThemeData(color: kGold),
         actions: [
           const ThemeToggleButton(),
-          IconButton(icon: const Icon(Icons.menu_rounded, color: kGold), onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
+          IconButton(
+              icon: const Icon(Icons.menu_rounded, color: kGold),
+              onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
         ],
       ),
-      endDrawer: const OperatorDrawer(currentMenu: OperatorMenu.processing, operatorName: 'Operator'),
+      endDrawer: const OperatorDrawer(
+          currentMenu: OperatorMenu.processing, operatorName: 'Operator'),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kGold))
           : RefreshIndicator(
               onRefresh: _loadTasks,
+              color: kGold,
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  _buildSectionHeader('Active Processing'),
-                  ...activeProcessing.map((r) => _buildJobCard(r, true)),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('Assigned Tasks'),
-                  ...assignedTasks.map((r) => _buildJobCard(r, false)),
+                  _buildSectionHeader('Active Processing', Icons.play_circle_fill_rounded, Colors.green),
+                  if (activeProcessing.isEmpty)
+                    _buildEmptySection('No jobs currently in processing.')
+                  else
+                    ...activeProcessing.map((r) => _buildJobCard(r, true)),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader('Assigned for Today', Icons.calendar_today_rounded, kGold),
+                  if (assignedTasks.isEmpty)
+                    _buildEmptySection('No new tasks assigned yet.')
+                  else
+                    ...assignedTasks.map((r) => _buildJobCard(r, false)),
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, IconData icon, Color color) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Text(title, style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Text(title,
+              style: TextStyle(
+                  color: context.textColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptySection(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      alignment: Alignment.center,
+      child: Text(message, style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
     );
   }
 
   Widget _buildJobCard(ServiceRequestEntity request, bool isActive) {
-    return Card(
-      color: context.surfaceColor,
+    final stage = request.processingDetails.currentStage;
+    
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: kGold.withOpacity(0.1))),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kGold.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -94,18 +143,38 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(request.materialDetails.type, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
-                Text(request.id.substring(0, 8), style: TextStyle(color: kGold, fontSize: 12)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(request.materialDetails.type,
+                        style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text('ID: ${request.id.substring(0, 8).toUpperCase()}',
+                        style: TextStyle(color: context.mutedTextColor, fontSize: 11, letterSpacing: 1)),
+                  ],
+                ),
+                _buildStageBadge(stage),
               ],
             ),
-            const Divider(),
-            _buildInfoRow('Weight', '${request.materialDetails.actualWeight ?? request.materialDetails.weight} kg'),
-            _buildInfoRow('Est. Time', request.processingDetails.estimatedTime ?? 'N/A'),
-            const SizedBox(height: 16),
+            const Divider(height: 32),
+            _buildInfoRow(Icons.scale_outlined, 'Weight', '${request.materialDetails.actualWeight ?? request.materialDetails.weight} kg'),
+            _buildInfoRow(Icons.timer_outlined, 'Est. Time', request.processingDetails.estimatedTime ?? 'N/A'),
+            if (isActive) ...[
+              const SizedBox(height: 16),
+              _buildProgressIndicator(stage),
+            ],
+            const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () => _updateStatus(request, isActive ? ServiceRequestStatus.processingCompleted : ServiceRequestStatus.processing),
-              style: ElevatedButton.styleFrom(backgroundColor: isActive ? Colors.green : kGold, minimumSize: const Size(double.infinity, 45)),
-              child: Text(isActive ? 'Mark as Completed' : 'Start Processing', style: const TextStyle(color: kBlack)),
+              onPressed: () => _handleAction(request),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: isActive ? kGold : kGold.withOpacity(0.1),
+                  foregroundColor: isActive ? kBlack : kGold,
+                  elevation: isActive ? 2 : 0,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: Text(
+                _getActionLabel(request),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -113,27 +182,142 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     );
   }
 
-  void _updateStatus(ServiceRequestEntity request, ServiceRequestStatus newStatus) async {
-    final result = await _service.updateProcessingStatus(
-      requestId: request.id,
-      operatorId: 'CURRENT_OPERATOR_ID', // TODO
-      newStatus: newStatus,
-      currentStatus: request.status.name,
-    );
-    result.fold(
-      (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
-      (_) => _loadTasks(),
+  String _getActionLabel(ServiceRequestEntity request) {
+    if (request.status != ServiceRequestStatus.processing) {
+      return 'Start Processing';
+    }
+    final nextStage = _getNextStage(request.processingDetails.currentStage);
+    if (nextStage == ProcessingStage.completed) {
+      return 'Complete Processing';
+    }
+    return 'Move to ${_getStageName(nextStage)}';
+  }
+
+  void _handleAction(ServiceRequestEntity request) async {
+    final currentOperatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (currentOperatorId == null) return;
+
+    if (request.status != ServiceRequestStatus.processing) {
+      // Transition from Assigned -> Processing (Starts at Rebagging)
+      final result = await _service.updateProcessingStatus(
+        requestId: request.id,
+        operatorId: currentOperatorId,
+        newStatus: ServiceRequestStatus.processing,
+        currentStatus: request.status.name,
+        newStage: ProcessingStage.rebagging,
+      );
+      result.fold(
+        (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+        (_) => _loadTasks(),
+      );
+    } else {
+      // Transition to next stage
+      final nextStage = _getNextStage(request.processingDetails.currentStage);
+      final newStatus = (nextStage == ProcessingStage.completed) 
+          ? ServiceRequestStatus.processingCompleted 
+          : ServiceRequestStatus.processing;
+
+      final result = await _service.updateProcessingStatus(
+        requestId: request.id,
+        operatorId: currentOperatorId,
+        newStatus: newStatus,
+        currentStatus: request.status.name,
+        newStage: nextStage,
+      );
+      result.fold(
+        (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+        (_) => _loadTasks(),
+      );
+    }
+  }
+
+  ProcessingStage _getNextStage(ProcessingStage current) {
+    switch (current) {
+      case ProcessingStage.none: return ProcessingStage.rebagging;
+      case ProcessingStage.rebagging: return ProcessingStage.loading;
+      case ProcessingStage.loading: return ProcessingStage.millingCrushing;
+      case ProcessingStage.millingCrushing: return ProcessingStage.unloading;
+      case ProcessingStage.unloading: return ProcessingStage.washingSeparation;
+      case ProcessingStage.washingSeparation: return ProcessingStage.refining;
+      case ProcessingStage.refining: return ProcessingStage.completed;
+      default: return ProcessingStage.completed;
+    }
+  }
+
+  String _getStageName(ProcessingStage stage) {
+    switch (stage) {
+      case ProcessingStage.rebagging: return 'Rebagging';
+      case ProcessingStage.loading: return 'Loading';
+      case ProcessingStage.millingCrushing: return 'Milling / Crushing';
+      case ProcessingStage.unloading: return 'Unloading';
+      case ProcessingStage.washingSeparation: return 'Washing / Separation';
+      case ProcessingStage.refining: return 'Refining';
+      case ProcessingStage.completed: return 'Completed';
+      default: return 'Pending';
+    }
+  }
+
+  Widget _buildStageBadge(ProcessingStage stage) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: kGold.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kGold.withOpacity(0.2)),
+      ),
+      child: Text(
+        _getStageName(stage).toUpperCase(),
+        style: const TextStyle(color: kGold, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+      ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildProgressIndicator(ProcessingStage stage) {
+    final stages = [
+      ProcessingStage.rebagging,
+      ProcessingStage.loading,
+      ProcessingStage.millingCrushing,
+      ProcessingStage.unloading,
+      ProcessingStage.washingSeparation,
+      ProcessingStage.refining,
+    ];
+    final currentIndex = stages.indexOf(stage);
+    final progress = (currentIndex + 1) / stages.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Processing Progress', style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
+            Text('${(progress * 100).toInt()}%', style: const TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+            value: progress,
+            backgroundColor: kGold.withOpacity(0.1),
+            color: kGold,
+            minHeight: 8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Icon(icon, size: 16, color: kGold.withOpacity(0.7)),
+          const SizedBox(width: 8),
           Text(label, style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
-          Text(value, style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.w500)),
+          const Spacer(),
+          Text(value, style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.w600)),
         ],
       ),
     );

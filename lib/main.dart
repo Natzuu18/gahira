@@ -4,6 +4,7 @@ import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_dashboard.dart';
 import './presentation/operator/operator_dashboard.dart';
 import './presentation/client/client_dashboard.dart';
+import './presentation/miner/miner_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
 import './presentation/landing/change_password_page.dart';
@@ -182,6 +183,10 @@ class _LoginPageState extends State<LoginPage>
     } else if (normalizedRole == 'client') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => ClientDashboardPage(clientName: name)),
+      );
+    } else if (normalizedRole == 'miner') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => MinerDashboardPage(minerName: name)),
       );
     } else {
       // Placeholder for other roles

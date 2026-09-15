@@ -83,21 +83,39 @@ class ServiceRequestEntity extends Equatable {
 
 class MaterialDetails extends Equatable {
   final String type;
-  final double weight;
+  final String? condition; // e.g. Wet, Dry, etc.
+  final int? numberOfSacks;
+  final double weight; // Estimated weight
   final double? actualWeight; // Set by Operator
+  final String? source; // Tunnel source
   final String? notes;
+  final String? documentUrl;
   final String? corrections; // Set by Operator if inaccurate
 
   const MaterialDetails({
     required this.type,
+    this.condition,
+    this.numberOfSacks,
     required this.weight,
     this.actualWeight,
+    this.source,
     this.notes,
+    this.documentUrl,
     this.corrections,
   });
 
   @override
-  List<Object?> get props => [type, weight, actualWeight, notes, corrections];
+  List<Object?> get props => [
+        type,
+        condition,
+        numberOfSacks,
+        weight,
+        actualWeight,
+        source,
+        notes,
+        documentUrl,
+        corrections
+      ];
 }
 
 class ProcessingDetails extends Equatable {

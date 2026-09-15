@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import 'client_drawer.dart';
+import 'service_requests_page.dart';
 
 // Gahira Ball Mill Management System - Client Dashboard
 // Main dashboard for clients to view their service requests, processing status, and billing
@@ -56,7 +57,14 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
         clientName: widget.clientName,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ServiceRequestsPage()),
+          ).then((_) {
+            // Ideally refresh stats here
+          });
+        },
         backgroundColor: kGold,
         foregroundColor: kBlack,
         child: const Icon(Icons.add_rounded),
@@ -169,7 +177,12 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                   child: _buildQuickActionButton(
                     'New Request',
                     Icons.add_circle_outline,
-                    () {},
+                    () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ServiceRequestsPage()),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -177,7 +190,12 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                   child: _buildQuickActionButton(
                     'View Status',
                     Icons.visibility_outlined,
-                    () {},
+                    () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ServiceRequestsPage()),
+                      );
+                    },
                   ),
                 ),
               ],

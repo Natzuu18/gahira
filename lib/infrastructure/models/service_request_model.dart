@@ -9,6 +9,8 @@ class ServiceRequestModel extends ServiceRequestEntity {
     required super.processingDetails,
     super.verificationDetails,
     required super.status,
+    super.isOperatorAssisted,
+    super.assistedByOperatorId,
     required super.createdAt,
     required super.updatedAt,
     super.billingId,
@@ -43,6 +45,10 @@ class ServiceRequestModel extends ServiceRequestEntity {
                 ?.map((e) => e.toString())
                 .toList() ??
             [],
+        currentStage: ProcessingStage.values.firstWhere(
+          (e) => e.name == (json['current_processing_stage'] as String?),
+          orElse: () => ProcessingStage.none,
+        ),
       ),
       verificationDetails: json['verified_by'] != null
           ? VerificationDetails(
@@ -56,6 +62,8 @@ class ServiceRequestModel extends ServiceRequestEntity {
         (e) => e.name == (json['status'] as String),
         orElse: () => ServiceRequestStatus.draft,
       ),
+      isOperatorAssisted: json['is_operator_assisted'] as bool? ?? false,
+      assistedByOperatorId: json['assisted_by_operator_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       billingId: json['billing_id'] as String?,
@@ -80,11 +88,14 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'estimated_time': processingDetails.estimatedTime,
       'scheduled_date': processingDetails.scheduledDate?.toIso8601String(),
       'assigned_operators': processingDetails.assignedOperatorIds,
+      'current_processing_stage': processingDetails.currentStage.name,
       'verified_by': verificationDetails?.operatorId,
       'verified_at': verificationDetails?.verifiedAt.toIso8601String(),
       'verification_remarks': verificationDetails?.remarks,
       'is_accurate': verificationDetails?.isAccurate,
       'status': status.name,
+      'is_operator_assisted': isOperatorAssisted,
+      'assisted_by_operator_id': assistedByOperatorId,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'billing_id': billingId,

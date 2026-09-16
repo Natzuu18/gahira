@@ -21,8 +21,12 @@ class ServiceRequestService {
     String? documentUrl,
     required String processingRequirements,
     required String pin,
+    bool isOperatorAssisted = false,
+    String? assistedByOperatorId,
+    String? estimatedTime, // Only for assisted
   }) async {
     // 1. Verify PIN
+    // If operator assisted, the PIN belongs to the primary miner (creatorId)
     final pinValid = await _repository.verifyUserPin(creatorId, pin);
     return pinValid.fold(
       (l) => Left(l),
@@ -44,8 +48,15 @@ class ServiceRequestService {
             documentUrl: documentUrl,
           ),
           processingDetails: ProcessingDetails(
-              requirements: processingRequirements, assignedOperatorIds: []),
-          status: ServiceRequestStatus.pendingOperatorVerification,
+            requirements: processingRequirements,
+            assignedOperatorIds: [],
+            estimatedTime: estimatedTime,
+          ),
+          status: isOperatorAssisted
+              ? ServiceRequestStatus.verified
+              : ServiceRequestStatus.pendingOperatorVerification,
+          isOperatorAssisted: isOperatorAssisted,
+          assistedByOperatorId: assistedByOperatorId,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -57,10 +68,15 @@ class ServiceRequestService {
             // 3. Log Audit
             await _repository.logAuditTrail(
               requestId: created.id,
-              userId: creatorId,
-              action: 'CREATE_REQUEST',
+              userId: assistedByOperatorId ?? creatorId,
+              action: isOperatorAssisted
+                  ? 'OPERATOR_ASSISTED_CREATE'
+                  : 'CREATE_REQUEST',
               previousStatus: 'None',
-              newStatus: ServiceRequestStatus.pendingOperatorVerification.name,
+              newStatus: model.status.name,
+              remarks: isOperatorAssisted
+                  ? 'Created by Operator $assistedByOperatorId on behalf of Miner $creatorId'
+                  : null,
             );
             return Right(created);
           },
@@ -189,13 +205,17 @@ class ServiceRequestService {
     required String operatorId,
     required ServiceRequestStatus newStatus,
     required String currentStatus,
+    ProcessingStage? newStage,
     String? remarks,
   }) async {
     final result = await _repository.updateRequestStatus(
       requestId: requestId,
       status: newStatus.name,
       userId: operatorId,
-      additionalData: remarks != null ? {'processing_notes': remarks} : null,
+      additionalData: {
+        if (remarks != null) 'processing_notes': remarks,
+        if (newStage != null) 'current_processing_stage': newStage.name,
+      },
     );
 
     return result.fold(
@@ -207,7 +227,7 @@ class ServiceRequestService {
           action: 'UPDATE_PROCESSING',
           previousStatus: currentStatus,
           newStatus: newStatus.name,
-          remarks: remarks,
+          remarks: newStage != null ? 'Moved to stage: ${newStage.name}' : remarks,
         );
         return const Right(null);
       },

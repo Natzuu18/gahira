@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:dartz/dartz.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/error/failures.dart';
@@ -16,7 +18,7 @@ class SupabaseUserRepository implements UserRepository {
     try {
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash')
           .order('fname', ascending: true);
 
       final List<UserEntity> users = (response as List)
@@ -42,7 +44,7 @@ class SupabaseUserRepository implements UserRepository {
       
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash')
           .or('status.eq.approved,status.eq.active,status.eq.inactive')
           .inFilter('role_id', [
             '5ef69f93-cb07-4052-989e-9e6ca48c4360', // miner
@@ -69,7 +71,7 @@ class SupabaseUserRepository implements UserRepository {
     try {
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash')
           .eq('status', 'inactive')
           .order('fname', ascending: true);
 
@@ -160,7 +162,7 @@ class SupabaseUserRepository implements UserRepository {
     try {
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash')
           .eq('userId', userId)
           .single();
 
@@ -193,7 +195,7 @@ class SupabaseUserRepository implements UserRepository {
           .from('users')
           .update(data)
           .eq('userId', user.userId)
-          .select('*, role:role_id(role), mining_units:mining_unit_id(name)')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash')
           .single();
 
       final updatedData = Map<String, dynamic>.from(response);
@@ -210,6 +212,20 @@ class SupabaseUserRepository implements UserRepository {
   Future<Either<Failure, void>> deleteUser(String userId) async {
     try {
       await _client.from('users').delete().eq('userId', userId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateUserPin(String userId, String pin) async {
+    try {
+      final pinHash = sha256.convert(utf8.encode(pin)).toString();
+      await _client
+          .from('users')
+          .update({'pin_hash': pinHash})
+          .eq('userId', userId);
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));

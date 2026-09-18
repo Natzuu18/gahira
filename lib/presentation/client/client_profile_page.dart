@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'client_drawer.dart';
+import '../miner/miner_drawer.dart';
 import 'package:gahira/main.dart';
 
 // Gahira Ball Mill Management System - Client Profile Page
@@ -56,9 +56,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           ),
         ],
       ),
-      endDrawer: const ClientDrawer(
-        currentMenu: ClientMenu.profile,
-        clientName: 'Client',
+      endDrawer: MinerDrawer(
+        currentMenu: MinerMenu.profile,
+        minerName: 'Miner',
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

@@ -4,6 +4,7 @@ import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import 'package:gahira/main.dart';
 import 'operator_dashboard.dart';
+import 'service_verification_page.dart';
 import 'client_service_page.dart';
 import 'processing_workflow_page.dart';
 import 'material_procurement_page.dart';
@@ -14,6 +15,7 @@ import 'sms_notification_page.dart';
 
 enum OperatorMenu { 
   dashboard, 
+  serviceVerification,
   clientService, 
   processing, 
   materials, 
@@ -99,6 +101,13 @@ class OperatorDrawer extends StatelessWidget {
               label: 'Dashboard',
               menu: OperatorMenu.dashboard,
               page: OperatorDashboardPage(operatorName: operatorName),
+            ),
+            _buildItem(
+              context,
+              icon: Icons.fact_check_outlined,
+              label: 'Service Verification',
+              menu: OperatorMenu.serviceVerification,
+              page: const ServiceVerificationPage(),
             ),
             _buildItem(
               context,

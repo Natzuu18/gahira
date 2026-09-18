@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartz/dartz.dart' hide State;
@@ -7,12 +8,13 @@ import '../../application/services/service_request_service.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../infrastructure/repositories/supabase_user_repository.dart';
+import '../../infrastructure/models/user_model.dart';
 import '../../domain/entities/user_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/pin_dialog.dart';
 import '../shared_widgets/audit_trail_viewer.dart';
-import 'client_drawer.dart';
+import '../miner/miner_drawer.dart';
 
 class ServiceRequestsPage extends StatefulWidget {
   const ServiceRequestsPage({super.key});
@@ -31,6 +33,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   String _searchQuery = '';
   List<ServiceRequestEntity> _requests = [];
   List<UserEntity> _availableMiners = [];
+  UserEntity? _currentUser;
   bool _isLoading = true;
 
   @override
@@ -42,11 +45,91 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+
     final requestsResult = await _repository.getServiceRequests();
     final minersResult = await _userRepository.getMinersAndClients();
+    
+    if (currentUserId != null) {
+      final userResult = await _userRepository.getUserById(currentUserId);
+      userResult.fold((l) => null, (user) => _currentUser = user);
+    }
 
     setState(() {
       _requests = requestsResult.getOrElse(() => []);
+      
+      // Add example data if list is empty (UI Only focus)
+      if (_requests.isEmpty) {
+        _requests = [
+          ServiceRequestEntity(
+            id: 'REQ-DEMO-001',
+            creatorId: currentUserId ?? '',
+            participatingMinerIds: [],
+            materialDetails: MaterialDetails(
+              type: 'Gold Ore',
+              condition: 'Rocky',
+              state: 'Dry',
+              sourceType: 'Associated Tunnel',
+              source: _currentUser?.miningUnitName ?? 'Associated Tunnel #1',
+              weight: 250.0,
+              numberOfSacks: 5,
+              photoUrls: ['dummy_url_1', 'dummy_url_2'],
+            ),
+            processingDetails: ProcessingDetails(
+              requirements: 'Standard processing',
+              assignedOperatorIds: [],
+            ),
+            status: ServiceRequestStatus.pendingOperatorVerification,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+          ServiceRequestEntity(
+            id: 'REQ-DEMO-002',
+            creatorId: currentUserId ?? '',
+            participatingMinerIds: [],
+            materialDetails: MaterialDetails(
+              type: 'Silver Ore',
+              condition: 'Mixed',
+              state: 'Wet',
+              sourceType: 'Other',
+              source: 'External Quarry B',
+              weight: 120.5,
+              numberOfSacks: 3,
+              photoUrls: [],
+            ),
+            processingDetails: ProcessingDetails(
+              requirements: 'Careful refining',
+              assignedOperatorIds: [],
+            ),
+            status: ServiceRequestStatus.verified,
+            createdAt: DateTime.now().subtract(const Duration(days: 1)),
+            updatedAt: DateTime.now().subtract(const Duration(days: 1)),
+          ),
+          ServiceRequestEntity(
+            id: 'REQ-DEMO-003',
+            creatorId: currentUserId ?? '',
+            participatingMinerIds: [],
+            materialDetails: MaterialDetails(
+              type: 'Mixed Ore',
+              condition: 'Clay',
+              state: 'Others',
+              sourceType: 'Partner Source',
+              source: 'Consolidated Mines Group',
+              weight: 500.0,
+              numberOfSacks: 12,
+              photoUrls: [],
+            ),
+            processingDetails: ProcessingDetails(
+              requirements: 'High pressure washing needed',
+              assignedOperatorIds: [],
+            ),
+            status: ServiceRequestStatus.processing,
+            createdAt: DateTime.now().subtract(const Duration(days: 3)),
+            updatedAt: DateTime.now().subtract(const Duration(days: 1)),
+          ),
+        ];
+      }
+
       _availableMiners = minersResult.getOrElse(() => []);
       _isLoading = false;
     });
@@ -108,10 +191,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           const SizedBox(width: 8),
         ],
       ),
-      endDrawer: const ClientDrawer(
-          currentMenu: ClientMenu.serviceRequests, clientName: 'Miner'),
+      endDrawer: MinerDrawer(
+          currentMenu: MinerMenu.serviceRequests, minerName: 'Miner'),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showNewRequestWorkflow,
+        onPressed: () => _showRequestWorkflow(),
         backgroundColor: kGold,
         elevation: 4,
         child: const Icon(Icons.add_rounded, color: kBlack, size: 28),
@@ -382,6 +465,13 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     }
   }
 
+  Widget _buildStepLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      child: Text(text, style: TextStyle(color: context.mutedTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+    );
+  }
+
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 12),
@@ -510,6 +600,15 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (request.status == ServiceRequestStatus.pendingOperatorVerification || 
+                      request.status == ServiceRequestStatus.returnedToMiner)
+                    IconButton(
+                      icon: const Icon(Icons.edit_note_rounded, color: kGold, size: 24),
+                      onPressed: () => _showRequestWorkflow(existingRequest: request),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  const SizedBox(height: 4),
                   Text(
                     '${request.materialDetails.weight} kg',
                     style: TextStyle(
@@ -549,13 +648,25 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 request.materialDetails.condition!.isNotEmpty)
               _buildDetailRow(
                   Icons.info_outline, 'Condition', request.materialDetails.condition!),
-            if (request.materialDetails.numberOfSacks != null)
-              _buildDetailRow(Icons.shopping_bag_outlined, 'Quantity',
-                  '${request.materialDetails.numberOfSacks} Sacks'),
+            if (request.materialDetails.state != null &&
+                request.materialDetails.state!.isNotEmpty)
+              _buildDetailRow(
+                  Icons.water_drop_outlined, 'State', request.materialDetails.state!),
+            if (request.materialDetails.sourceType != null &&
+                request.materialDetails.sourceType!.isNotEmpty)
+              _buildDetailRow(
+                  Icons.source_outlined, 'Source Type', request.materialDetails.sourceType!),
             if (request.materialDetails.source != null &&
                 request.materialDetails.source!.isNotEmpty)
               _buildDetailRow(
-                  Icons.location_on_outlined, 'Source', request.materialDetails.source!),
+                  Icons.location_on_outlined, 'Source Details', request.materialDetails.source!),
+            if (request.materialDetails.photoUrls.isNotEmpty)
+              _buildDetailRow(Icons.photo_library_outlined, 'Photos', '${request.materialDetails.photoUrls.length} Attached'),
+            if (request.participatingMinerIds.length > 1)
+              _buildParticipantsDropdown(request.participatingMinerIds),
+            if (request.materialDetails.numberOfSacks != null)
+              _buildDetailRow(Icons.shopping_bag_outlined, 'Quantity',
+                  '${request.materialDetails.numberOfSacks} Sacks'),
             _buildSectionHeader('Processing & Timeline'),
             if (request.processingDetails.estimatedTime != null)
               _buildDetailRow(Icons.timer_outlined, 'Est. Duration',
@@ -764,7 +875,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     }
   }
 
-  void _showNewRequestWorkflow() {
+  void _showRequestWorkflow({ServiceRequestEntity? existingRequest}) {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     if (currentUserId == null) return;
 
@@ -772,17 +883,42 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     final formKey = GlobalKey<FormState>();
 
     // Step 1: Miner Selection
-    bool forMyselfOnly = true;
-    List<String> participating = [];
+    bool forMyselfOnly = existingRequest == null || existingRequest.participatingMinerIds.length <= 1;
+    bool isPickerOpen = false; 
+    List<String> participating = existingRequest != null 
+      ? existingRequest.participatingMinerIds.where((id) => id != currentUserId).toList() 
+      : [];
     String minerSearchQuery = '';
 
     // Step 2: Material Information
-    String type = '';
-    String condition = '';
-    int? sacks;
-    double weight = 0;
-    String source = '';
-    String notes = '';
+    String condition = existingRequest?.materialDetails.condition ?? 'Rocky';
+    String state = existingRequest?.materialDetails.state ?? 'Dry';
+    String sourceType = existingRequest?.materialDetails.sourceType ?? 'Associated Ball Mill';
+    String sourceDetails = existingRequest?.materialDetails.source ?? '';
+
+    if (existingRequest == null) {
+      if (_currentUser?.miningUnitType == 'Ball Mill' || _currentUser?.miningUnitType == 'Processing Plant') {
+        sourceType = 'Associated Ball Mill';
+        sourceDetails = _currentUser?.miningUnitName ?? '';
+      } else {
+        sourceType = 'Ball Mill / Processing Plant';
+      }
+    }
+
+    int? sacks = existingRequest?.materialDetails.numberOfSacks;
+    double weight = existingRequest?.materialDetails.weight ?? 0;
+    String notes = existingRequest?.materialDetails.notes ?? '';
+    List<PlatformFile> selectedPhotos = []; // Note: New photos only for simplicity or handle existing
+    List<String> existingPhotoUrls = existingRequest?.materialDetails.photoUrls ?? [];
+
+    final List<String> conditionOptions = ['Rocky', 'Muddy', 'Sandy', 'Mixed', 'Clay'];
+    final List<String> stateOptions = ['Dry', 'Wet', 'Others'];
+    final List<String> sourceOptions = [
+      'Associated Ball Mill',
+      'Ball Mill / Processing Plant',
+      'Partner Source',
+      'Other'
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -865,63 +1001,199 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       ),
                       if (!forMyselfOnly) ...[
                         const SizedBox(height: 16),
-                        TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Search miners by name...',
-                            prefixIcon: const Icon(Icons.search, color: kGold),
-                            filled: true,
-                            fillColor: context.surfaceColor,
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    BorderSide(color: kGold.withOpacity(0.2))),
+                        _buildStepLabel('Selected Participants'),
+                        
+                        // "Dropdown" Header
+                        InkWell(
+                          onTap: () => setModalState(() => isPickerOpen = !isPickerOpen),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: context.surfaceColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: kGold.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: participating.isEmpty 
+                                        ? [Text('Tap to select miners...', style: TextStyle(color: context.mutedTextColor, fontSize: 13))]
+                                        : participating.map((id) {
+                                            UserEntity? miner;
+                                            for (var m in _availableMiners) {
+                                              if (m.userId == id) {
+                                                miner = m;
+                                                break;
+                                              }
+                                            }
+                                            final name = miner != null ? '${miner.fname} ${miner.lname}' : 'Unknown';
+                                            return Padding(
+                                              padding: const EdgeInsets.only(right: 8.0),
+                                              child: Chip(
+                                                label: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                                backgroundColor: kGold.withOpacity(0.1),
+                                                padding: EdgeInsets.zero,
+                                                visualDensity: VisualDensity.compact,
+                                                side: BorderSide(color: kGold.withOpacity(0.3)),
+                                                onDeleted: () => setModalState(() => participating.remove(id)),
+                                              ),
+                                            );
+                                          }).toList(),
+                                    ),
+                                  ),
+                                ),
+                                Icon(isPickerOpen ? Icons.arrow_drop_up_rounded : Icons.arrow_drop_down_rounded, color: kGold),
+                              ],
+                            ),
                           ),
-                          style: TextStyle(color: context.textColor),
-                          onChanged: (v) =>
-                              setModalState(() => minerSearchQuery = v),
                         ),
-                        const SizedBox(height: 12),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 200),
-                          child: ListView(
-                            shrinkWrap: true,
-                            children: _availableMiners
-                                .where((m) =>
-                                    m.userId != currentUserId &&
-                                    (m.fname.toLowerCase().contains(
-                                            minerSearchQuery.toLowerCase()) ||
-                                        m.lname.toLowerCase().contains(
-                                            minerSearchQuery.toLowerCase())))
-                                .map((m) => CheckboxListTile(
-                                      title: Text('${m.fname} ${m.lname}',
-                                          style: TextStyle(
-                                              color: context.textColor,
-                                              fontSize: 14)),
-                                      value: participating.contains(m.userId),
-                                      onChanged: (v) => setModalState(() => v!
-                                          ? participating.add(m.userId)
-                                          : participating.remove(m.userId)),
-                                      activeColor: kGold,
+
+                        if (isPickerOpen) ...[
+                          const SizedBox(height: 8),
+                          // "Dropdown" Menu content
+                          Container(
+                            decoration: BoxDecoration(
+                              color: context.surfaceColor.withOpacity(0.8),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: kGold.withOpacity(0.1)),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))],
+                            ),
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: TextField(
+                                    decoration: InputDecoration(
+                                      hintText: 'Search miners...',
+                                      prefixIcon: const Icon(Icons.search, color: kGold, size: 18),
+                                      isDense: true,
                                       contentPadding: EdgeInsets.zero,
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                    ))
-                                .toList(),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    style: TextStyle(color: context.textColor, fontSize: 12),
+                                    onChanged: (v) => setModalState(() => minerSearchQuery = v),
+                                  ),
+                                ),
+                                Container(
+                                  constraints: const BoxConstraints(maxHeight: 200),
+                                  child: ListView(
+                                    shrinkWrap: true,
+                                    children: _availableMiners
+                                        .where((m) =>
+                                            m.userId != currentUserId &&
+                                            (m.fname.toLowerCase().contains(minerSearchQuery.toLowerCase()) ||
+                                                m.lname.toLowerCase().contains(minerSearchQuery.toLowerCase())))
+                                        .map((m) => CheckboxListTile(
+                                              title: Text('${m.fname} ${m.lname}', style: TextStyle(color: context.textColor, fontSize: 13)),
+                                              value: participating.contains(m.userId),
+                                              dense: true,
+                                              visualDensity: VisualDensity.compact,
+                                              onChanged: (v) => setModalState(() => v! ? participating.add(m.userId) : participating.remove(m.userId)),
+                                              activeColor: kGold,
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                                              controlAffinity: ListTileControlAffinity.leading,
+                                            ))
+                                        .toList(),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ] else ...[
-                      _buildValidatedInput(
-                        label: 'Material Type',
-                        hint: 'e.g. Gold Ore',
-                        onChanged: (v) => type = v,
-                        validator: (v) => (v == null || v.isEmpty) ? 'Material type is required' : null,
-                      ),
-                      _buildValidatedInput(
-                        label: 'Material Condition',
-                        hint: 'e.g. Wet, Dry, Muddy',
-                        onChanged: (v) => condition = v,
-                      ),
+                      // Material Condition (Bullets)
+                      _buildStepLabel('Material Condition'),
+                      ...conditionOptions.map((c) => RadioListTile<String>(
+                        title: Text(c, style: TextStyle(color: context.textColor, fontSize: 13)),
+                        value: c,
+                        groupValue: condition,
+                        activeColor: kGold,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (v) => setModalState(() => condition = v!),
+                      )).toList(),
+                      const SizedBox(height: 16),
+
+                      // Material State (Bullets)
+                      _buildStepLabel('Material State'),
+                      ...stateOptions.map((s) => RadioListTile<String>(
+                        title: Text(s, style: TextStyle(color: context.textColor, fontSize: 13)),
+                        value: s,
+                        groupValue: state,
+                        activeColor: kGold,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (v) => setModalState(() => state = v!),
+                      )).toList(),
+                      const SizedBox(height: 16),
+
+                      // Material Source (Bullets)
+                      _buildStepLabel('Material Source'),
+                      ...sourceOptions.map((so) => RadioListTile<String>(
+                        title: Text(so, style: TextStyle(color: context.textColor, fontSize: 13)),
+                        value: so,
+                        groupValue: sourceType,
+                        activeColor: kGold,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (v) => setModalState(() {
+                          sourceType = v!;
+                          
+                          // Auto-fill logic
+                          bool canAutoFill = false;
+                          if (sourceType == 'Associated Ball Mill' && 
+                                    (_currentUser?.miningUnitType == 'Ball Mill' || _currentUser?.miningUnitType == 'Processing Plant')) {
+                            canAutoFill = true;
+                          }
+
+                          if (canAutoFill && _currentUser?.miningUnitName != null) {
+                            sourceDetails = _currentUser!.miningUnitName!;
+                          } else {
+                            sourceDetails = '';
+                          }
+                        }),
+                      )).toList(),
+                      const SizedBox(height: 16),
+
+                      // Source Details
+                      _buildStepLabel('Source Details'),
+                      // Display read-only if it matches user's associated unit
+                      if (sourceType == 'Associated Ball Mill' &&
+                          sourceDetails.isNotEmpty &&
+                          _currentUser?.miningUnitName == sourceDetails)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: context.surfaceColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: kGold.withOpacity(0.1)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Unit Type: ${_currentUser?.miningUnitType}', 
+                                style: TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 4),
+                              Text(sourceDetails, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        )
+                      else
+                        _buildValidatedInput(
+                          label: '',
+                          hint: 'Enter source details manually',
+                          initialValue: sourceDetails,
+                          onChanged: (v) => sourceDetails = v,
+                          validator: (v) => (v == null || v.isEmpty) ? 'Source details required' : null,
+                        ),
+                      const SizedBox(height: 16),
+
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -929,6 +1201,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                             child: _buildValidatedInput(
                               label: 'Number of Sacks',
                               hint: 'Optional',
+                              initialValue: sacks?.toString(),
                               keyboardType: TextInputType.number,
                               onChanged: (v) => sacks = int.tryParse(v),
                               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -939,6 +1212,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                             child: _buildValidatedInput(
                               label: 'Estimated Weight (kg)',
                               hint: '0.0',
+                              initialValue: weight > 0 ? weight.toString() : null,
                               keyboardType: const TextInputType.numberWithOptions(
                                   decimal: true),
                               onChanged: (v) => weight = double.tryParse(v) ?? 0,
@@ -954,50 +1228,119 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                         ],
                       ),
                       _buildValidatedInput(
-                        label: 'Source (Tunnel)',
-                        hint: 'Which tunnel did this come from?',
-                        onChanged: (v) => source = v,
-                      ),
-                      _buildValidatedInput(
                         label: 'Additional Notes',
                         hint: 'Any other processing requirements...',
+                        initialValue: notes,
                         maxLines: 2,
                         onChanged: (v) => notes = v,
                       ),
                       const SizedBox(height: 8),
-                      Text('Upload Photo/Document',
+                      Text('Sack Photos (Up to 5)',
                           style: TextStyle(
                               color: context.mutedTextColor,
                               fontSize: 12,
                               fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Photo upload coming soon!')));
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          decoration: BoxDecoration(
-                            color: context.surfaceColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: kGold.withOpacity(0.3),
-                                style: BorderStyle.solid),
-                          ),
-                          child: Center(
-                            child: Column(
-                              children: [
-                                Icon(Icons.add_a_photo_outlined,
-                                    color: kGold.withOpacity(0.7)),
-                                const SizedBox(height: 4),
-                                Text('Add Attachment (Optional)',
-                                    style: TextStyle(
-                                        color: kGold.withOpacity(0.7),
-                                        fontSize: 12)),
-                              ],
-                            ),
-                          ),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            // Existing Photos
+                            ...existingPhotoUrls.map((url) => Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      color: context.surfaceColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: kGold.withOpacity(0.2)),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.network(url, fit: BoxFit.cover, 
+                                        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.red)),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: -2,
+                                    top: -2,
+                                    child: GestureDetector(
+                                      onTap: () => setModalState(() => existingPhotoUrls.remove(url)),
+                                      child: const CircleAvatar(
+                                        radius: 10,
+                                        backgroundColor: Colors.red,
+                                        child: Icon(Icons.close, size: 12, color: Colors.white),
+                                      ),
+                                    ),
+                                  )
+                                ],
+                              ),
+                            )),
+                            // New selected photos
+                            ...selectedPhotos.map((p) => Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      color: context.surfaceColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: kGold.withOpacity(0.2)),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: p.bytes != null 
+                                        ? Image.memory(p.bytes!, fit: BoxFit.cover)
+                                        : const Icon(Icons.image, color: kGold),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: -2,
+                                    top: -2,
+                                    child: GestureDetector(
+                                      onTap: () => setModalState(() => selectedPhotos.remove(p)),
+                                      child: const CircleAvatar(
+                                        radius: 10,
+                                        backgroundColor: Colors.red,
+                                        child: Icon(Icons.close, size: 12, color: Colors.white),
+                                      ),
+                                    ),
+                                  )
+                                ],
+                              ),
+                            )),
+                            if ((selectedPhotos.length + existingPhotoUrls.length) < 5)
+                              InkWell(
+                                onTap: () async {
+                                  final result = await FilePicker.platform.pickFiles(
+                                    type: FileType.image,
+                                    allowMultiple: true,
+                                    withData: true,
+                                  );
+                                  if (result != null) {
+                                    setModalState(() {
+                                      final remaining = 5 - (selectedPhotos.length + existingPhotoUrls.length);
+                                      selectedPhotos.addAll(result.files.take(remaining));
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: context.surfaceColor,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: kGold.withOpacity(0.3), style: BorderStyle.solid),
+                                  ),
+                                  child: const Center(child: Icon(Icons.add_a_photo_outlined, color: kGold)),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -1037,13 +1380,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                 if (formKey.currentState!.validate()) {
                                   Navigator.pop(context);
                                   _showReviewDialog(
-                                    type: type,
+                                    existingRequestId: existingRequest?.id,
                                     condition: condition,
+                                    state: state,
+                                    sourceType: sourceType,
                                     weight: weight,
                                     sacks: sacks,
-                                    source: source,
+                                    source: sourceDetails,
                                     notes: notes,
                                     miners: [currentUserId, ...participating],
+                                    newPhotos: selectedPhotos,
+                                    existingPhotoUrls: existingPhotoUrls,
                                   );
                                 }
                               }
@@ -1076,13 +1423,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   }
 
   void _showReviewDialog({
-    required String type,
+    String? existingRequestId,
     required String condition,
+    required String state,
+    required String sourceType,
     required double weight,
     int? sacks,
     required String source,
     required String notes,
     required List<String> miners,
+    required List<PlatformFile> newPhotos,
+    required List<String> existingPhotoUrls,
   }) {
     bool isCertified = false;
     showDialog(
@@ -1093,8 +1444,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             backgroundColor: context.surfaceColor,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Review Request Details',
-                style: TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+            title: Text(existingRequestId == null ? 'Review Request Details' : 'Review Updates',
+                style: const TextStyle(color: kGold, fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1104,18 +1455,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       style: TextStyle(
                           color: context.mutedTextColor, fontSize: 13)),
                   const SizedBox(height: 20),
-                  _buildDetailRow(Icons.category_rounded, 'Material Type', type),
-                  if (condition.isNotEmpty)
-                    _buildDetailRow(
-                        Icons.info_outline, 'Condition', condition),
+                  _buildDetailRow(Icons.info_outline, 'Condition', condition),
+                  _buildDetailRow(Icons.water_drop_outlined, 'State', state),
+                  _buildDetailRow(Icons.source_outlined, 'Source Type', sourceType),
+                  _buildDetailRow(Icons.location_on_outlined, 'Source Details', source),
                   if (sacks != null)
                     _buildDetailRow(
                         Icons.shopping_bag_outlined, 'Sacks', sacks.toString()),
                   _buildDetailRow(Icons.scale_rounded, 'Est. Weight', '$weight kg'),
-                  if (source.isNotEmpty)
-                    _buildDetailRow(Icons.location_on_outlined, 'Source', source),
                   _buildDetailRow(Icons.people_rounded, 'Participants',
                       '${miners.length} Miner(s)'),
+                  _buildDetailRow(Icons.photo_library_outlined, 'Photos', '${newPhotos.length + existingPhotoUrls.length} Total'),
                   const SizedBox(height: 16),
                   Text('Additional Notes:',
                       style: TextStyle(
@@ -1164,13 +1514,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     ? () {
                         Navigator.pop(context);
                         _showPinConfirmation(
-                          type: type,
+                          existingRequestId: existingRequestId,
                           condition: condition,
+                          state: state,
+                          sourceType: sourceType,
                           weight: weight,
                           sacks: sacks,
                           source: source,
                           notes: notes,
                           miners: miners,
+                          newPhotos: newPhotos,
+                          existingPhotoUrls: existingPhotoUrls,
                         );
                       }
                     : null,
@@ -1180,8 +1534,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('Authorize & Submit',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                child: Text(existingRequestId == null ? 'Authorize & Submit' : 'Authorize & Update',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           );
@@ -1191,49 +1545,139 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   }
 
   void _showPinConfirmation({
-    required String type,
+    String? existingRequestId,
     required String condition,
+    required String state,
+    required String sourceType,
     required double weight,
     int? sacks,
     required String source,
     required String notes,
     required List<String> miners,
+    required List<PlatformFile> newPhotos,
+    required List<String> existingPhotoUrls,
   }) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => PinDialog(
-        title: 'Authorize Submission',
+        title: 'Miner PIN Confirmation',
         onConfirm: (pin) async {
           final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-          if (currentUserId == null) return;
+          if (currentUserId == null) return 'Session expired. Please re-login.';
 
-          final result = await _service.createRequest(
-            creatorId: currentUserId,
-            participatingMinerIds: miners,
-            materialType: type,
-            materialCondition: condition,
-            numberOfSacks: sacks,
-            materialWeight: weight,
-            source: source,
-            notes: notes,
-            processingRequirements: notes, // Mapping notes to requirements for now
-            pin: pin,
-          );
-          result.fold(
-            (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(l.message), backgroundColor: Colors.redAccent)),
-            (_) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Request submitted for Operator verification!'),
-                  backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-              _loadData();
-            },
-          );
+          // 1. Upload new photos if any
+          List<String> photoUrls = List.from(existingPhotoUrls);
+          if (newPhotos.isNotEmpty) {
+             final uploadResult = await _repository.uploadRequestPhotos(newPhotos);
+             bool uploadFailed = false;
+             uploadResult.fold(
+               (l) => uploadFailed = true,
+               (urls) => photoUrls.addAll(urls),
+             );
+             if (uploadFailed) return 'Failed to upload photos. Check connection.';
+          }
+
+          if (existingRequestId != null) {
+            // UPDATE WORKFLOW
+            final result = await _service.updateRequest(
+              requestId: existingRequestId,
+              creatorId: currentUserId,
+              participatingMinerIds: miners,
+              materialType: 'Ore',
+              materialCondition: condition,
+              materialState: state,
+              materialSourceType: sourceType,
+              numberOfSacks: sacks,
+              materialWeight: weight,
+              source: source,
+              notes: notes,
+              pin: pin,
+              photoUrls: photoUrls,
+            );
+            return result.fold((l) => l.message, (_) {
+               _loadData();
+               return null;
+            });
+          } else {
+            // CREATE WORKFLOW
+            final result = await _service.createRequest(
+              creatorId: currentUserId,
+              participatingMinerIds: miners,
+              materialType: 'Ore', 
+              materialCondition: condition,
+              materialState: state,
+              materialSourceType: sourceType,
+              numberOfSacks: sacks,
+              materialWeight: weight,
+              source: source,
+              notes: notes,
+              processingRequirements: notes, 
+              pin: pin,
+              photoUrls: photoUrls,
+            );
+
+            return result.fold(
+              (l) => l.message, 
+              (_) {
+                _loadData();
+                return null; 
+              },
+            );
+          }
         },
+      ),
+    ).then((success) {
+      if (success == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(existingRequestId == null ? 'Request submitted successfully!' : 'Request updated successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
+  }
+
+  Widget _buildParticipantsDropdown(List<String> ids) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        leading: Icon(Icons.group_outlined, size: 18, color: kGold.withOpacity(0.6)),
+        title: Text('Participants (${ids.length})', style: TextStyle(color: context.mutedTextColor, fontSize: 14)),
+        trailing: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: kGold),
+        childrenPadding: const EdgeInsets.only(left: 32, bottom: 12),
+        expandedAlignment: Alignment.centerLeft,
+        children: [
+          Container(
+            constraints: const BoxConstraints(maxHeight: 120),
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: ids.map((id) {
+                   UserEntity? miner;
+                    for (var m in _availableMiners) {
+                      if (m.userId == id) {
+                        miner = m;
+                        break;
+                      }
+                    }
+                    final name = miner != null ? '${miner.fname} ${miner.lname}' : 'Miner';
+                    return Chip(
+                      label: Text(name, style: const TextStyle(fontSize: 10)),
+                      backgroundColor: kGold.withOpacity(0.05),
+                      side: BorderSide(color: kGold.withOpacity(0.2)),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                    );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1241,6 +1685,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   Widget _buildValidatedInput({
     required String label,
     required String hint,
+    String? initialValue,
     TextInputType? keyboardType,
     int maxLines = 1,
     required Function(String) onChanged,
@@ -1260,6 +1705,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   letterSpacing: 0.5)),
           const SizedBox(height: 8),
           TextFormField(
+            initialValue: initialValue,
             decoration: InputDecoration(
               hintText: hint,
               hintStyle:
@@ -1296,5 +1742,32 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         ],
       ),
     );
+  }
+
+  String _getMinerNames(List<String> ids) {
+    if (ids.isEmpty) return 'None';
+    return ids.map((id) {
+      // Manual loop to avoid runtime type issues with firstWhere and inheritance
+      UserEntity? miner;
+      for (final m in _availableMiners) {
+        if (m.userId == id) {
+          miner = m;
+          break;
+        }
+      }
+
+      miner ??= UserModel(
+        userId: id,
+        fname: 'Miner',
+        lname: '',
+        email: '',
+        address: '',
+        contactNum: '',
+        roleId: '',
+        status: '',
+      );
+
+      return '${miner!.fname} ${miner.lname}'.trim();
+    }).join(', ');
   }
 }

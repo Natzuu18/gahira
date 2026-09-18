@@ -14,6 +14,8 @@ class UserModel extends UserEntity {
     required super.status,
     super.miningUnitId,
     super.miningUnitName,
+    super.miningUnitType,
+    super.pinHash,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -30,6 +32,8 @@ class UserModel extends UserEntity {
       status: json['status'] ?? '',
       miningUnitId: json['mining_unit_id'],
       miningUnitName: json['mining_unit_name'] ?? (json['mining_units'] != null ? json['mining_units']['name'] : null),
+      miningUnitType: json['mining_unit_type'] ?? (json['mining_units'] != null ? json['mining_units']['type'] : null),
+      pinHash: json['pin_hash'],
     );
   }
 
@@ -48,7 +52,8 @@ class UserModel extends UserEntity {
       'role_id': roleId,
       'status': status,
       'mining_unit_id': miningUnitId,
-      // miningUnitName is not persisted in this table
+      'pin_hash': pinHash,
+      // miningUnitName and miningUnitType are not persisted in this table
     };
   }
 
@@ -66,6 +71,8 @@ class UserModel extends UserEntity {
       status: entity.status,
       miningUnitId: entity.miningUnitId,
       miningUnitName: entity.miningUnitName,
+      miningUnitType: entity.miningUnitType,
+      pinHash: entity.pinHash,
     );
   }
 }

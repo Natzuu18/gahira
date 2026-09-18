@@ -105,39 +105,125 @@ class ServiceRequestEntity extends Equatable {
 
 class MaterialDetails extends Equatable {
   final String type;
-  final String? condition; // e.g. Wet, Dry, etc.
+  final String? condition; // Rocky, Muddy, etc.
+  final String? state; // Dry, Wet, Others
+  final String? sourceType; // Associated Tunnel, Ball Mill, etc.
+  final String? source; // Details of the source
   final int? numberOfSacks;
   final double weight; // Estimated weight
   final double? actualWeight; // Set by Operator
-  final String? source; // Tunnel source
   final String? notes;
   final String? documentUrl;
-  final String? corrections; // Set by Operator if inaccurate
+  final List<String> photoUrls;
+  final List<OperatorVerification> verifications; // List of verifications from Operators
 
   const MaterialDetails({
     required this.type,
     this.condition,
+    this.state,
+    this.sourceType,
+    this.source,
     this.numberOfSacks,
     required this.weight,
     this.actualWeight,
-    this.source,
     this.notes,
     this.documentUrl,
-    this.corrections,
+    this.photoUrls = const [],
+    this.verifications = const [],
   });
+
+  MaterialDetails copyWith({
+    String? type,
+    String? condition,
+    String? state,
+    String? sourceType,
+    String? source,
+    int? numberOfSacks,
+    double? weight,
+    double? actualWeight,
+    String? notes,
+    String? documentUrl,
+    List<String>? photoUrls,
+    List<OperatorVerification>? verifications,
+  }) {
+    return MaterialDetails(
+      type: type ?? this.type,
+      condition: condition ?? this.condition,
+      state: state ?? this.state,
+      sourceType: sourceType ?? this.sourceType,
+      source: source ?? this.source,
+      numberOfSacks: numberOfSacks ?? this.numberOfSacks,
+      weight: weight ?? this.weight,
+      actualWeight: actualWeight ?? this.actualWeight,
+      notes: notes ?? this.notes,
+      documentUrl: documentUrl ?? this.documentUrl,
+      photoUrls: photoUrls ?? this.photoUrls,
+      verifications: verifications ?? this.verifications,
+    );
+  }
 
   @override
   List<Object?> get props => [
         type,
         condition,
+        state,
+        sourceType,
+        source,
         numberOfSacks,
         weight,
         actualWeight,
-        source,
         notes,
         documentUrl,
-        corrections
+        photoUrls,
+        verifications
       ];
+}
+
+class OperatorVerification extends Equatable {
+  final String id;
+  final String operatorId;
+  final DateTime verifiedAt;
+  
+  // Verified/Corrected Material Details
+  final double actualWeight;
+  final int actualSacks;
+  final String condition;
+  final String state;
+  final String source;
+  
+  // Verification Outcome
+  final bool isAccurate;
+  final String? notes; // correction_notes
+  final String? processingEstimate;
+
+  const OperatorVerification({
+    required this.id,
+    required this.operatorId,
+    required this.verifiedAt,
+    required this.actualWeight,
+    required this.actualSacks,
+    required this.condition,
+    required this.state,
+    required this.source,
+    required this.isAccurate,
+    this.notes,
+    this.processingEstimate,
+  });
+
+  @override
+  List<Object?> get props => [
+    id, 
+    operatorId, 
+    verifiedAt, 
+    actualWeight, 
+    actualSacks, 
+    condition, 
+    state, 
+    source, 
+    isAccurate, 
+    notes, 
+    processingEstimate
+  ];
 }
 
 class ProcessingDetails extends Equatable {

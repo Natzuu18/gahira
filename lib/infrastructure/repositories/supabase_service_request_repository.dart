@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:dartz/dartz.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/error/failures.dart';
 import '../../domain/entities/service_request_entity.dart';
@@ -10,17 +13,56 @@ class SupabaseServiceRequestRepository {
 
   Future<Either<Failure, List<ServiceRequestModel>>> getServiceRequests() async {
     try {
-      final response = await _client.from('service_requests').select().order('created_at', ascending: false);
-      return Right((response as List).map((e) => ServiceRequestModel.fromJson(e)).toList());
+      final response = await _client
+          .from('service_requests')
+          .select('*, operator_verified_services(*)');
+      
+      print('--- FETCHING SERVICE REQUESTS ---');
+      print('RAW DATA: $response');
+
+      final list = (response as List).map((json) {
+        try {
+          return ServiceRequestModel.fromJson(json);
+        } catch (e) {
+          print('PARSING ERROR FOR ROW: $json');
+          print('ERROR DETAILS: $e');
+          rethrow;
+        }
+      }).toList();
+
+      return Right(list);
     } catch (e) {
+      print('REPOSITORY FETCH ERROR: $e');
       return Left(ServerFailure(e.toString()));
     }
   }
 
   Future<Either<Failure, ServiceRequestModel>> createServiceRequest(ServiceRequestModel model) async {
     try {
-      final response = await _client.from('service_requests').insert(model.toJson()).select().single();
-      return Right(ServiceRequestModel.fromJson(response));
+      final data = model.toJson();
+      
+      // Insert the main request
+      final response = await _client
+          .from('service_requests')
+          .insert(data)
+          .select()
+          .single();
+      
+      final created = ServiceRequestModel.fromJson(response);
+
+      // Create Audit Trail entry for creation
+      await logAuditTrail(
+        requestId: created.id,
+        userId: created.creatorId,
+        action: 'CREATE_REQUEST',
+        previousStatus: 'None',
+        newStatus: created.status.name,
+        remarks: 'Material submission started',
+      );
+
+      return Right(created);
+    } on PostgrestException catch (e) {
+      return Left(ServerFailure('Database error: ${e.message}'));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }
@@ -42,22 +84,78 @@ class SupabaseServiceRequestRepository {
       await _client.from('service_requests').update(updates).eq('service_request_id', requestId);
       return const Right(null);
     } catch (e) {
+      print('Status Update Error: $e');
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> submitOperatorVerification({
+    required String requestId,
+    required String operatorId,
+    required double actualWeight,
+    required int actualSacks,
+    required String condition,
+    required String state,
+    required String source,
+    required bool isAccurate,
+    required String processingEstimate,
+    String? notes,
+  }) async {
+    try {
+      await _client.from('operator_verified_services').insert({
+        'service_request_id': requestId,
+        'operator_id': operatorId,
+        'actual_weight': actualWeight,
+        'actual_sacks': actualSacks,
+        'condition': condition,
+        'state': state,
+        'source': source,
+        'is_accurate': isAccurate,
+        'processing_estimate': processingEstimate,
+        'correction_notes': notes,
+        'verified_at': DateTime.now().toIso8601String(),
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, ServiceRequestModel>> updateServiceRequest(ServiceRequestModel model) async {
+    try {
+      final data = model.toJson();
+      // Remove fields that shouldn't be updated or cause issues
+      data.remove('user_id'); 
+      data.remove('created_at');
+      
+      final response = await _client
+          .from('service_requests')
+          .update(data)
+          .eq('service_request_id', model.id)
+          .select()
+          .single();
+          
+      return Right(ServiceRequestModel.fromJson(response));
+    } on PostgrestException catch (e) {
+      return Left(ServerFailure('Update failed: ${e.message}'));
+    } catch (e) {
       return Left(ServerFailure(e.toString()));
     }
   }
 
   Future<Either<Failure, bool>> verifyUserPin(String userId, String pin) async {
     try {
-      // Assuming 'pin' column in 'users' table. 
-      // In a real app, this should be a secure RPC call that hashes the input.
       final response = await _client
           .from('users')
-          .select('pin')
+          .select('pin_hash')
           .eq('userId', userId)
           .single();
       
-      final storedPin = response['pin'] as String?;
-      return Right(storedPin == pin);
+      final storedHash = response['pin_hash'] as String?;
+      if (storedHash == null) return const Right(false);
+
+      final inputHash = sha256.convert(utf8.encode(pin)).toString();
+      return Right(storedHash == inputHash);
     } catch (e) {
       return Left(ServerFailure('PIN verification failed: ${e.toString()}'));
     }
@@ -99,6 +197,28 @@ class SupabaseServiceRequestRepository {
       return Right(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, List<String>>> uploadRequestPhotos(List<PlatformFile> photos) async {
+    try {
+      final List<String> urls = [];
+      for (final file in photos) {
+        if (file.bytes == null) continue;
+        final extension = file.name.split('.').last;
+        final path = 'request_${DateTime.now().millisecondsSinceEpoch}_${urls.length}.$extension';
+        
+        await _client.storage.from('serviceRequests').uploadBinary(
+          path,
+          file.bytes!,
+          fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+        );
+        
+        urls.add(_client.storage.from('serviceRequests').getPublicUrl(path));
+      }
+      return Right(urls);
+    } catch (e) {
+      return Left(ServerFailure('Photo upload failed: ${e.toString()}'));
     }
   }
 }

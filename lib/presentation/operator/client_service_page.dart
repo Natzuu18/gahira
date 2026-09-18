@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:dartz/dartz.dart' hide State;
+import '../../infrastructure/supabase/supabase_config.dart';
 import '../../application/services/service_request_service.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
@@ -183,11 +186,12 @@ class _ClientServicePageState extends State<ClientServicePage> {
   void _confirmWithPin(ServiceRequestEntity request, double weight, String time, bool accurate, String notes, String corrections) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => PinDialog(
         onConfirm: (pin) async {
           final result = await _service.verifyMaterial(
             requestId: request.id,
-            operatorId: 'CURRENT_OPERATOR_ID', // TODO
+            operatorId: SupabaseConfig.client.auth.currentUser?.id ?? '',
             actualWeight: weight,
             estimatedTime: time,
             isAccurate: accurate,
@@ -196,9 +200,12 @@ class _ClientServicePageState extends State<ClientServicePage> {
             corrections: corrections,
             currentStatus: request.status.name,
           );
-          result.fold(
-            (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
-            (_) => _loadRequests(),
+          return result.fold(
+            (l) => l.message,
+            (_) {
+              _loadRequests();
+              return null;
+            },
           );
         },
       ),

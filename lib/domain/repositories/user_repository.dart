@@ -19,4 +19,5 @@ abstract class UserRepository {
     required UserRole role,
     String? miningUnitId,
   });
+  Future<Either<Failure, void>> updateUserPin(String userId, String pin);
 }

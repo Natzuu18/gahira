@@ -230,7 +230,7 @@ class SupabaseAuthRepository implements AuthRepository {
 
       final userData = await _client
           .from('users')
-          .select('*, role:role_id(role)')
+          .select('*, role:role_id(role), pin_hash')
           .eq('userId', user.id)
           .maybeSingle();
 

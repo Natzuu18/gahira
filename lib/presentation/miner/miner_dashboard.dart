@@ -29,7 +29,25 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
   late final ServiceRequestService _service;
 
   List<UserEntity> _otherMiners = [];
+  UserEntity? _currentUser;
   bool _isLoadingMiners = false;
+  bool _hasActionRequired = false;
+
+  // --- Example/Mock Data for UI ---
+  final List<Map<String, dynamic>> _mockRequests = [
+    {'ref': 'REQ-8A2F', 'material': 'Gold Ore', 'status': 'Pending', 'date': '2024-09-15', 'condition': 'Rocky', 'state': 'Dry', 'source': 'Associated Tunnel'},
+    {'ref': 'REQ-9B3C', 'material': 'Silver Ore', 'status': 'Approved', 'date': '2024-09-14', 'condition': 'Mixed', 'state': 'Wet', 'source': 'Partner Source'},
+    {'ref': 'REQ-4C2D', 'material': 'Raw Quartz', 'status': 'Verified', 'date': '2024-09-13', 'condition': 'Clay', 'state': 'Wet', 'source': 'Other'},
+  ];
+
+  final List<Map<String, dynamic>> _mockActiveOps = [
+    {'machine': 'Ball Mill A', 'drum': 'Drum #02', 'operator': 'Mike', 'status': 'Processing', 'progress': 0.65},
+  ];
+
+  final List<Map<String, dynamic>> _mockHistory = [
+    {'material': 'Gold Ore', 'yield': '12.4g', 'date': '2024-09-10', 'status': 'Completed'},
+    {'material': 'Mixed Ore', 'yield': '8.1g', 'date': '2024-09-08', 'status': 'Completed'},
+  ];
 
   @override
   void initState() {
@@ -40,8 +58,15 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
 
   Future<void> _loadMiners() async {
     setState(() => _isLoadingMiners = true);
-    final result = await _userRepository.getMinersAndClients();
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    if (currentUserId == null) return;
+
+    // 1. Fetch current user profile
+    final userResult = await _userRepository.getUserById(currentUserId);
+    userResult.fold((l) => null, (user) => _currentUser = user);
+
+    // 2. Fetch other miners for group selection
+    final result = await _userRepository.getMinersAndClients();
 
     setState(() {
       _otherMiners = result.fold(
@@ -56,7 +81,6 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
     _checkActionRequired();
   }
 
-  bool _hasActionRequired = false;
   Future<void> _checkActionRequired() async {
     final result = await _requestRepository.getServiceRequests();
     result.fold((l) => null, (requests) {
@@ -65,569 +89,6 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
             requests.any((r) => r.status == ServiceRequestStatus.returnedToMiner);
       });
     });
-  }
-
-  void _showCreateRequestWorkflow() {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    if (currentUserId == null) return;
-
-    int currentStep = 1;
-    final formKey = GlobalKey<FormState>();
-
-    // Step 1: Miner Selection
-    bool forMyselfOnly = true;
-    List<String> participatingIds = [];
-    String minerSearchQuery = '';
-
-    // Step 2: Material Information
-    String materialType = '';
-    String materialCondition = '';
-    int? numberOfSacks;
-    double weight = 0;
-    String source = '';
-    String notes = '';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.bgColor,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Container(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              left: 20,
-              right: 20,
-              top: 20,
-            ),
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                            color: kGold.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(2)),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          currentStep == 1
-                              ? 'Step 1: Miner Selection'
-                              : 'Step 2: Material Information',
-                          style: const TextStyle(
-                              color: kGold,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          '$currentStep / 2',
-                          style: TextStyle(
-                              color: context.mutedTextColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    if (currentStep == 1) ...[
-                      Text('Are you creating this request as a group?',
-                          style: TextStyle(
-                              color: context.textColor,
-                              fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      RadioListTile<bool>(
-                        title: Text('Create for myself only',
-                            style: TextStyle(color: context.textColor)),
-                        value: true,
-                        groupValue: forMyselfOnly,
-                        activeColor: kGold,
-                        onChanged: (v) => setModalState(() => forMyselfOnly = v!),
-                      ),
-                      RadioListTile<bool>(
-                        title: Text('Add another Miner (Group)',
-                            style: TextStyle(color: context.textColor)),
-                        value: false,
-                        groupValue: forMyselfOnly,
-                        activeColor: kGold,
-                        onChanged: (v) => setModalState(() => forMyselfOnly = v!),
-                      ),
-                      if (!forMyselfOnly) ...[
-                        const SizedBox(height: 16),
-                        TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Search miners by name...',
-                            prefixIcon: const Icon(Icons.search, color: kGold),
-                            filled: true,
-                            fillColor: context.surfaceColor,
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide:
-                                    BorderSide(color: kGold.withOpacity(0.2))),
-                          ),
-                          style: TextStyle(color: context.textColor),
-                          onChanged: (v) =>
-                              setModalState(() => minerSearchQuery = v),
-                        ),
-                        const SizedBox(height: 12),
-                        if (_isLoadingMiners)
-                          const Center(
-                              child: CircularProgressIndicator(color: kGold))
-                        else if (_otherMiners.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text('No other miners available.',
-                                style: TextStyle(
-                                    color: context.mutedTextColor,
-                                    fontSize: 13)),
-                          )
-                        else
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 200),
-                            child: ListView(
-                              shrinkWrap: true,
-                              children: _otherMiners
-                                  .where((m) =>
-                                      m.fname.toLowerCase().contains(
-                                          minerSearchQuery.toLowerCase()) ||
-                                      m.lname.toLowerCase().contains(
-                                          minerSearchQuery.toLowerCase()))
-                                  .map((m) => CheckboxListTile(
-                                        title: Text('${m.fname} ${m.lname}',
-                                            style: TextStyle(
-                                                color: context.textColor)),
-                                        subtitle: Text(m.email,
-                                            style: TextStyle(
-                                                color: context.mutedTextColor,
-                                                fontSize: 12)),
-                                        value: participatingIds.contains(m.userId),
-                                        activeColor: kGold,
-                                        onChanged: (selected) {
-                                          setModalState(() {
-                                            if (selected!) {
-                                              participatingIds.add(m.userId);
-                                            } else {
-                                              participatingIds.remove(m.userId);
-                                            }
-                                          });
-                                        },
-                                      ))
-                                  .toList(),
-                            ),
-                          ),
-                      ],
-                    ] else ...[
-                      _buildValidatedInput(
-                        label: 'Material Type',
-                        hint: 'e.g. Gold Ore, Silver',
-                        onChanged: (v) => materialType = v,
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Material type is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildValidatedInput(
-                        label: 'Material Condition',
-                        hint: 'e.g. Wet, Dry, Muddy',
-                        onChanged: (v) => materialCondition = v,
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _buildValidatedInput(
-                              label: 'Number of Sacks',
-                              hint: 'Optional',
-                              keyboardType: TextInputType.number,
-                              onChanged: (v) => numberOfSacks = int.tryParse(v),
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildValidatedInput(
-                              label: 'Est. Weight (kg)',
-                              hint: '0.0',
-                              keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true),
-                              onChanged: (v) => weight = double.tryParse(v) ?? 0,
-                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                              validator: (v) {
-                                if (v == null || v.isEmpty) {
-                                  return 'Weight is required';
-                                }
-                                final val = double.tryParse(v);
-                                if (val == null || val <= 0) {
-                                  return 'Enter a valid weight';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _buildValidatedInput(
-                        label: 'Source (Tunnel)',
-                        hint: 'Which tunnel did this come from?',
-                        onChanged: (v) => source = v,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildValidatedInput(
-                        label: 'Additional Notes',
-                        hint: 'Any other processing requirements...',
-                        maxLines: 2,
-                        onChanged: (v) => notes = v,
-                      ),
-                      const SizedBox(height: 16),
-                      Text('Upload Photo/Document',
-                          style: TextStyle(
-                              color: context.mutedTextColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Photo upload coming soon!')));
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          decoration: BoxDecoration(
-                            color: context.surfaceColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: kGold.withOpacity(0.3),
-                                style: BorderStyle.solid),
-                          ),
-                          child: Center(
-                            child: Column(
-                              children: [
-                                Icon(Icons.add_a_photo_outlined,
-                                    color: kGold.withOpacity(0.7)),
-                                const SizedBox(height: 4),
-                                Text('Add Attachment (Optional)',
-                                    style: TextStyle(
-                                        color: kGold.withOpacity(0.7),
-                                        fontSize: 12)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 32),
-                    Row(
-                      children: [
-                        if (currentStep == 2) ...[
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () =>
-                                  setModalState(() => currentStep = 1),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: kGold),
-                                minimumSize: const Size(double.infinity, 50),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
-                              ),
-                              child: const Text('Back',
-                                  style: TextStyle(
-                                      color: kGold, fontWeight: FontWeight.bold)),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                        ],
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              if (currentStep == 1) {
-                                if (!forMyselfOnly && participatingIds.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              'Please select at least one other miner for a group request.')));
-                                  return;
-                                }
-                                setModalState(() => currentStep = 2);
-                              } else {
-                                if (formKey.currentState!.validate()) {
-                                  Navigator.pop(context);
-                                  _showReviewDialog(
-                                    materialType: materialType,
-                                    materialCondition: materialCondition,
-                                    numberOfSacks: numberOfSacks,
-                                    weight: weight,
-                                    source: source,
-                                    notes: notes,
-                                    participatingIds: [
-                                      currentUserId,
-                                      ...participatingIds
-                                    ],
-                                  );
-                                }
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: kGold,
-                              foregroundColor: kBlack,
-                              minimumSize: const Size(double.infinity, 50),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: Text(
-                                currentStep == 1 ? 'Next Step' : 'Review & Submit',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 16)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showReviewDialog({
-    required String materialType,
-    required String materialCondition,
-    int? numberOfSacks,
-    required double weight,
-    required String source,
-    required String notes,
-    required List<String> participatingIds,
-  }) {
-    bool isCertified = false;
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return AlertDialog(
-            backgroundColor: context.surfaceColor,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('Review Request Details',
-                style: TextStyle(color: kGold, fontWeight: FontWeight.bold)),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Please check the entered information for accuracy.',
-                      style: TextStyle(
-                          color: context.mutedTextColor, fontSize: 13)),
-                  const SizedBox(height: 16),
-                  _buildReviewItem('Material Type', materialType),
-                  if (materialCondition.isNotEmpty)
-                    _buildReviewItem('Condition', materialCondition),
-                  if (numberOfSacks != null)
-                    _buildReviewItem('Sacks', numberOfSacks.toString()),
-                  _buildReviewItem('Est. Weight', '$weight kg'),
-                  if (source.isNotEmpty) _buildReviewItem('Source', source),
-                  _buildReviewItem(
-                      'Participants', '${participatingIds.length} Miner(s)'),
-                  const SizedBox(height: 12),
-                  const Text('Additional Notes:',
-                      style: TextStyle(
-                          color: kGold,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.bgColor.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      notes.isEmpty ? 'None' : notes,
-                      style: TextStyle(
-                          color: context.textColor,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 13),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                        'I certify that the information above is accurate and ready for verification.',
-                        style: TextStyle(fontSize: 12)),
-                    value: isCertified,
-                    activeColor: kGold,
-                    onChanged: (v) => setModalState(() => isCertified = v!),
-                    controlAffinity: ListTileControlAffinity.leading,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child:
-                      const Text('Go Back', style: TextStyle(color: Colors.grey))),
-              ElevatedButton(
-                onPressed: isCertified
-                    ? () {
-                        Navigator.pop(context);
-                        _showPinConfirmation(
-                          materialType: materialType,
-                          materialCondition: materialCondition,
-                          numberOfSacks: numberOfSacks,
-                          weight: weight,
-                          source: source,
-                          notes: notes,
-                          participatingIds: participatingIds,
-                        );
-                      }
-                    : null,
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: kGold, foregroundColor: kBlack),
-                child: const Text('Authorize & Submit',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _showPinConfirmation({
-    required String materialType,
-    required String materialCondition,
-    int? numberOfSacks,
-    required double weight,
-    required String source,
-    required String notes,
-    required List<String> participatingIds,
-  }) {
-    showDialog(
-      context: context,
-      builder: (context) => PinDialog(
-        title: 'Authorize Submission',
-        onConfirm: (pin) async {
-          final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-          if (currentUserId == null) return;
-
-          final result = await _service.createRequest(
-            creatorId: currentUserId,
-            participatingMinerIds: participatingIds,
-            materialType: materialType,
-            materialCondition: materialCondition,
-            numberOfSacks: numberOfSacks,
-            materialWeight: weight,
-            source: source,
-            notes: notes,
-            processingRequirements: notes, // Mapping notes to requirements
-            pin: pin,
-          );
-
-          result.fold(
-            (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(l.message), backgroundColor: Colors.redAccent)),
-            (_) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Request submitted for Operator verification!'),
-                  backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildValidatedInput({
-    required String label,
-    required String hint,
-    TextInputType? keyboardType,
-    int maxLines = 1,
-    required Function(String) onChanged,
-    String? Function(String?)? validator,
-    List<TextInputFormatter>? inputFormatters,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
-        const SizedBox(height: 6),
-        TextFormField(
-          maxLines: maxLines,
-          keyboardType: keyboardType,
-          onChanged: onChanged,
-          validator: validator,
-          inputFormatters: inputFormatters,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          style: TextStyle(color: context.textColor),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle:
-                TextStyle(color: context.mutedTextColor.withOpacity(0.3)),
-            filled: true,
-            fillColor: context.surfaceColor,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: kGold.withOpacity(0.2))),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: kGold.withOpacity(0.2))),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: kGold)),
-            errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide:
-                    const BorderSide(color: Colors.redAccent, width: 1)),
-            focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide:
-                    const BorderSide(color: Colors.redAccent, width: 1.5)),
-            errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 11),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildReviewItem(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
-          Text(value,
-              style: TextStyle(
-                  color: context.textColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14)),
-        ],
-      ),
-    );
   }
 
   @override
@@ -665,7 +126,12 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
         minerName: widget.minerName,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showCreateRequestWorkflow,
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ServiceRequestsPage()),
+          );
+        },
         backgroundColor: kGold,
         foregroundColor: kBlack,
         child: const Icon(Icons.add_rounded),
@@ -675,21 +141,48 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Welcome back,',
-                style: TextStyle(color: context.mutedTextColor, fontSize: 14)),
-            Text(widget.minerName,
-                style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold)),
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Welcome back,',
+                        style: TextStyle(color: context.mutedTextColor, fontSize: 14)),
+                    Text(widget.minerName,
+                        style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const Spacer(),
+                _buildAccountStatusBadge(),
+              ],
+            ),
             const SizedBox(height: 32),
-            _buildMetricCard(
-                'My Total Requests', '0', Icons.description_outlined, kGold),
-            const SizedBox(height: 24),
+
+            // --- Summary Metrics ---
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 1.5,
+              children: [
+                _buildSummaryMetric('My Total Requests', '12', Icons.description_outlined, kGold),
+                _buildSummaryMetric('Active Jobs', '1', Icons.settings_input_component_rounded, Colors.green),
+              ],
+            ),
+
+            const SizedBox(height: 32),
+
             if (_hasActionRequired) ...[
               _buildActionRequiredCard(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
             ],
+
+            // --- Quick Actions ---
             Text('Quick Actions',
                 style: TextStyle(
                     color: context.textColor,
@@ -700,8 +193,13 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
               children: [
                 Expanded(
                   child: _buildQuickActionButton(
-                      'New Request', Icons.add_circle_outline,
-                      _showCreateRequestWorkflow),
+                      'New Request', Icons.add_circle_outline, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const ServiceRequestsPage()),
+                    );
+                  }),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -716,9 +214,217 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
                 ),
               ],
             ),
+
+            const SizedBox(height: 32),
+
+            // --- My Service Requests (Status) ---
+            _buildSectionHeader('Recent Requests', () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceRequestsPage()));
+            }),
+            const SizedBox(height: 12),
+            ..._mockRequests.map((r) => _buildRequestListItem(r)),
+
+            const SizedBox(height: 32),
+
+            // --- Active Processing Service ---
+            Text('Active Operations',
+                style: TextStyle(
+                    color: context.textColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            if (_mockActiveOps.isEmpty)
+              _buildEmptyState('No active processing at the moment.')
+            else
+              ..._mockActiveOps.map((op) => _buildActiveOpCard(op)),
+
+            const SizedBox(height: 32),
+
+            // --- Service History ---
+            _buildSectionHeader('Completion History', () {}),
+            const SizedBox(height: 12),
+            ..._mockHistory.map((h) => _buildHistoryListItem(h)),
+
+            const SizedBox(height: 80), // Space for FAB
           ],
         ),
       ),
+    );
+  }
+
+  // --- Helper Widgets ---
+
+  Widget _buildAccountStatusBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: kGold.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kGold.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.circle, color: Colors.green, size: 8),
+          const SizedBox(width: 8),
+          Text(
+            'Account Active',
+            style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryMetric(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kGold.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Icon(icon, color: color, size: 24),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: TextStyle(color: context.textColor, fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(title, style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, VoidCallback onTap) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title, style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+        TextButton(onPressed: onTap, child: const Text('View All', style: TextStyle(color: kGold))),
+      ],
+    );
+  }
+
+  Widget _buildRequestListItem(Map<String, dynamic> req) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kGold.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: kGold.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(Icons.description_outlined, color: kGold, size: 20),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(req['material'], style: TextStyle(color: context.textColor, fontWeight: FontWeight.w600)),
+                Text('Ref: ${req['ref']} • ${req['date']}', style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
+              ],
+            ),
+          ),
+          _buildStatusBadge(req['status']),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveOpCard(Map<String, dynamic> op) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.green.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.settings_input_component_rounded, color: Colors.green, size: 20),
+              const SizedBox(width: 12),
+              Text(op['machine'], style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              Text('${(op['progress'] * 100).toInt()}%', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          LinearProgressIndicator(
+            value: op['progress'],
+            backgroundColor: Colors.green.withOpacity(0.1),
+            color: Colors.green,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Drum: ${op['drum']}', style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
+              Text('Op: ${op['operator']}', style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryListItem(Map<String, dynamic> item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.textColor.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_outline_rounded, color: Colors.green, size: 20),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item['material'], style: TextStyle(color: context.textColor, fontWeight: FontWeight.w600)),
+                Text('Date: ${item['date']}', style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
+              ],
+            ),
+          ),
+          Text(item['yield'], style: const TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    final color = status == 'Approved' ? Colors.green : Colors.orange;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      child: Text(status, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(12)),
+      child: Center(child: Text(message, style: TextStyle(color: context.mutedTextColor, fontSize: 13))),
     );
   }
 
@@ -765,38 +471,6 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
     );
   }
 
-  Widget _buildMetricCard(
-      String title, String value, IconData icon, Color color) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 32),
-          const SizedBox(width: 20),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(value,
-                  style: TextStyle(
-                      color: context.textColor,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold)),
-              Text(title,
-                  style:
-                      TextStyle(color: context.mutedTextColor, fontSize: 14)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildQuickActionButton(
       String label, IconData icon, VoidCallback onTap) {
     return InkWell(
@@ -832,6 +506,24 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
       ),
       child: const Icon(Icons.settings_input_component_rounded,
           color: kGold, size: 16),
+    );
+  }
+
+  Widget _buildReviewItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
+          Text(value,
+              style: TextStyle(
+                  color: context.textColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14)),
+        ],
+      ),
     );
   }
 }

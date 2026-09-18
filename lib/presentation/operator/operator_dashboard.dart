@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:dartz/dartz.dart' hide State;
 
+import '../../core/error/failures.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/pin_dialog.dart';
@@ -12,6 +14,9 @@ import '../../infrastructure/repositories/supabase_service_request_repository.da
 import '../../application/services/service_request_service.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/entities/service_request_entity.dart';
+import '../../infrastructure/models/service_request_model.dart';
+
+import 'service_verification_page.dart';
 
 class OperatorDashboardPage extends StatefulWidget {
   const OperatorDashboardPage({super.key, this.operatorName = 'Operator'});
@@ -114,7 +119,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
     String minerSearchQuery = '';
 
     // Step 2: Material Details
-    String materialType = '';
     String condition = '';
     int? sacks;
     double weight = 0;
@@ -225,13 +229,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
                     ] else ...[
                       _buildValidatedInput(
                         context,
-                        label: 'Material Type',
-                        hint: 'e.g. Gold Ore',
-                        onChanged: (v) => materialType = v,
-                        validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                      ),
-                      _buildValidatedInput(
-                        context,
                         label: 'Material Condition',
                         hint: 'e.g. Wet, Dry, Muddy',
                         onChanged: (v) => condition = v,
@@ -321,7 +318,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
                                   _confirmAssistedRequest(
                                     primaryMinerId: selectedMinerIds.first,
                                     participatingIds: selectedMinerIds,
-                                    type: materialType,
                                     condition: condition,
                                     sacks: sacks,
                                     weight: weight,
@@ -360,7 +356,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
   void _confirmAssistedRequest({
     required String primaryMinerId,
     required List<String> participatingIds,
-    required String type,
     required String condition,
     int? sacks,
     required double weight,
@@ -380,7 +375,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
           children: [
             const Text('Please ask the primary Miner to verify these details and enter their PIN to authorize.', style: TextStyle(fontSize: 13)),
             const SizedBox(height: 20),
-            _buildReviewRow(context, 'Material', type),
             _buildReviewRow(context, 'Weight', '$weight kg'),
             if (sacks != null) _buildReviewRow(context, 'Sacks', sacks.toString()),
             _buildReviewRow(context, 'Est. Time', estTime),
@@ -395,7 +389,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
               _authorizeWithMinerPin(
                 minerId: primaryMinerId,
                 participatingIds: participatingIds,
-                type: type,
                 condition: condition,
                 sacks: sacks,
                 weight: weight,
@@ -415,7 +408,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
   void _authorizeWithMinerPin({
     required String minerId,
     required List<String> participatingIds,
-    required String type,
     required String condition,
     int? sacks,
     required double weight,
@@ -425,16 +417,17 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
   }) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => PinDialog(
         title: 'Miner Authorization PIN',
         onConfirm: (pin) async {
           final currentOperatorId = Supabase.instance.client.auth.currentUser?.id;
-          if (currentOperatorId == null) return;
+          if (currentOperatorId == null) return 'Session expired. Please re-login.';
 
           final result = await _service.createRequest(
             creatorId: minerId,
             participatingMinerIds: participatingIds,
-            materialType: type,
+            materialType: 'Ore', 
             materialCondition: condition,
             numberOfSacks: sacks,
             materialWeight: weight,
@@ -447,21 +440,23 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
             assistedByOperatorId: currentOperatorId,
           );
 
-          result.fold(
-            (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message), backgroundColor: Colors.redAccent)),
-            (_) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Service request created and forwarded to Owner!'),
-                  backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
+          return result.fold(
+            (l) => l.message,
+            (_) => null,
           );
         },
       ),
-    );
+    ).then((success) {
+      if (success == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Service request created and forwarded to Owner!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
   }
 
   Widget _buildValidatedInput(
@@ -603,21 +598,61 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
                 Expanded(
                   child: _buildQuickActionButton(
                     context,
-                    'Create Request for Miner',
-                    Icons.person_add_alt_1_rounded,
-                    _showCreateAssistedRequest,
+                    'Service Verification',
+                    Icons.fact_check_outlined,
+                    () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ServiceVerificationPage())),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildQuickActionButton(
                     context,
-                    'Processing Workflow',
-                    Icons.assignment_ind_outlined,
+                    'Workflow',
+                    Icons.settings_input_component_rounded,
                     () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProcessingWorkflowPage())),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 32),
+
+            // Pending Verification Preview
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Recent Requests', style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                TextButton(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ServiceVerificationPage())),
+                  child: const Text('View All', style: TextStyle(color: kGold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            FutureBuilder<Either<Failure, List<ServiceRequestModel>>>(
+              future: _requestRepository.getServiceRequests(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: kGold));
+                final list = snapshot.data?.fold((l) => [], (r) => r) ?? [];
+                if (list.isEmpty) return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(12)),
+                  child: const Center(child: Text('No recent requests', style: TextStyle(color: Colors.grey))),
+                );
+                
+                return Column(
+                  children: list.take(3).map((r) => Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(12)),
+                    child: ListTile(
+                      title: Text(r.materialDetails.type, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                      subtitle: Text('Ref: ${r.id.substring(0,8).toUpperCase()}', style: const TextStyle(fontSize: 12)),
+                      trailing: const Icon(Icons.chevron_right, color: kGold),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ServiceVerificationPage())),
+                    ),
+                  )).toList(),
+                );
+              }
             ),
             const SizedBox(height: 32),
 

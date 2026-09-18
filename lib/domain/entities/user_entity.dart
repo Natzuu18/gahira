@@ -13,6 +13,8 @@ class UserEntity extends Equatable {
   final String status; // e.g. active / inactive / pending
   final String? miningUnitId; // FK -> MiningUnit
   final String? miningUnitName; // Joined from mining_units table
+  final String? miningUnitType; // Joined from mining_units table
+  final String? pinHash; // Hashed PIN for secure actions
 
   const UserEntity({
     required this.userId,
@@ -27,6 +29,8 @@ class UserEntity extends Equatable {
     required this.status,
     this.miningUnitId,
     this.miningUnitName,
+    this.miningUnitType,
+    this.pinHash,
   });
 
   @override
@@ -43,5 +47,7 @@ class UserEntity extends Equatable {
     status,
     miningUnitId,
     miningUnitName,
+    miningUnitType,
+    pinHash,
   ];
 }

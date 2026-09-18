@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'client_drawer.dart';
+import '../miner/miner_drawer.dart';
 
 // Gahira Ball Mill Management System - Billing Page
 // Clients can view their bills, make payments, and view payment history
@@ -104,9 +104,9 @@ class _BillingPageState extends State<BillingPage> {
           ),
         ],
       ),
-      endDrawer: const ClientDrawer(
-        currentMenu: ClientMenu.billing,
-        clientName: 'Client',
+      endDrawer: MinerDrawer(
+        currentMenu: MinerMenu.billing,
+        minerName: 'Miner',
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

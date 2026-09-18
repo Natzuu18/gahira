@@ -14,11 +14,14 @@ class ServiceRequestService {
     required List<String> participatingMinerIds,
     required String materialType,
     String? materialCondition,
+    String? materialState,
+    String? materialSourceType,
     int? numberOfSacks,
     required double materialWeight,
     String? source,
     String? notes,
     String? documentUrl,
+    List<String> photoUrls = const [],
     required String processingRequirements,
     required String pin,
     bool isOperatorAssisted = false,
@@ -41,11 +44,14 @@ class ServiceRequestService {
           materialDetails: MaterialDetails(
             type: materialType,
             condition: materialCondition,
+            state: materialState,
+            sourceType: materialSourceType,
             numberOfSacks: numberOfSacks,
             weight: materialWeight,
             source: source,
             notes: notes,
             documentUrl: documentUrl,
+            photoUrls: photoUrls,
           ),
           processingDetails: ProcessingDetails(
             requirements: processingRequirements,
@@ -85,15 +91,85 @@ class ServiceRequestService {
     );
   }
 
+  Future<Either<Failure, ServiceRequestEntity>> updateRequest({
+    required String requestId,
+    required String creatorId,
+    required List<String> participatingMinerIds,
+    required String materialType,
+    String? materialCondition,
+    String? materialState,
+    String? materialSourceType,
+    int? numberOfSacks,
+    required double materialWeight,
+    String? source,
+    String? notes,
+    List<String> photoUrls = const [],
+    required String pin,
+  }) async {
+    // 1. Verify PIN
+    final pinValid = await _repository.verifyUserPin(creatorId, pin);
+    return pinValid.fold(
+      (l) => Left(l),
+      (isValid) async {
+        if (!isValid) return const Left(ValidationFailure('Incorrect PIN'));
+
+        // 2. Update Request
+        final model = ServiceRequestModel(
+          id: requestId,
+          creatorId: creatorId,
+          participatingMinerIds: participatingMinerIds,
+          materialDetails: MaterialDetails(
+            type: materialType,
+            condition: materialCondition,
+            state: materialState,
+            sourceType: materialSourceType,
+            numberOfSacks: numberOfSacks,
+            weight: materialWeight,
+            source: source,
+            notes: notes,
+            photoUrls: photoUrls,
+          ),
+          processingDetails: const ProcessingDetails(
+            requirements: '',
+            assignedOperatorIds: [],
+          ),
+          status: ServiceRequestStatus.pendingOperatorVerification, // Reset status to pending
+          createdAt: DateTime.now(), // Won't be updated due to repository removal
+          updatedAt: DateTime.now(),
+        );
+
+        final result = await _repository.updateServiceRequest(model);
+        return result.fold(
+          (l) => Left(l),
+          (updated) async {
+            // 3. Log Audit
+            await _repository.logAuditTrail(
+              requestId: updated.id,
+              userId: creatorId,
+              action: 'UPDATE_REQUEST',
+              previousStatus: 'Unknown',
+              newStatus: updated.status.name,
+              remarks: 'Request details updated by miner',
+            );
+            return Right(updated);
+          },
+        );
+      },
+    );
+  }
+
   Future<Either<Failure, void>> verifyMaterial({
     required String requestId,
     required String operatorId,
     required double actualWeight,
+    required int actualSacks,
+    required String condition,
+    required String state,
+    required String source,
     required String estimatedTime,
     required bool isAccurate,
     required String pin,
     String? remarks,
-    String? corrections,
     required String currentStatus,
   }) async {
     final pinValid = await _repository.verifyUserPin(operatorId, pin);
@@ -106,24 +182,34 @@ class ServiceRequestService {
             ? ServiceRequestStatus.verified 
             : ServiceRequestStatus.returnedToMiner;
 
+        // 1. Update the main request status
         final result = await _repository.updateRequestStatus(
           requestId: requestId,
           status: newStatus.name,
           userId: operatorId,
           additionalData: {
-            'actual_weight': actualWeight,
-            'estimated_time': estimatedTime,
-            'verified_by': operatorId,
-            'verified_at': DateTime.now().toIso8601String(),
-            'is_accurate': isAccurate,
-            'verification_remarks': remarks,
-            'material_corrections': corrections,
+            'updated_at': DateTime.now().toIso8601String(),
           },
         );
 
         return result.fold(
           (l) => Left(l),
           (_) async {
+            // 2. Submit the full verification record to the new table
+            await _repository.submitOperatorVerification(
+              requestId: requestId,
+              operatorId: operatorId,
+              actualWeight: actualWeight,
+              actualSacks: actualSacks,
+              condition: condition,
+              state: state,
+              source: source,
+              isAccurate: isAccurate,
+              processingEstimate: estimatedTime,
+              notes: remarks,
+            );
+
+            // 3. Log Audit Trail
             await _repository.logAuditTrail(
               requestId: requestId,
               userId: operatorId,

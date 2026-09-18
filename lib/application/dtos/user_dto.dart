@@ -11,6 +11,7 @@ class UserDto {
   final String contactNum;
   final String roleId;
   final String status;
+  final String? pinHash;
 
   const UserDto({
     required this.userId,
@@ -23,6 +24,7 @@ class UserDto {
     required this.contactNum,
     required this.roleId,
     required this.status,
+    this.pinHash,
   });
 
   factory UserDto.fromJson(Map<String, dynamic> json) {
@@ -37,6 +39,7 @@ class UserDto {
       contactNum: (json['contact_num'] ?? json['contact_Num'] ?? '').toString(),
       roleId: (json['role_id'] ?? json['role'] ?? '').toString(),
       status: json['status'] as String? ?? 'pending',
+      pinHash: json['pin_hash'] as String?,
     );
   }
 
@@ -52,6 +55,7 @@ class UserDto {
       'contact_num': contactNum,
       'role_id': roleId,
       'status': status,
+      'pin_hash': pinHash,
     };
   }
 
@@ -67,6 +71,7 @@ class UserDto {
       contactNum: entity.contactNum,
       roleId: entity.roleId,
       status: entity.status,
+      pinHash: entity.pinHash,
     );
   }
 
@@ -82,6 +87,7 @@ class UserDto {
       contactNum: contactNum,
       roleId: roleId,
       status: status,
+      pinHash: pinHash,
     );
   }
 }

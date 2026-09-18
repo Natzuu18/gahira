@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'client_drawer.dart';
+import '../miner/miner_drawer.dart';
 
 // Gahira Ball Mill Management System - Transaction History Page
 // Clients can view their complete financial transaction history
@@ -173,9 +173,9 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
           ),
         ],
       ),
-      endDrawer: const ClientDrawer(
-        currentMenu: ClientMenu.transactionHistory,
-        clientName: 'Client',
+      endDrawer: MinerDrawer(
+        currentMenu: MinerMenu.transactionHistory,
+        minerName: 'Miner',
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

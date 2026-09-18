@@ -8,6 +8,7 @@ import './presentation/miner/miner_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
 import './presentation/landing/change_password_page.dart';
+import './presentation/landing/set_pin_page.dart';
 
 import './infrastructure/supabase/supabase_config.dart';
 import './infrastructure/repositories/supabase_auth_repository.dart';
@@ -146,7 +147,7 @@ class _LoginPageState extends State<LoginPage>
         },
         (userDto) {
           debugPrint('Login successful: ${userDto.fname} ${userDto.lname} - Role: ${userDto.roleId}');
-          _goToDashboard(userDto.roleId, '${userDto.fname} ${userDto.lname}');
+          _goToDashboard(userDto.roleId, '${userDto.fname} ${userDto.lname}', pinSet: userDto.pinHash != null);
         },
       );
     }
@@ -158,16 +159,23 @@ class _LoginPageState extends State<LoginPage>
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
       _setLoading(false);
-      _goToDashboard('admin', 'OAuth User');
+      _goToDashboard('admin', 'OAuth User', pinSet: true);
     });
   }
 
-  void _goToDashboard(String role, String name) {
+  void _goToDashboard(String role, String name, {bool pinSet = true}) {
     final String normalizedRole = role.toLowerCase();
 
     if (normalizedRole == 'change_password_required') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const ChangePasswordPage()),
+      );
+      return;
+    }
+
+    if (!pinSet) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const SetPinPage()),
       );
       return;
     }
@@ -178,13 +186,10 @@ class _LoginPageState extends State<LoginPage>
       );
     } else if (normalizedRole == 'operator') {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => OperatorDashboardPage(operatorName: name)),
+        MaterialPageRoute(
+            builder: (_) => OperatorDashboardPage(operatorName: name)),
       );
-    } else if (normalizedRole == 'client') {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => ClientDashboardPage(clientName: name)),
-      );
-    } else if (normalizedRole == 'miner') {
+    } else if (normalizedRole == 'client' || normalizedRole == 'miner') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => MinerDashboardPage(minerName: name)),
       );

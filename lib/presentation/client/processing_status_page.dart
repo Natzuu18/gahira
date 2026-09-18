@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'client_drawer.dart';
+import '../miner/miner_drawer.dart';
 
 // Gahira Ball Mill Management System - Processing Status Page
 // Clients can track the progress of their processing jobs through workflow stages
@@ -92,9 +92,9 @@ class _ProcessingStatusPageState extends State<ProcessingStatusPage> {
           ),
         ],
       ),
-      endDrawer: const ClientDrawer(
-        currentMenu: ClientMenu.processingStatus,
-        clientName: 'Client',
+      endDrawer: MinerDrawer(
+        currentMenu: MinerMenu.processingStatus,
+        minerName: 'Miner',
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

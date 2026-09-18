@@ -17,88 +17,81 @@ class ServiceRequestModel extends ServiceRequestEntity {
   });
 
   factory ServiceRequestModel.fromJson(Map<String, dynamic> json) {
+    // Parse verifications if they exist (from join on operator_verified_services)
+    final List<OperatorVerification> verificationList = [];
+    if (json['operator_verified_services'] != null) {
+      final List<dynamic> verificationsRaw = json['operator_verified_services'] as List;
+      for (var v in verificationsRaw) {
+        verificationList.add(OperatorVerification(
+          id: v['verification_id']?.toString() ?? '',
+          operatorId: v['operator_id']?.toString() ?? '',
+          verifiedAt: v['verified_at'] != null ? DateTime.parse(v['verified_at']) : DateTime.now(),
+          actualWeight: (v['actual_weight'] ?? 0.0).toDouble(),
+          actualSacks: v['actual_sacks'] ?? 0,
+          condition: v['condition'] ?? '',
+          state: v['state'] ?? '',
+          source: v['source'] ?? '',
+          isAccurate: v['is_accurate'] ?? true,
+          notes: v['correction_notes'],
+          processingEstimate: v['processing_estimate'],
+        ));
+      }
+    }
+
     return ServiceRequestModel(
-      id: json['service_request_id'] as String,
-      creatorId: json['creator_id'] as String,
+      id: json['service_request_id']?.toString() ?? '',
+      creatorId: json['user_id']?.toString() ?? '',
       participatingMinerIds: (json['participating_miners'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
       materialDetails: MaterialDetails(
-        type: json['material_type'] as String,
-        condition: json['material_condition'] as String?,
-        numberOfSacks: json['number_of_sacks'] as int?,
-        weight: (json['material_weight'] as num).toDouble(),
-        actualWeight: (json['actual_weight'] as num?)?.toDouble(),
-        source: json['material_source'] as String?,
-        notes: json['material_notes'] as String?,
-        documentUrl: json['document_url'] as String?,
-        corrections: json['material_corrections'] as String?,
-      ),
-      processingDetails: ProcessingDetails(
-        requirements: json['processing_requirements'] as String,
-        estimatedTime: json['estimated_time'] as String?,
-        scheduledDate: json['scheduled_date'] != null
-            ? DateTime.parse(json['scheduled_date'] as String)
-            : null,
-        assignedOperatorIds: (json['assigned_operators'] as List<dynamic>?)
+        type: json['purpose']?.toString() ?? 'Ore',
+        condition: json['material_condition']?.toString(),
+        state: json['material_state']?.toString(),
+        sourceType: json['material_source_type']?.toString(),
+        source: json['material_source']?.toString(),
+        numberOfSacks: json['quantity'] as int?,
+        weight: (json['material_weight'] ?? 0.0).toDouble(),
+        notes: json['material_notes']?.toString(),
+        documentUrl: null,
+        photoUrls: (json['photo_urls'] as List<dynamic>?)
                 ?.map((e) => e.toString())
                 .toList() ??
             [],
-        currentStage: ProcessingStage.values.firstWhere(
-          (e) => e.name == (json['current_processing_stage'] as String?),
-          orElse: () => ProcessingStage.none,
-        ),
+        verifications: verificationList,
       ),
-      verificationDetails: json['verified_by'] != null
-          ? VerificationDetails(
-              operatorId: json['verified_by'] as String,
-              verifiedAt: DateTime.parse(json['verified_at'] as String),
-              remarks: json['verification_remarks'] as String?,
-              isAccurate: json['is_accurate'] as bool? ?? true,
-            )
-          : null,
+      processingDetails: const ProcessingDetails(
+        requirements: '',
+        assignedOperatorIds: [],
+      ),
       status: ServiceRequestStatus.values.firstWhere(
-        (e) => e.name == (json['status'] as String),
-        orElse: () => ServiceRequestStatus.draft,
+        (e) => e.name == (json['status']?.toString()),
+        orElse: () => ServiceRequestStatus.pendingOperatorVerification,
       ),
-      isOperatorAssisted: json['is_operator_assisted'] as bool? ?? false,
-      assistedByOperatorId: json['assisted_by_operator_id'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
-      billingId: json['billing_id'] as String?,
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'service_request_id': id,
-      'creator_id': creatorId,
-      'participating_miners': participatingMinerIds,
-      'material_type': materialDetails.type,
-      'material_condition': materialDetails.condition,
-      'number_of_sacks': materialDetails.numberOfSacks,
-      'material_weight': materialDetails.weight,
-      'actual_weight': materialDetails.actualWeight,
-      'material_source': materialDetails.source,
-      'material_notes': materialDetails.notes,
-      'document_url': materialDetails.documentUrl,
-      'material_corrections': materialDetails.corrections,
-      'processing_requirements': processingDetails.requirements,
-      'estimated_time': processingDetails.estimatedTime,
-      'scheduled_date': processingDetails.scheduledDate?.toIso8601String(),
-      'assigned_operators': processingDetails.assignedOperatorIds,
-      'current_processing_stage': processingDetails.currentStage.name,
-      'verified_by': verificationDetails?.operatorId,
-      'verified_at': verificationDetails?.verifiedAt.toIso8601String(),
-      'verification_remarks': verificationDetails?.remarks,
-      'is_accurate': verificationDetails?.isAccurate,
+      'user_id': creatorId,
+      'service_type': 'Milling',
+      'request_date': createdAt.toIso8601String().split('T')[0],
+      'quantity': materialDetails.numberOfSacks ?? 0,
+      'purpose': materialDetails.type,
       'status': status.name,
-      'is_operator_assisted': isOperatorAssisted,
-      'assisted_by_operator_id': assistedByOperatorId,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
-      'billing_id': billingId,
+      'material_condition': materialDetails.condition,
+      'material_state': materialDetails.state,
+      'material_source_type': materialDetails.sourceType,
+      'material_source': materialDetails.source,
+      'material_notes': materialDetails.notes,
+      'photo_urls': materialDetails.photoUrls,
+      'material_weight': materialDetails.weight,
+      'participating_miners': participatingMinerIds,
     };
   }
 

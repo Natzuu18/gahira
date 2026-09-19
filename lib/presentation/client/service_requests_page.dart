@@ -66,12 +66,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             creatorId: currentUserId ?? '',
             participatingMinerIds: [],
             materialDetails: MaterialDetails(
-              type: 'Gold Ore',
               condition: 'Rocky',
               state: 'Dry',
               sourceType: 'Associated Tunnel',
               source: _currentUser?.miningUnitName ?? 'Associated Tunnel #1',
-              weight: 250.0,
               numberOfSacks: 5,
               photoUrls: ['dummy_url_1', 'dummy_url_2'],
             ),
@@ -88,12 +86,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             creatorId: currentUserId ?? '',
             participatingMinerIds: [],
             materialDetails: MaterialDetails(
-              type: 'Silver Ore',
               condition: 'Mixed',
               state: 'Wet',
               sourceType: 'Other',
               source: 'External Quarry B',
-              weight: 120.5,
               numberOfSacks: 3,
               photoUrls: [],
             ),
@@ -110,12 +106,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             creatorId: currentUserId ?? '',
             participatingMinerIds: [],
             materialDetails: MaterialDetails(
-              type: 'Mixed Ore',
               condition: 'Clay',
               state: 'Others',
               sourceType: 'Partner Source',
               source: 'Consolidated Mines Group',
-              weight: 500.0,
               numberOfSacks: 12,
               photoUrls: [],
             ),
@@ -305,8 +299,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
 
     if (_searchQuery.isNotEmpty) {
       list = list.where((r) => 
-        r.materialDetails.type.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        r.id.toLowerCase().contains(_searchQuery.toLowerCase())
+        r.id.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+        (r.materialDetails.source?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false)
       ).toList();
     }
 
@@ -569,30 +563,18 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      request.materialDetails.type,
+                      'Ref: ${request.id.substring(0, 8).toUpperCase()}',
                       style: TextStyle(
                           color: context.textColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 16),
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          'Ref: ${request.id.substring(0, 8).toUpperCase()}',
-                          style: TextStyle(
-                              color: context.mutedTextColor,
-                              fontSize: 11,
-                              letterSpacing: 0.5),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "• $dateStr",
-                          style: TextStyle(
-                              color: context.mutedTextColor,
-                              fontSize: 11),
-                        ),
-                      ],
+                    Text(
+                      dateStr,
+                      style: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 11),
                     ),
                   ],
                 ),
@@ -609,13 +591,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       constraints: const BoxConstraints(),
                     ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${request.materialDetails.weight} kg',
-                    style: TextStyle(
-                        color: kGold,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14),
-                  ),
                   if (request.materialDetails.numberOfSacks != null)
                     Text(
                       '${request.materialDetails.numberOfSacks} sacks',
@@ -639,11 +614,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           children: [
             const Divider(height: 32),
             _buildSectionHeader('Material Summary'),
-            _buildDetailRow(Icons.scale_outlined, 'Initial Weight',
-                '${request.materialDetails.weight} kg'),
-            if (request.materialDetails.actualWeight != null)
-              _buildDetailRow(Icons.monitor_weight_rounded, 'Verified Weight',
-                  '${request.materialDetails.actualWeight} kg'),
             if (request.materialDetails.condition != null &&
                 request.materialDetails.condition!.isNotEmpty)
               _buildDetailRow(
@@ -759,7 +729,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Reason: ${request.materialDetails.corrections ?? "Incomplete information"}',
+            'Reason: ${request.materialDetails.verifications.isNotEmpty ? request.materialDetails.verifications.last.notes ?? "Incomplete information" : "Incomplete information"}',
             style: TextStyle(color: context.textColor.withOpacity(0.9), fontSize: 13),
           ),
           const SizedBox(height: 16),
@@ -893,6 +863,14 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     // Step 2: Material Information
     String condition = existingRequest?.materialDetails.condition ?? 'Rocky';
     String state = existingRequest?.materialDetails.state ?? 'Dry';
+    String otherState = ''; // For "Others" option
+    
+    // If editing, check if state is custom
+    if (existingRequest != null && state != 'Dry' && state != 'Wet') {
+      otherState = state;
+      state = 'Others';
+    }
+
     String sourceType = existingRequest?.materialDetails.sourceType ?? 'Associated Ball Mill';
     String sourceDetails = existingRequest?.materialDetails.source ?? '';
 
@@ -906,7 +884,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     }
 
     int? sacks = existingRequest?.materialDetails.numberOfSacks;
-    double weight = existingRequest?.materialDetails.weight ?? 0;
     String notes = existingRequest?.materialDetails.notes ?? '';
     List<PlatformFile> selectedPhotos = []; // Note: New photos only for simplicity or handle existing
     List<String> existingPhotoUrls = existingRequest?.materialDetails.photoUrls ?? [];
@@ -1130,6 +1107,21 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                         contentPadding: EdgeInsets.zero,
                         onChanged: (v) => setModalState(() => state = v!),
                       )).toList(),
+                      if (state == 'Others')
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: TextFormField(
+                            initialValue: otherState,
+                            onChanged: (v) => otherState = v,
+                            style: TextStyle(color: context.textColor, fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'Please specify material state',
+                              filled: true,
+                              fillColor: context.surfaceColor,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 16),
 
                       // Material Source (Bullets)
@@ -1205,24 +1197,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                               keyboardType: TextInputType.number,
                               onChanged: (v) => sacks = int.tryParse(v),
                               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildValidatedInput(
-                              label: 'Estimated Weight (kg)',
-                              hint: '0.0',
-                              initialValue: weight > 0 ? weight.toString() : null,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true),
-                              onChanged: (v) => weight = double.tryParse(v) ?? 0,
-                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                              validator: (v) {
-                                if (v == null || v.isEmpty) return 'Weight is required';
-                                final val = double.tryParse(v);
-                                if (val == null || val <= 0) return 'Enter a valid weight';
-                                return null;
-                              },
                             ),
                           ),
                         ],
@@ -1382,9 +1356,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                   _showReviewDialog(
                                     existingRequestId: existingRequest?.id,
                                     condition: condition,
-                                    state: state,
+                                    state: state == 'Others' ? otherState : state,
                                     sourceType: sourceType,
-                                    weight: weight,
                                     sacks: sacks,
                                     source: sourceDetails,
                                     notes: notes,
@@ -1427,7 +1400,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     required String condition,
     required String state,
     required String sourceType,
-    required double weight,
     int? sacks,
     required String source,
     required String notes,
@@ -1462,7 +1434,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   if (sacks != null)
                     _buildDetailRow(
                         Icons.shopping_bag_outlined, 'Sacks', sacks.toString()),
-                  _buildDetailRow(Icons.scale_rounded, 'Est. Weight', '$weight kg'),
                   _buildDetailRow(Icons.people_rounded, 'Participants',
                       '${miners.length} Miner(s)'),
                   _buildDetailRow(Icons.photo_library_outlined, 'Photos', '${newPhotos.length + existingPhotoUrls.length} Total'),
@@ -1518,7 +1489,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                           condition: condition,
                           state: state,
                           sourceType: sourceType,
-                          weight: weight,
                           sacks: sacks,
                           source: source,
                           notes: notes,
@@ -1549,7 +1519,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     required String condition,
     required String state,
     required String sourceType,
-    required double weight,
     int? sacks,
     required String source,
     required String notes,
@@ -1584,12 +1553,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               requestId: existingRequestId,
               creatorId: currentUserId,
               participatingMinerIds: miners,
-              materialType: 'Ore',
               materialCondition: condition,
               materialState: state,
               materialSourceType: sourceType,
               numberOfSacks: sacks,
-              materialWeight: weight,
               source: source,
               notes: notes,
               pin: pin,
@@ -1604,12 +1571,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             final result = await _service.createRequest(
               creatorId: currentUserId,
               participatingMinerIds: miners,
-              materialType: 'Ore', 
               materialCondition: condition,
               materialState: state,
               materialSourceType: sourceType,
               numberOfSacks: sacks,
-              materialWeight: weight,
               source: source,
               notes: notes,
               processingRequirements: notes, 

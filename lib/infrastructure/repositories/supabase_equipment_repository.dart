@@ -9,7 +9,7 @@ class SupabaseEquipmentRepository {
   // --- MACHINES ---
   Future<Either<Failure, List<Map<String, dynamic>>>> getMachines() async {
     try {
-      final response = await _client.from('machines').select().order('machine_name');
+      final response = await _client.from('machines').select('*, drums(*)').order('machine_name');
       return Right(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       return Left(ServerFailure(e.toString()));

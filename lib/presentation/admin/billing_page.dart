@@ -87,8 +87,7 @@ class _BillingPageState extends State<BillingPage> {
               ],
             ),
             const Divider(),
-            _buildDetailRow('Material', request.materialDetails.type),
-            _buildDetailRow('Actual Weight', '${request.materialDetails.actualWeight} kg'),
+            _buildDetailRow('Reference', request.id.substring(0, 8).toUpperCase()),
             if (!isDone)
               Padding(
                 padding: const EdgeInsets.only(top: 16),

@@ -52,7 +52,7 @@ class _ClientServicePageState extends State<ClientServicePage> {
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
         elevation: 0,
-        title: const Text('MATERIAL VERIFICATION', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2)),
+        title: const Text('MINER SERVICES', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2)),
         iconTheme: const IconThemeData(color: kGold),
         actions: [
           const ThemeToggleButton(),
@@ -95,12 +95,17 @@ class _ClientServicePageState extends State<ClientServicePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Request ID: ${request.id.substring(0, 8)}', style: const TextStyle(color: kGold, fontWeight: FontWeight.bold)),
-                Text(request.materialDetails.type, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+                Text(request.creatorName ?? 'Unknown Miner', style: const TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 16)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: kGold.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text('ID: ${request.id.substring(0, 8)}', style: const TextStyle(color: kGold, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
               ],
             ),
+            const SizedBox(height: 8),
+            Text(request.materialDetails.sourceType ?? 'N/A', style: TextStyle(color: context.textColor, fontWeight: FontWeight.w500, fontSize: 13)),
             const Divider(),
-            _buildInfoRow('Miner Est. Weight', '${request.materialDetails.weight} kg'),
             _buildInfoRow('Miner Reqs', request.processingDetails.requirements),
             const SizedBox(height: 16),
             ElevatedButton(
@@ -115,7 +120,6 @@ class _ClientServicePageState extends State<ClientServicePage> {
   }
 
   void _showVerificationDialog(ServiceRequestEntity request) {
-    double actualWeight = request.materialDetails.weight;
     String estTime = '';
     String notes = '';
     String corrections = '';
@@ -143,12 +147,6 @@ class _ClientServicePageState extends State<ClientServicePage> {
                     activeColor: kGold,
                   ),
                   TextField(
-                    decoration: InputDecoration(labelText: 'Actual Weight (kg)', labelStyle: TextStyle(color: context.mutedTextColor)),
-                    style: TextStyle(color: context.textColor),
-                    keyboardType: TextInputType.number,
-                    onChanged: (v) => actualWeight = double.tryParse(v) ?? 0,
-                  ),
-                  TextField(
                     decoration: InputDecoration(labelText: 'Est. Processing Time', labelStyle: TextStyle(color: context.mutedTextColor)),
                     style: TextStyle(color: context.textColor),
                     onChanged: (v) => estTime = v,
@@ -168,7 +166,7 @@ class _ClientServicePageState extends State<ClientServicePage> {
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      _confirmWithPin(request, actualWeight, estTime, isAccurate, notes, corrections);
+                      _confirmWithPin(request, estTime, isAccurate, notes, corrections);
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: kGold, minimumSize: const Size(double.infinity, 50)),
                     child: Text(isAccurate ? 'Confirm Verification' : 'Return to Miner', style: const TextStyle(color: kBlack)),
@@ -183,7 +181,7 @@ class _ClientServicePageState extends State<ClientServicePage> {
     );
   }
 
-  void _confirmWithPin(ServiceRequestEntity request, double weight, String time, bool accurate, String notes, String corrections) {
+  void _confirmWithPin(ServiceRequestEntity request, String time, bool accurate, String notes, String corrections) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -192,12 +190,14 @@ class _ClientServicePageState extends State<ClientServicePage> {
           final result = await _service.verifyMaterial(
             requestId: request.id,
             operatorId: SupabaseConfig.client.auth.currentUser?.id ?? '',
-            actualWeight: weight,
+            actualSacks: request.materialDetails.numberOfSacks ?? 0,
+            condition: request.materialDetails.condition ?? 'Rocky',
+            state: request.materialDetails.state ?? 'Dry',
+            source: request.materialDetails.source ?? '',
             estimatedTime: time,
             isAccurate: accurate,
             pin: pin,
-            remarks: notes,
-            corrections: corrections,
+            remarks: corrections.isNotEmpty ? corrections : notes,
             currentStatus: request.status.name,
           );
           return result.fold(

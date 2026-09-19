@@ -62,7 +62,7 @@ class _CompletedProcessingPageState extends State<CompletedProcessingPage> {
                   child: ListTile(
                     leading: const Icon(Icons.check_circle, color: Colors.green),
                     title: Text(t['service_requests']?['purpose'] ?? 'Job Result', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
-                    subtitle: Text('Yield: ${t['actual_weight_out']}kg | Date: ${t['scheduled_date']}', style: TextStyle(color: context.mutedTextColor)),
+                    subtitle: Text('Date: ${t['scheduled_date']}', style: TextStyle(color: context.mutedTextColor)),
                     trailing: const Icon(Icons.receipt_outlined, color: kGold),
                     onTap: () => _showSummaryDialog(t),
                   ),
@@ -86,7 +86,6 @@ class _CompletedProcessingPageState extends State<CompletedProcessingPage> {
             _buildRow('Machine', task['machines']?['machine_name'] ?? 'N/A'),
             _buildRow('Drum', task['drums']?['drum_name'] ?? 'N/A'),
             _buildRow('Operator', task['operator']?['fname'] ?? 'N/A'),
-            _buildRow('Weight Out', '${task['actual_weight_out']} kg'),
             _buildRow('Date', task['scheduled_date']),
             const Divider(),
             const Text('Remarks:', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 12)),

@@ -82,7 +82,6 @@ class _ActiveProcessingPageState extends State<ActiveProcessingPage> {
   }
 
   void _showCompletionDialog(Map<String, dynamic> task) {
-    final weightController = TextEditingController();
     final remarksController = TextEditingController();
 
     showDialog(
@@ -93,12 +92,6 @@ class _ActiveProcessingPageState extends State<ActiveProcessingPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextFormField(
-              controller: weightController,
-              decoration: const InputDecoration(labelText: 'Final Yield Weight (kg)'),
-              keyboardType: TextInputType.number,
-              style: TextStyle(color: context.textColor),
-            ),
             TextFormField(
               controller: remarksController,
               decoration: const InputDecoration(labelText: 'Operator Remarks'),
@@ -115,7 +108,6 @@ class _ActiveProcessingPageState extends State<ActiveProcessingPage> {
               await _repository.updateTaskStatus(
                 task['processing_id'], 
                 'Completed', 
-                weightOut: double.tryParse(weightController.text),
                 remarks: remarksController.text,
               );
               Navigator.pop(context);

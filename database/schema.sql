@@ -167,16 +167,12 @@ CREATE TABLE public.service_availability (
 CREATE TABLE public.service_requests (
   service_request_id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
-  machine_id uuid,
-  drum_id uuid,
   service_availability_id uuid,
   service_type character varying NOT NULL,
   request_date date NOT NULL,
   start_time time without time zone,
   end_time time without time zone,
   quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
-  purpose text,
-  remarks text,
   status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::text, 'pending'::text, 'pendingOperatorVerification'::text, 'returnedToMiner'::text, 'accepted'::text, 'verified'::text, 'scheduled'::text, 'assigned'::text, 'processing'::text, 'processingCompleted'::text, 'goldHandoff'::text, 'completed'::text, 'cancelled'::text])),
   approved_by uuid,
   approved_at timestamp with time zone,
@@ -187,15 +183,31 @@ CREATE TABLE public.service_requests (
   material_source_type text,
   material_source text,
   material_notes text,
-  material_weight double precision,
   photo_urls ARRAY DEFAULT '{}'::text[],
   participating_miners ARRAY DEFAULT '{}'::uuid[],
+  is_operator_assisted boolean DEFAULT false,
+  assisted_by_operator_id uuid,
+  current_processing_stage text,
+  processing_notes text,
+  sacked_quantity integer,
+  billing_id text,
   CONSTRAINT service_requests_pkey PRIMARY KEY (service_request_id),
   CONSTRAINT fk_service_request_user FOREIGN KEY (user_id) REFERENCES public.users(userId),
-  CONSTRAINT fk_service_request_machine FOREIGN KEY (machine_id) REFERENCES public.machines(machine_id),
-  CONSTRAINT fk_service_request_drum FOREIGN KEY (drum_id) REFERENCES public.drums(drum_id),
   CONSTRAINT fk_service_request_availability FOREIGN KEY (service_availability_id) REFERENCES public.service_availability(service_availability_id),
-  CONSTRAINT fk_service_request_approved_by FOREIGN KEY (approved_by) REFERENCES public.users(userId)
+  CONSTRAINT fk_service_request_approved_by FOREIGN KEY (approved_by) REFERENCES public.users(userId),
+  CONSTRAINT service_requests_assisted_by_operator_id_fkey FOREIGN KEY (assisted_by_operator_id) REFERENCES public.users(userId)
+);
+
+CREATE TABLE public.ongoing_services (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  service_request_id uuid NOT NULL,
+  operator_id uuid NOT NULL,
+  current_stage text NOT NULL DEFAULT 'rebagging'::text,
+  started_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT ongoing_services_pkey PRIMARY KEY (id),
+  CONSTRAINT ongoing_services_service_request_id_fkey FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
+  CONSTRAINT ongoing_services_operator_id_fkey FOREIGN KEY (operator_id) REFERENCES public.users(userId)
 );
 CREATE TABLE public.audit_trails (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -215,20 +227,27 @@ CREATE TABLE public.operator_verified_services (
   service_request_id uuid NOT NULL,
   operator_id uuid NOT NULL,
   verified_at timestamp with time zone NOT NULL DEFAULT now(),
-
-  -- Verified/Corrected Material Details
-  actual_weight double precision NOT NULL,
-  actual_sacks integer,
-  condition character varying,
-  state character varying,
-  source character varying,
-
-  -- Verification Outcome
+  actual_sacks integer NOT NULL,
+  condition character varying NOT NULL,
+  state character varying NOT NULL,
+  source character varying NOT NULL,
   is_accurate boolean NOT NULL DEFAULT true,
   correction_notes text,
-  processing_estimate character varying, -- e.g., '3 Hours'
-
+  processing_estimate character varying,
   CONSTRAINT operator_verified_services_pkey PRIMARY KEY (verification_id),
   CONSTRAINT fk_verified_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
   CONSTRAINT fk_verified_operator FOREIGN KEY (operator_id) REFERENCES public.users(userId)
+);
+CREATE TABLE public.mill_queue (
+  queue_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  service_request_id uuid NOT NULL UNIQUE,
+  queue_type character varying NOT NULL CHECK (queue_type::text = ANY (ARRAY['general'::character varying, 'scheduled'::character varying]::text[])),
+  position integer NOT NULL DEFAULT nextval('mill_queue_position_seq'::regclass),
+  scheduled_at timestamp with time zone,
+  status character varying NOT NULL DEFAULT 'waiting'::character varying CHECK (status::text = ANY (ARRAY['waiting'::character varying, 'in_progress'::character varying, 'completed'::character varying, 'skipped'::character varying]::text[])),
+  added_at timestamp with time zone DEFAULT now(),
+  added_by uuid,d
+  CONSTRAINT mill_queue_pkey PRIMARY KEY (queue_id),
+  CONSTRAINT mill_queue_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.users(userId),
+  CONSTRAINT fk_queue_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id)
 );

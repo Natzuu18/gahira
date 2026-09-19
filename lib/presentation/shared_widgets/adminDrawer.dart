@@ -11,7 +11,6 @@ import '../admin/availability_page.dart';
 import '../admin/miner_client_list_page.dart';
 import '../admin/add_miner_page.dart';
 import '../admin/service_request_page.dart';
-import '../admin/processing/schedule_assignment_page.dart';
 import '../admin/processing/processing_calendar_page.dart';
 import '../admin/processing/active_processing_page.dart';
 import '../admin/processing/completed_processing_page.dart';
@@ -33,7 +32,6 @@ enum AdminMenu {
   // Service Requests
   serviceRequest,
   // Processing
-  scheduleAssignment,
   calendar,
   activeProcessing,
   completedProcessing,
@@ -182,7 +180,7 @@ class AdminDrawer extends StatelessWidget {
                     _buildItem(
                       context,
                       icon: Icons.assignment_outlined,
-                      label: 'Service Requests',
+                      label: 'Services',
                       menu: AdminMenu.serviceRequest,
                       page: const ServiceRequestPage(),
                     ),
@@ -193,19 +191,11 @@ class AdminDrawer extends StatelessWidget {
                       icon: Icons.settings_input_component_rounded,
                       label: 'Processing',
                       menus: [
-                        AdminMenu.scheduleAssignment,
                         AdminMenu.calendar,
                         AdminMenu.activeProcessing,
                         AdminMenu.completedProcessing
                       ],
                       children: [
-                        _buildSubItem(
-                          context,
-                          icon: Icons.assignment_ind_outlined,
-                          label: 'Schedule & Assignment',
-                          menu: AdminMenu.scheduleAssignment,
-                          page: const ScheduleAssignmentPage(),
-                        ),
                         _buildSubItem(
                           context,
                           icon: Icons.calendar_today_outlined,

@@ -29,7 +29,7 @@ class UserDto {
 
   factory UserDto.fromJson(Map<String, dynamic> json) {
     return UserDto(
-      userId: json['userId'] as String,
+      userId: (json['userId'] ?? json['userid'] ?? json['user_id'] ?? '').toString(),
       fname: json['fname'] as String,
       mname: json['mname'] as String?,
       lname: json['lname'] as String,

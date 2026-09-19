@@ -41,13 +41,12 @@ class SupabaseProcessingRepository {
     }
   }
 
-  Future<Either<Failure, void>> updateTaskStatus(String processingId, String status, {double? weightOut, String? remarks}) async {
+  Future<Either<Failure, void>> updateTaskStatus(String processingId, String status, {String? remarks}) async {
     try {
       final updates = <String, dynamic>{};
       updates['status'] = status;
       updates['updated_at'] = DateTime.now().toIso8601String();
 
-      if (weightOut != null) updates['actual_weight_out'] = weightOut;
       if (remarks != null) updates['remarks'] = remarks;
 
       await _client.from('processing_tasks').update(updates).eq('processing_id', processingId);

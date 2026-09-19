@@ -15,7 +15,7 @@ class SupabaseServiceRequestRepository {
     try {
       final response = await _client
           .from('service_requests')
-          .select('*, operator_verified_services(*)');
+          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*)');
       
       print('--- FETCHING SERVICE REQUESTS ---');
       print('RAW DATA: $response');
@@ -89,10 +89,58 @@ class SupabaseServiceRequestRepository {
     }
   }
 
+  Future<Either<Failure, void>> addToMillQueue({
+    required String requestId,
+    required String userId,
+    required String queueType,
+    DateTime? scheduledAt,
+  }) async {
+    try {
+      await _client.from('mill_queue').insert({
+        'service_request_id': requestId,
+        'queue_type': queueType,
+        'scheduled_at': scheduledAt?.toIso8601String(),
+        'added_by': userId,
+        'status': 'waiting',
+      });
+      return const Right(null);
+    } catch (e) {
+      print('Add to mill queue error: $e');
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> claimServiceRequest({
+    required String requestId,
+    required String operatorId,
+  }) async {
+    try {
+      await _client.from('ongoing_services').insert({
+        'service_request_id': requestId,
+        'operator_id': operatorId,
+        'current_stage': 'rebagging',
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> updateMillQueueStatus({
+    required String requestId,
+    required String status,
+  }) async {
+    try {
+      await _client.from('mill_queue').update({'status': status}).eq('service_request_id', requestId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
   Future<Either<Failure, void>> submitOperatorVerification({
     required String requestId,
     required String operatorId,
-    required double actualWeight,
     required int actualSacks,
     required String condition,
     required String state,
@@ -105,7 +153,6 @@ class SupabaseServiceRequestRepository {
       await _client.from('operator_verified_services').insert({
         'service_request_id': requestId,
         'operator_id': operatorId,
-        'actual_weight': actualWeight,
         'actual_sacks': actualSacks,
         'condition': condition,
         'state': state,

@@ -112,7 +112,7 @@ class OperatorDrawer extends StatelessWidget {
             _buildItem(
               context,
               icon: Icons.people_outline_rounded,
-              label: 'Client Service',
+              label: 'Miner Services',
               menu: OperatorMenu.clientService,
               page: const ClientServicePage(),
             ),

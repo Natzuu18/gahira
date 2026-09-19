@@ -3,11 +3,13 @@ import 'package:intl/intl.dart';
 import 'package:dartz/dartz.dart' hide State;
 import '../../../core/error/failures.dart';
 import '../../../domain/entities/service_request_entity.dart';
+import '../../../domain/entities/user_entity.dart';
 import '../../../infrastructure/models/service_request_model.dart';
 import '../../../infrastructure/repositories/supabase_processing_repository.dart';
 import '../../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../../infrastructure/repositories/supabase_equipment_repository.dart';
 import '../../../infrastructure/repositories/supabase_user_repository.dart';
+import '../../../infrastructure/supabase/supabase_config.dart';
 import '../../shared_widgets/appColor.dart';
 import '../../shared_widgets/adminDrawer.dart';
 import '../../shared_widgets/themeToggleButton.dart';
@@ -26,12 +28,10 @@ class _ScheduleAssignmentPageState extends State<ScheduleAssignmentPage> {
   final _equipRepo = SupabaseEquipmentRepository();
   final _userRepo = SupabaseUserRepository();
 
-  List<Map<String, dynamic>> _tasks = [];
   List<ServiceRequestModel> _approvedRequests = [];
-  List<Map<String, dynamic>> _machines = [];
-  List<Map<String, dynamic>> _drums = [];
-  List<dynamic> _operators = [];
+  List<UserEntity> _allUsers = [];
   bool _isLoading = true;
+  String _currentFilter = 'To Schedule'; // Options: 'To Schedule', 'Queue', 'Scheduled'
 
   @override
   void initState() {
@@ -42,118 +42,172 @@ class _ScheduleAssignmentPageState extends State<ScheduleAssignmentPage> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     
-    final tasksRes = await _processingRepo.getProcessingTasks();
-    final requestsRes = await _requestRepo.getServiceRequests(); // Filter for Approved later
-    final machinesRes = await _equipRepo.getMachines();
-    final drumsRes = await _equipRepo.getDrums();
-    final usersRes = await _userRepo.getAllUsers(); // Filter for Operators
+    final requestsRes = await _requestRepo.getServiceRequests();
+    final usersRes = await _userRepo.getAllUsers();
 
-    tasksRes.fold((f) => null, (list) => _tasks = list);
-    requestsRes.fold((f) => null, (list) => _approvedRequests = list.where((r) => r.status.name == 'approved' || r.status.name == 'verified').toList());
-    machinesRes.fold((f) => null, (list) => _machines = list);
-    drumsRes.fold((f) => null, (list) => _drums = list);
-    usersRes.fold((f) => null, (list) => _operators = list.where((u) => u.roleId == 'operator').toList());
+    requestsRes.fold((f) => null, (list) {
+      _approvedRequests = list.where((r) => 
+        r.status != ServiceRequestStatus.pendingOperatorVerification && 
+        r.status != ServiceRequestStatus.draft &&
+        r.status != ServiceRequestStatus.cancelled &&
+        r.status != ServiceRequestStatus.returnedToMiner
+      ).toList();
+    });
+
+    usersRes.fold((f) => null, (list) => _allUsers = list);
 
     setState(() => _isLoading = false);
   }
 
-  void _showAddDialog() {
-    String? selectedRequestId;
-    String? selectedMachineId;
-    String? selectedDrumId;
-    String? selectedOperatorId;
+  String _getUserName(String id) {
+    UserEntity? user;
+    for (final u in _allUsers) {
+      if (u.userId == id) {
+        user = u;
+        break;
+      }
+    }
+    return user != null ? '${user.fname} ${user.lname}' : 'Unknown';
+  }
+
+  void _showAddDialogForRequest(ServiceRequestModel request) {
     DateTime selectedDate = DateTime.now();
-    TimeOfDay selectedTime = const TimeOfDay(hour: 8, minute: 0);
+    TimeOfDay selectedTime = TimeOfDay.now();
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: context.surfaceColor,
-          title: const Text('New Assignment', style: TextStyle(color: kGold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: selectedRequestId,
-                  dropdownColor: context.surfaceColor,
-                  decoration: const InputDecoration(labelText: 'Approved Request'),
-                  items: _approvedRequests.map((r) => DropdownMenuItem(
-                    value: r.id.toString(), 
-                    child: Text('${r.id.substring(0, 8)} - ${r.materialDetails.type}', style: TextStyle(color: context.textColor, fontSize: 12))
-                  )).toList(),
-                  onChanged: (v) => setDialogState(() => selectedRequestId = v),
-                ),
-                DropdownButtonFormField<String>(
-                  value: selectedMachineId,
-                  dropdownColor: context.surfaceColor,
-                  decoration: const InputDecoration(labelText: 'Machine'),
-                  items: _machines.where((m) => m['status'] == 'Available').map((m) => DropdownMenuItem(
-                    value: m['machine_id'].toString(), 
-                    child: Text(m['machine_name'], style: TextStyle(color: context.textColor))
-                  )).toList(),
-                  onChanged: (v) => setDialogState(() {
-                    selectedMachineId = v;
-                    selectedDrumId = null;
-                  }),
-                ),
-                DropdownButtonFormField<String>(
-                  value: selectedDrumId,
-                  dropdownColor: context.surfaceColor,
-                  decoration: const InputDecoration(labelText: 'Drum'),
-                  items: _drums.where((d) => d['machine_id'].toString() == selectedMachineId && d['status'] == 'Available').map((d) => DropdownMenuItem(
-                    value: d['drum_id'].toString(), 
-                    child: Text(d['drum_name'], style: TextStyle(color: context.textColor))
-                  )).toList(),
-                  onChanged: (v) => setDialogState(() => selectedDrumId = v),
-                ),
-                DropdownButtonFormField<String>(
-                  value: selectedOperatorId,
-                  dropdownColor: context.surfaceColor,
-                  decoration: const InputDecoration(labelText: 'Operator'),
-                  items: _operators.map((o) => DropdownMenuItem(
-                    value: o.userId.toString(), 
-                    child: Text('${o.fname} ${o.lname}', style: TextStyle(color: context.textColor))
-                  )).toList(),
-                  onChanged: (v) => setDialogState(() => selectedOperatorId = v),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  dense: true,
-                  title: Text('Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}', style: TextStyle(color: context.textColor)),
-                  trailing: const Icon(Icons.calendar_today, color: kGold, size: 18),
-                  onTap: () async {
-                    final d = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
-                    if (d != null) setDialogState(() => selectedDate = d);
-                  },
-                ),
-              ],
-            ),
+          title: Text('Ref: ${request.id.substring(0, 8)}', style: const TextStyle(color: kGold, fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Set a specific time for processing or move directly to the general queue.', 
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 20),
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text('Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}', 
+                  style: TextStyle(color: context.textColor, fontSize: 14)),
+                trailing: const Icon(Icons.calendar_today, color: kGold, size: 18),
+                onTap: () async {
+                  final d = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
+                  if (d != null) setDialogState(() => selectedDate = d);
+                },
+              ),
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text('Time: ${selectedTime.format(context)}', 
+                  style: TextStyle(color: context.textColor, fontSize: 14)),
+                trailing: const Icon(Icons.access_time_rounded, color: kGold, size: 18),
+                onTap: () async {
+                  final t = await showTimePicker(context: context, initialTime: selectedTime);
+                  if (t != null) setDialogState(() => selectedTime = t);
+                },
+              ),
+            ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kGold),
+            TextButton(
               onPressed: () async {
-                if (selectedRequestId == null || selectedMachineId == null || selectedDrumId == null || selectedOperatorId == null) return;
-                
-                final data = {
-                  'service_request_id': selectedRequestId,
-                  'machine_id': selectedMachineId,
-                  'drum_id': selectedDrumId,
-                  'operator_id': selectedOperatorId,
-                  'scheduled_date': DateFormat('yyyy-MM-dd').format(selectedDate),
-                  'status': 'Scheduled',
-                };
-                await _processingRepo.createProcessingTask(data);
+                final currentUserId = SupabaseConfig.client.auth.currentUser?.id;
+                if (currentUserId == null) return;
+
+                // ADD TO QUEUE Logic
+                await _requestRepo.updateRequestStatus(
+                  requestId: request.id,
+                  status: ServiceRequestStatus.queued.name,
+                  userId: currentUserId,
+                );
+
                 Navigator.pop(context);
                 _loadData();
               },
-              child: const Text('Assign', style: TextStyle(color: Colors.white)),
+              child: const Text('Add to Queue', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kGold),
+              onPressed: () async {
+                final currentUserId = SupabaseConfig.client.auth.currentUser?.id;
+                if (currentUserId == null) return;
+
+                // EXACT SCHEDULE Logic
+                final scheduledDateTime = DateTime(
+                  selectedDate.year,
+                  selectedDate.month,
+                  selectedDate.day,
+                  selectedTime.hour,
+                  selectedTime.minute,
+                );
+
+                await _requestRepo.updateRequestStatus(
+                  requestId: request.id,
+                  status: ServiceRequestStatus.scheduled.name,
+                  userId: currentUserId,
+                  additionalData: {
+                    'approved_at': scheduledDateTime.toIso8601String(),
+                  }
+                );
+
+                Navigator.pop(context);
+                _loadData();
+              },
+              child: const Text('Exact Schedule', style: TextStyle(color: kBlack, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  List<ServiceRequestModel> get _filteredRequests {
+    switch (_currentFilter) {
+      case 'Queue':
+        return _approvedRequests.where((r) => r.status == ServiceRequestStatus.queued).toList();
+      case 'Scheduled':
+        return _approvedRequests.where((r) => r.status == ServiceRequestStatus.scheduled).toList();
+      case 'To Schedule':
+      default:
+        return _approvedRequests.where((r) => r.status == ServiceRequestStatus.verified || r.status == ServiceRequestStatus.accepted).toList();
+    }
+  }
+
+  Widget _buildFilterBar() {
+    final filters = ['To Schedule', 'Queue', 'Scheduled'];
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      color: context.surfaceColor,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: filters.map((f) {
+          final isSelected = _currentFilter == f;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: ChoiceChip(
+                label: Center(
+                  child: Text(
+                    f.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? kBlack : context.textColor.withOpacity(0.6),
+                    ),
+                  ),
+                ),
+                selected: isSelected,
+                onSelected: (val) => setState(() => _currentFilter = f),
+                selectedColor: kGold,
+                backgroundColor: context.bgColor,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                showCheckmark: false,
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -174,38 +228,81 @@ class _ScheduleAssignmentPageState extends State<ScheduleAssignmentPage> {
       endDrawer: const AdminDrawer(currentMenu: AdminMenu.scheduleAssignment),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kGold))
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _tasks.length,
-              itemBuilder: (context, index) {
-                final t = _tasks[index];
-                return Card(
-                  color: context.surfaceColor,
-                  child: ListTile(
-                    leading: const Icon(Icons.assignment_ind, color: kGold),
-                    title: Text('Task #${t['processing_id'].toString().substring(0, 8)}', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
-                    subtitle: Text('${t['scheduled_date']} | Machine: ${t['machines']?['machine_name']} | Op: ${t['operator']?['fname']}', style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
-                    trailing: _buildStatusChip(t['status']),
+          : Column(
+              children: [
+                _buildFilterBar(),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _filteredRequests.length,
+                    itemBuilder: (context, index) {
+                      final r = _filteredRequests[index];
+                      return Card(
+                        color: context.surfaceColor,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: kGold.withOpacity(0.1)),
+                        ),
+                        child: ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: kGold.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.inventory_2_outlined, color: kGold, size: 20),
+                          ),
+                          title: Text(
+                            'Sacks: ${r.materialDetails.numberOfSacks ?? 0}',
+                            style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Requester: ${_getUserName(r.creatorId)}',
+                                style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                              Text(
+                                'Requested: ${DateFormat('MMM dd, yyyy • hh:mm a').format(r.createdAt)}',
+                                style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+                              ),
+                              if (r.status == ServiceRequestStatus.scheduled && r.approvedAt != null)
+                                Text(
+                                  'Scheduled for: ${DateFormat('MMM dd • hh:mm a').format(r.approvedAt!)}',
+                                  style: const TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold),
+                                )
+                              else if (r.status == ServiceRequestStatus.queued)
+                                const Text(
+                                  'In General Queue',
+                                  style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                            ],
+                          ),
+                          trailing: r.status == ServiceRequestStatus.verified || r.status == ServiceRequestStatus.accepted
+                              ? IconButton(
+                                  icon: const Icon(Icons.calendar_month_outlined, color: kGold),
+                                  onPressed: () => _showAddDialogForRequest(r),
+                                )
+                              : Icon(Icons.check_circle_outline_rounded, color: Colors.green.withOpacity(0.5)),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: kGold,
-        onPressed: _showAddDialog,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
     );
   }
 
-  Widget _buildStatusChip(String status) {
-    Color color = Colors.blue;
-    if (status == 'Active') color = Colors.green;
-    if (status == 'Completed') color = Colors.grey;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color)),
-      child: Text(status, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
-    );
+Color _getStatusColor(ServiceRequestStatus status) {
+  switch (status) {
+    case ServiceRequestStatus.verified: return Colors.green;
+    case ServiceRequestStatus.queued: return Colors.orange;
+    case ServiceRequestStatus.scheduled: return kGold;
+    case ServiceRequestStatus.processing: return Colors.blue;
+    default: return Colors.grey;
   }
+}
 }

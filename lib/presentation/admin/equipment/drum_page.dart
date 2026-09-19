@@ -68,7 +68,6 @@ class _DrumPageState extends State<DrumPage> {
                 ),
                 _buildField(nameController, 'Drum Name'),
                 _buildField(codeController, 'Drum Code'),
-                _buildField(capacityController, 'Capacity (kg)', keyboardType: TextInputType.number),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: status,
@@ -90,7 +89,6 @@ class _DrumPageState extends State<DrumPage> {
                 final data = {
                   'drum_name': nameController.text,
                   'drum_code': codeController.text,
-                  'capacity': double.tryParse(capacityController.text) ?? 0.0,
                   'machine_id': selectedMachineId,
                   'status': status,
                 };
@@ -145,7 +143,7 @@ class _DrumPageState extends State<DrumPage> {
                   child: ListTile(
                     leading: const Icon(Icons.reorder, color: kGold),
                     title: Text(d['drum_name'], style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
-                    subtitle: Text('${d['drum_code']} | ${d['capacity']}kg | ${d['machines']?['machine_name'] ?? 'No Machine'}', style: TextStyle(color: context.mutedTextColor)),
+                    subtitle: Text('${d['drum_code']} | ${d['machines']?['machine_name'] ?? 'No Machine'}', style: TextStyle(color: context.mutedTextColor)),
                     trailing: _buildStatusChip(d['status']),
                     onTap: () => _showAddEditDialog(d),
                   ),

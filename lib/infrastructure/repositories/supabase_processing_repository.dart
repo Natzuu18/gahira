@@ -12,7 +12,7 @@ class SupabaseProcessingRepository {
         *,
         service_requests:service_request_id (
           service_request_id,
-          purpose,
+          service_type,
           quantity,
           user:user_id (fname, lname)
         ),

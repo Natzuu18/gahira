@@ -246,8 +246,22 @@ CREATE TABLE public.mill_queue (
   scheduled_at timestamp with time zone,
   status character varying NOT NULL DEFAULT 'waiting'::character varying CHECK (status::text = ANY (ARRAY['waiting'::character varying, 'in_progress'::character varying, 'completed'::character varying, 'skipped'::character varying]::text[])),
   added_at timestamp with time zone DEFAULT now(),
-  added_by uuid,d
+  added_by uuid,
   CONSTRAINT mill_queue_pkey PRIMARY KEY (queue_id),
   CONSTRAINT mill_queue_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.users(userId),
   CONSTRAINT fk_queue_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id)
+);
+
+CREATE TABLE public.processing_tasks (
+    processing_id uuid NOT NULL DEFAULT gen_random_uuid(),
+    service_request_id uuid REFERENCES public.service_requests(service_request_id),
+    machine_id uuid REFERENCES public.machines(machine_id),
+    drum_id uuid REFERENCES public.drums(drum_id),
+    operator_id uuid REFERENCES public.users(userId),
+    scheduled_date date NOT NULL,
+    status text NOT NULL DEFAULT 'Scheduled',
+    remarks text,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT processing_tasks_pkey PRIMARY KEY (processing_id)
 );

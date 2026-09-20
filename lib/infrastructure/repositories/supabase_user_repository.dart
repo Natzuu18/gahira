@@ -90,6 +90,38 @@ class SupabaseUserRepository implements UserRepository {
     }
   }
 
+  Future<Either<Failure, List<UserEntity>>> getOperators() async {
+    try {
+      final response = await _client
+          .from('users')
+          .select('*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash')
+          .eq('role_id', '91fb0b2f-f627-4234-ae38-2a305a799ff4') // operator
+          .order('fname', ascending: true);
+
+      final List<UserEntity> users = (response as List)
+          .map((json) {
+            final data = Map<String, dynamic>.from(json);
+            final roleName = data['role'] != null ? data['role']['role'] : '';
+            data['role_id'] = roleName;
+            return UserModel.fromJson(data);
+          })
+          .toList();
+
+      return Right(users);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> updateUserStatus(String userId, String status) async {
+    try {
+      await _client.from('users').update({'status': status}).eq('userId', userId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
   @override
   Future<Either<Failure, void>> addUserByAdmin({
     required String firstName,

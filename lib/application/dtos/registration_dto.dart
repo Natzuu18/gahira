@@ -48,7 +48,7 @@ class RegistrationDto {
       phone: entity.phone,
       email: entity.email,
       address: entity.address,
-      role: entity.role.name,
+      role: entity.role.toString().split('.').last,
       phoneVerificationToken: entity.phoneVerificationToken,
       miningUnitId: entity.miningUnitId,
       clientDocumentBase64: entity.clientDocument != null

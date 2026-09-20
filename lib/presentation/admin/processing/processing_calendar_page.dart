@@ -81,7 +81,7 @@ class _ProcessingCalendarPageState extends State<ProcessingCalendarPage> {
                       child: ListTile(
                         dense: true,
                         leading: Icon(Icons.circle, color: _getStatusColor(t['status']), size: 12),
-                        title: Text(t['service_requests']?['purpose'] ?? 'Operation', style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.bold)),
+                        title: Text(t['service_requests']?['service_type'] ?? 'Operation', style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.bold)),
                         subtitle: Text('${t['machines']?['machine_name']} | ${t['operator']?['fname']}', style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
                       ),
                     )).toList(),

@@ -193,7 +193,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
   Widget _buildStatusBadge(ServiceRequestStatus status) {
     Color color = kGold;
-    String label = status.name.toUpperCase();
+    String label = status.toString().split('.').last.toUpperCase();
     
     if (status == ServiceRequestStatus.verified || status == ServiceRequestStatus.accepted) {
       color = Colors.green;

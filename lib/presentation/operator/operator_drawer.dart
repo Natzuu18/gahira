@@ -7,7 +7,6 @@ import 'operator_dashboard.dart';
 import 'service_verification_page.dart';
 import 'client_service_page.dart';
 import 'processing_workflow_page.dart';
-import 'material_procurement_page.dart';
 import 'equipment_maintenance_page.dart';
 import 'workforce_shift_page.dart';
 import 'operator_billing_page.dart';
@@ -18,7 +17,6 @@ enum OperatorMenu {
   serviceVerification,
   clientService, 
   processing, 
-  materials, 
   equipment, 
   workforce, 
   billing, 
@@ -122,13 +120,6 @@ class OperatorDrawer extends StatelessWidget {
               label: 'Processing Workflow',
               menu: OperatorMenu.processing,
               page: const ProcessingWorkflowPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.inventory_2_outlined,
-              label: 'Raw Materials',
-              menu: OperatorMenu.materials,
-              page: const MaterialProcurementPage(),
             ),
             _buildItem(
               context,

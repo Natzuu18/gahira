@@ -111,7 +111,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
   List<ServiceRequestEntity> get _filteredRequests {
     List<ServiceRequestEntity> list = List.from(_requests);
     if (_filterStatus != 'All') {
-      list = list.where((r) => r.status.name.toLowerCase() == _filterStatus.toLowerCase()).toList();
+      list = list.where((r) => r.status.toString().split('.').last.toLowerCase() == _filterStatus.toLowerCase()).toList();
     }
     
     // Sort logic for Queue: Sort items in the queue by their creation time so their UI index acts as dynamic position counter
@@ -250,7 +250,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
               ],
             ),
             const SizedBox(height: 4),
-            Text('Status: ${request.status.name}', style: TextStyle(color: _getStatusColor(request.status), fontSize: 12)),
+            Text('Status: ${request.status.toString().split('.').last}', style: TextStyle(color: _getStatusColor(request.status), fontSize: 12)),
           ],
         ),
         childrenPadding: const EdgeInsets.all(16),
@@ -386,7 +386,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                         ownerId: currentUserId,
                         scheduledDate: selectedDate,
                         assignedOperatorIds: const [], // Empty list as operator assignment isn't required here
-                        currentStatus: request.status.name,
+                        currentStatus: request.status.toString().split('.').last,
                       );
                       Navigator.pop(context);
                       result.fold(
@@ -413,7 +413,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
     final result = await _service.addToGeneralQueue(
       requestId: request.id,
       userId: currentUserId,
-      currentStatus: request.status.name,
+      currentStatus: request.status.toString().split('.').last,
     );
 
     result.fold(

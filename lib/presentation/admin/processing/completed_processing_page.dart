@@ -61,7 +61,7 @@ class _CompletedProcessingPageState extends State<CompletedProcessingPage> {
                   color: context.surfaceColor,
                   child: ListTile(
                     leading: const Icon(Icons.check_circle, color: Colors.green),
-                    title: Text(t['service_requests']?['purpose'] ?? 'Job Result', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+                    title: Text(t['service_requests']?['service_type'] ?? 'Job Result', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
                     subtitle: Text('Date: ${t['scheduled_date']}', style: TextStyle(color: context.mutedTextColor)),
                     trailing: const Icon(Icons.receipt_outlined, color: kGold),
                     onTap: () => _showSummaryDialog(t),

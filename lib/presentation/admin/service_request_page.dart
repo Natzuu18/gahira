@@ -13,6 +13,7 @@ import '../shared_widgets/appColor.dart';
 import '../shared_widgets/adminDrawer.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/audit_trail_viewer.dart';
+import '../shared_widgets/monitoring_page.dart';
 
 class ServiceRequestPage extends StatefulWidget {
   const ServiceRequestPage({super.key});
@@ -32,6 +33,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
   bool _isLoading = true;
   String _filterStatus = 'All';
   String _scheduleTimelineFilter = 'All'; // New options: 'All', 'Today', 'Upcoming'
+  final Set<String> _showOriginalDataIds = {};
 
   @override
   void initState() {
@@ -199,6 +201,22 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
     final String typeLabel = isKorpo ? 'KORPO (${request.participatingMinerIds.length})' : 'INDIVIDUAL';
     final String requesterName = _getCreatorName(request);
     final String dateStr = DateFormat('MMM dd, yyyy • hh:mm a').format(request.createdAt);
+    
+    final latestVerification = request.materialDetails.verifications.isNotEmpty 
+        ? request.materialDetails.verifications.last 
+        : null;
+    
+    final bool showOriginal = _showOriginalDataIds.contains(request.id) || latestVerification == null;
+    
+    final displaySacks = showOriginal 
+        ? (request.materialDetails.numberOfSacks ?? 0) 
+        : latestVerification.actualSacks;
+    final displayCondition = showOriginal 
+        ? (request.materialDetails.condition ?? 'N/A') 
+        : latestVerification.condition;
+    final displayState = showOriginal 
+        ? (request.materialDetails.state ?? 'N/A') 
+        : latestVerification.state;
 
     return Card(
       color: context.surfaceColor,
@@ -208,7 +226,14 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(requesterName, style: const TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(requesterName, style: const TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+                if (latestVerification != null && !showOriginal)
+                  Text('Verified by Operator', style: TextStyle(color: Colors.teal, fontSize: 10, fontWeight: FontWeight.bold)),
+              ],
+            ),
             if (index != null)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -255,6 +280,29 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
         ),
         childrenPadding: const EdgeInsets.all(16),
         children: [
+          if (latestVerification != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ActionChip(
+                      label: Text(showOriginal ? 'Switch to Verified Data' : 'Show Original Miner Data', 
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      onPressed: () => setState(() {
+                        if (showOriginal) {
+                          _showOriginalDataIds.remove(request.id);
+                        } else {
+                          _showOriginalDataIds.add(request.id);
+                        }
+                      }),
+                      backgroundColor: showOriginal ? Colors.teal.withOpacity(0.1) : kGold.withOpacity(0.1),
+                      side: BorderSide(color: showOriginal ? Colors.teal : kGold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (isKorpo) ...[
             const Text('GROUP PARTICIPANTS', style: TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
             const SizedBox(height: 12),
@@ -282,13 +330,35 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
               )).toList(),
             ),
             const SizedBox(height: 16),
-            const Divider(),
+            if (request.status == ServiceRequestStatus.processing || 
+              request.status == ServiceRequestStatus.processingCompleted)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonitoringPage(request: request, title: 'ADMIN MONITORING'))),
+                  icon: const Icon(Icons.monitor_heart_outlined, size: 18),
+                  label: const Text('MONITOR LIVE PROCESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.withOpacity(0.1),
+                    foregroundColor: Colors.blue,
+                    side: BorderSide(color: Colors.blue.withOpacity(0.3)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ),
+          const Divider(),
             const SizedBox(height: 16),
           ],
-          _buildDetailRow('Number of Sacks', '${request.materialDetails.numberOfSacks ?? 0} Sacks'),
-          _buildDetailRow('Condition', request.materialDetails.condition ?? 'N/A'),
-          _buildDetailRow('State', request.materialDetails.state ?? 'N/A'),
+          _buildDetailRow(showOriginal ? 'Miner Sacks' : 'Actual Sacks (Verified)', '$displaySacks Sacks'),
+          _buildDetailRow('Condition', displayCondition),
+          _buildDetailRow('State', displayState),
           _buildDetailRow('Est. Time', request.processingDetails.estimatedTime ?? 'N/A'),
+          if (latestVerification?.notes != null && !showOriginal)
+             _buildDetailRow('Operator Notes', latestVerification!.notes!),
+
           if (request.status == ServiceRequestStatus.verified || request.status == ServiceRequestStatus.accepted) ...[
             const SizedBox(height: 16),
             Row(
@@ -321,6 +391,25 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
               ],
             ),
           ],
+          if (request.status == ServiceRequestStatus.processing || 
+              request.status == ServiceRequestStatus.processingCompleted)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonitoringPage(request: request, title: 'ADMIN MONITORING'))),
+                  icon: const Icon(Icons.monitor_heart_outlined, size: 18),
+                  label: const Text('MONITOR LIVE PROCESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.withOpacity(0.1),
+                    foregroundColor: Colors.blue,
+                    side: BorderSide(color: Colors.blue.withOpacity(0.3)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ),
           const Divider(),
           const SizedBox(height: 16),
           const Text('Audit Trail', style: TextStyle(color: kGold, fontWeight: FontWeight.bold)),
@@ -341,6 +430,9 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
 
   void _showScheduleDialog(ServiceRequestEntity request) {
     DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+    final latestVerification = request.materialDetails.verifications.isNotEmpty 
+        ? request.materialDetails.verifications.last 
+        : null;
 
     showModalBottomSheet(
       context: context,
@@ -362,6 +454,28 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                 children: [
                   Text('Schedule Processing', style: TextStyle(color: kGold, fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
+                  
+                  // Summary of what is being scheduled
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: context.surfaceColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: kGold.withOpacity(0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('VERIFICATION SUMMARY', style: TextStyle(color: kGold.withOpacity(0.7), fontSize: 10, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        _buildDetailRow('Actual Sacks', '${latestVerification?.actualSacks ?? request.materialDetails.numberOfSacks ?? 0}'),
+                        _buildDetailRow('Condition', latestVerification?.condition ?? request.materialDetails.condition ?? 'N/A'),
+                        _buildDetailRow('Est. Time', request.processingDetails.estimatedTime ?? 'N/A'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
                   ListTile(
                     title: Text('Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}', style: TextStyle(color: context.textColor)),
                     trailing: const Icon(Icons.calendar_today, color: kGold),
@@ -407,6 +521,49 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
   }
 
   Future<void> _handleAddToQueue(ServiceRequestEntity request) async {
+    final latestVerification = request.materialDetails.verifications.isNotEmpty 
+        ? request.materialDetails.verifications.last 
+        : null;
+
+    final bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.surfaceColor,
+        title: const Text('Add to Queue', style: TextStyle(color: kGold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Are you sure you want to add this request to the general queue based on the verified data?', 
+              style: TextStyle(color: context.textColor, fontSize: 14)),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.bgColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  _buildDetailRow('Actual Sacks', '${latestVerification?.actualSacks ?? request.materialDetails.numberOfSacks ?? 0}'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel', style: TextStyle(color: context.mutedTextColor))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: ElevatedButton.styleFrom(backgroundColor: kGold),
+            child: const Text('Confirm', style: TextStyle(color: kBlack)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirm) return;
+
     final currentUserId = SupabaseConfig.client.auth.currentUser?.id;
     if (currentUserId == null) return;
 

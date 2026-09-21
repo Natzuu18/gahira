@@ -227,7 +227,10 @@ class OperatorVerification extends Equatable {
 class ProcessingDetails extends Equatable {
   final String requirements;
   final String? processingNotes;
-  final int? sackedQuantity; // Added for the Sacking stage result
+  final int? sackedQuantity; 
+  final int? minerSacksProcessed; // Tracks cumulative miner sacks processed in batches
+  final DateTime? unloadingStartedAt;
+  final DateTime? unloadingCompletedAt;
   final String? estimatedTime; // Set by Operator
   final DateTime? scheduledDate; // Set by Owner
   final List<String> assignedOperatorIds;
@@ -237,6 +240,9 @@ class ProcessingDetails extends Equatable {
     required this.requirements,
     this.processingNotes,
     this.sackedQuantity,
+    this.minerSacksProcessed = 0,
+    this.unloadingStartedAt,
+    this.unloadingCompletedAt,
     this.estimatedTime,
     this.scheduledDate,
     required this.assignedOperatorIds,
@@ -247,6 +253,9 @@ class ProcessingDetails extends Equatable {
     String? requirements,
     String? processingNotes,
     int? sackedQuantity,
+    int? minerSacksProcessed,
+    DateTime? unloadingStartedAt,
+    DateTime? unloadingCompletedAt,
     String? estimatedTime,
     DateTime? scheduledDate,
     List<String>? assignedOperatorIds,
@@ -256,6 +265,9 @@ class ProcessingDetails extends Equatable {
       requirements: requirements ?? this.requirements,
       processingNotes: processingNotes ?? this.processingNotes,
       sackedQuantity: sackedQuantity ?? this.sackedQuantity,
+      minerSacksProcessed: minerSacksProcessed ?? this.minerSacksProcessed,
+      unloadingStartedAt: unloadingStartedAt ?? this.unloadingStartedAt,
+      unloadingCompletedAt: unloadingCompletedAt ?? this.unloadingCompletedAt,
       estimatedTime: estimatedTime ?? this.estimatedTime,
       scheduledDate: scheduledDate ?? this.scheduledDate,
       assignedOperatorIds: assignedOperatorIds ?? this.assignedOperatorIds,
@@ -265,7 +277,7 @@ class ProcessingDetails extends Equatable {
 
   @override
   List<Object?> get props =>
-      [requirements, processingNotes, sackedQuantity, estimatedTime, scheduledDate, assignedOperatorIds, currentStage];
+      [requirements, processingNotes, sackedQuantity, minerSacksProcessed, unloadingStartedAt, unloadingCompletedAt, estimatedTime, scheduledDate, assignedOperatorIds, currentStage];
 }
 
 class VerificationDetails extends Equatable {

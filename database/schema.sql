@@ -173,7 +173,7 @@ CREATE TABLE public.service_requests (
   start_time time without time zone,
   end_time time without time zone,
   quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
-  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::text, 'pending'::text, 'pendingOperatorVerification'::text, 'returnedToMiner'::text, 'accepted'::text, 'verified'::text, 'scheduled'::text, 'assigned'::text, 'processing'::text, 'processingCompleted'::text, 'goldHandoff'::text, 'completed'::text, 'cancelled'::text])),
+  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::text, 'pending'::text, 'pendingOperatorVerification'::text, 'returnedToMiner'::text, 'accepted'::text, 'verified'::text, 'queued'::text, 'scheduled'::text, 'assigned'::text, 'processing'::text, 'processingCompleted'::text, 'goldHandoff'::text, 'completed'::text, 'cancelled'::text])),
   approved_by uuid,
   approved_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -189,25 +189,16 @@ CREATE TABLE public.service_requests (
   assisted_by_operator_id uuid,
   current_processing_stage text,
   processing_notes text,
-  sacked_quantity integer,
   billing_id text,
+  sacked_quantity integer,
+  miner_sacks_processed integer DEFAULT 0,
+  unloading_started_at timestamp with time zone,
+  unloading_completed_at timestamp with time zone,
   CONSTRAINT service_requests_pkey PRIMARY KEY (service_request_id),
   CONSTRAINT fk_service_request_user FOREIGN KEY (user_id) REFERENCES public.users(userId),
   CONSTRAINT fk_service_request_availability FOREIGN KEY (service_availability_id) REFERENCES public.service_availability(service_availability_id),
   CONSTRAINT fk_service_request_approved_by FOREIGN KEY (approved_by) REFERENCES public.users(userId),
   CONSTRAINT service_requests_assisted_by_operator_id_fkey FOREIGN KEY (assisted_by_operator_id) REFERENCES public.users(userId)
-);
-
-CREATE TABLE public.ongoing_services (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  service_request_id uuid NOT NULL,
-  operator_id uuid NOT NULL,
-  current_stage text NOT NULL DEFAULT 'rebagging'::text,
-  started_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT ongoing_services_pkey PRIMARY KEY (id),
-  CONSTRAINT ongoing_services_service_request_id_fkey FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
-  CONSTRAINT ongoing_services_operator_id_fkey FOREIGN KEY (operator_id) REFERENCES public.users(userId)
 );
 CREATE TABLE public.audit_trails (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -251,17 +242,38 @@ CREATE TABLE public.mill_queue (
   CONSTRAINT mill_queue_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.users(userId),
   CONSTRAINT fk_queue_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id)
 );
+CREATE TABLE public.ongoing_services (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  service_request_id uuid NOT NULL UNIQUE,
+  operator_id uuid NOT NULL,
+  machine_id uuid,
+  drum_id uuid,
+  current_stage character varying NOT NULL DEFAULT 'rebagging'::character varying,
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_stage_updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  remarks text,
+  CONSTRAINT ongoing_services_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_ongoing_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
+  CONSTRAINT fk_ongoing_operator FOREIGN KEY (operator_id) REFERENCES public.users(userId),
+  CONSTRAINT fk_ongoing_machine FOREIGN KEY (machine_id) REFERENCES public.machines(machine_id),
+  CONSTRAINT fk_ongoing_drum FOREIGN KEY (drum_id) REFERENCES public.drums(drum_id)
+);
 
-CREATE TABLE public.processing_tasks (
-    processing_id uuid NOT NULL DEFAULT gen_random_uuid(),
-    service_request_id uuid REFERENCES public.service_requests(service_request_id),
-    machine_id uuid REFERENCES public.machines(machine_id),
-    drum_id uuid REFERENCES public.drums(drum_id),
-    operator_id uuid REFERENCES public.users(userId),
-    scheduled_date date NOT NULL,
-    status text NOT NULL DEFAULT 'Scheduled',
-    remarks text,
-    created_at timestamp with time zone NOT NULL DEFAULT now(),
-    updated_at timestamp with time zone NOT NULL DEFAULT now(),
-    CONSTRAINT processing_tasks_pkey PRIMARY KEY (processing_id)
+CREATE TABLE public.milling_batches (
+  batch_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  service_request_id uuid NOT NULL,
+  operator_id uuid NOT NULL,
+  machine_id uuid NOT NULL,
+  drum_id uuid NOT NULL,
+  input_sacks integer NOT NULL,
+  output_sacks integer NOT NULL,
+  estimated_duration_minutes integer,
+  status character varying NOT NULL DEFAULT 'milling'::character varying CHECK (status::text = ANY (ARRAY['milling'::text, 'completed'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  completed_at timestamp with time zone,
+  CONSTRAINT milling_batches_pkey PRIMARY KEY (batch_id),
+  CONSTRAINT fk_mb_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
+  CONSTRAINT fk_mb_operator FOREIGN KEY (operator_id) REFERENCES public.users(userId),
+  CONSTRAINT fk_mb_machine FOREIGN KEY (machine_id) REFERENCES public.machines(machine_id),
+  CONSTRAINT fk_mb_drum FOREIGN KEY (drum_id) REFERENCES public.drums(drum_id)
 );

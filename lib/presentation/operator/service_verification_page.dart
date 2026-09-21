@@ -39,15 +39,47 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   }
 
   Future<void> _loadRequests() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    final requestsResult = await _repository.getServiceRequests();
-    final usersResult = await _userRepository.getAllUsers();
     
-    setState(() {
-      _requests = requestsResult.fold((l) => [], (list) => list);
-      _allUsers = usersResult.fold((l) => [], (list) => list);
-      _isLoading = false;
-    });
+    try {
+      final requestsResult = await _repository.getServiceRequests();
+      final usersResult = await _userRepository.getAllUsers();
+      
+      if (!mounted) return;
+      
+      String? errorMessage;
+      requestsResult.fold(
+        (l) => errorMessage = 'Requests: ${l.message}',
+        (list) => _requests = list,
+      );
+      
+      usersResult.fold(
+        (l) => errorMessage = (errorMessage ?? '') + ' Users: ${l.message}',
+        (list) => _allUsers = list,
+      );
+
+      if (errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading data: $errorMessage'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 10),
+            action: SnackBarAction(label: 'RETRY', textColor: Colors.white, onPressed: _loadRequests),
+          ),
+        );
+      }
+
+      setState(() => _isLoading = false);
+    } catch (e) {
+      print('Critical Error in _loadRequests: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Critical Error: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   String _getMinerName(String id) {
@@ -365,7 +397,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   }
 
   void _showVerificationForm(ServiceRequestEntity request) {
-    final weightController = TextEditingController();
     final sackController = TextEditingController(text: (request.materialDetails.numberOfSacks ?? 0).toString());
     final estNumController = TextEditingController(text: '3');
     final remarksController = TextEditingController();
@@ -606,7 +637,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => PinDialog(
+      builder: (dialogContext) => PinDialog(
         title: 'Operator Security PIN',
         onConfirm: (pin) async {
           final operatorId = Supabase.instance.client.auth.currentUser?.id;
@@ -628,16 +659,19 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
           return result.fold(
             (l) => l.message,
-            (_) {
-              Navigator.pop(context); // Close bottom sheet
-              _loadRequests();
-              return null;
-            },
+            (_) => null, // Success: return null to let PinDialog pop itself
           );
         },
       ),
     ).then((success) {
       if (success == true) {
+        // If the PIN dialog finished successfully, close the Verification form sheet
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context); 
+        }
+        
+        _loadRequests();
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Verification submitted!'), 
@@ -731,6 +765,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     String state = 'Dry';
     String otherState = '';
     int? sacks;
+    double weight = 0;
     String source = '';
     String estProcessingTime = '';
     String notes = '';
@@ -833,6 +868,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       children: [
                         Expanded(
                           child: _buildAssistedInput('Actual Sacks', '0', (v) => sacks = int.tryParse(v), isNumber: true),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildAssistedInput('Actual Weight (kg)', '0.0', (v) => weight = double.tryParse(v) ?? 0, isNumber: true, isDecimal: true),
                         ),
                       ],
                     ),
@@ -965,13 +1004,13 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => PinDialog(
+      builder: (dialogContext) => PinDialog(
         title: 'Miner PIN Verification',
         onConfirm: (pin) async {
           final operatorId = Supabase.instance.client.auth.currentUser?.id;
           if (operatorId == null) return 'Session expired.';
           
-          final operatorName = _getMinerName(operatorId); // Reusing name helper
+          final operatorName = _getMinerName(operatorId); 
 
           final result = await _service.createRequest(
             creatorId: minerId,
@@ -991,15 +1030,18 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
           return result.fold(
             (l) => l.message,
-            (_) {
-              _loadRequests();
-              return null;
-            }
+            (_) => null, // Return null so PinDialog pops itself
           );
         },
       ),
     ).then((success) {
       if (success == true) {
+         // Close the Assisted Request Form Sheet
+         if (Navigator.canPop(context)) {
+           Navigator.pop(context);
+         }
+         
+         _loadRequests();
          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assisted request submitted successfully!'), backgroundColor: Colors.green));
       }
     });

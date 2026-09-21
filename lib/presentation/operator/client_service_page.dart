@@ -34,12 +34,28 @@ class _ClientServicePageState extends State<ClientServicePage> {
   }
 
   Future<void> _loadRequests() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    final result = await _repository.getServiceRequests();
-    setState(() {
-      _requests = result.getOrElse(() => []);
-      _isLoading = false;
-    });
+    try {
+      final result = await _repository.getServiceRequests();
+      if (!mounted) return;
+      result.fold(
+        (l) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${l.message}'), backgroundColor: Colors.red),
+          );
+        },
+        (list) => _requests = list,
+      );
+      setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Critical Error: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override

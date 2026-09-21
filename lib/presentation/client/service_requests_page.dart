@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartz/dartz.dart' hide State;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 import '../../core/error/failures.dart';
 import '../../application/services/service_request_service.dart';
 import '../../domain/entities/service_request_entity.dart';
@@ -14,6 +15,7 @@ import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/pin_dialog.dart';
 import '../shared_widgets/audit_trail_viewer.dart';
+import '../shared_widgets/monitoring_page.dart';
 import '../miner/miner_drawer.dart';
 
 class ServiceRequestsPage extends StatefulWidget {
@@ -64,16 +66,16 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           ServiceRequestEntity(
             id: 'REQ-DEMO-001',
             creatorId: currentUserId ?? '',
-            participatingMinerIds: [],
-            materialDetails: MaterialDetails(
+            participatingMinerIds: const [],
+            materialDetails: const MaterialDetails(
               condition: 'Rocky',
               state: 'Dry',
               sourceType: 'Associated Tunnel',
-              source: _currentUser?.miningUnitName ?? 'Associated Tunnel #1',
+              source: 'Associated Tunnel #1',
               numberOfSacks: 5,
               photoUrls: ['dummy_url_1', 'dummy_url_2'],
             ),
-            processingDetails: ProcessingDetails(
+            processingDetails: const ProcessingDetails(
               requirements: 'Standard processing',
               assignedOperatorIds: [],
             ),
@@ -84,8 +86,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           ServiceRequestEntity(
             id: 'REQ-DEMO-002',
             creatorId: currentUserId ?? '',
-            participatingMinerIds: [],
-            materialDetails: MaterialDetails(
+            participatingMinerIds: const [],
+            materialDetails: const MaterialDetails(
               condition: 'Mixed',
               state: 'Wet',
               sourceType: 'Other',
@@ -93,19 +95,19 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               numberOfSacks: 3,
               photoUrls: [],
             ),
-            processingDetails: ProcessingDetails(
+            processingDetails: const ProcessingDetails(
               requirements: 'Careful refining',
               assignedOperatorIds: [],
             ),
             status: ServiceRequestStatus.verified,
-            createdAt: DateTime.now().subtract(const Duration(days: 1)),
-            updatedAt: DateTime.now().subtract(const Duration(days: 1)),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
           ),
           ServiceRequestEntity(
             id: 'REQ-DEMO-003',
             creatorId: currentUserId ?? '',
-            participatingMinerIds: [],
-            materialDetails: MaterialDetails(
+            participatingMinerIds: const [],
+            materialDetails: const MaterialDetails(
               condition: 'Clay',
               state: 'Others',
               sourceType: 'Partner Source',
@@ -113,13 +115,13 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               numberOfSacks: 12,
               photoUrls: [],
             ),
-            processingDetails: ProcessingDetails(
+            processingDetails: const ProcessingDetails(
               requirements: 'High pressure washing needed',
               assignedOperatorIds: [],
             ),
             status: ServiceRequestStatus.processing,
-            createdAt: DateTime.now().subtract(const Duration(days: 3)),
-            updatedAt: DateTime.now().subtract(const Duration(days: 1)),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
           ),
         ];
       }
@@ -219,7 +221,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                           onChanged: (value) => setState(() => _searchQuery = value),
                           style: TextStyle(color: context.textColor, fontSize: 14),
                           decoration: InputDecoration(
-                            hintText: 'Search by material or ID...',
+                            hintText: 'Search by ID...',
                             hintStyle: TextStyle(color: context.mutedTextColor, fontSize: 14),
                             prefixIcon: const Icon(Icons.search_rounded, color: kGold, size: 20),
                             filled: true,
@@ -516,7 +518,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         request.status == ServiceRequestStatus.processingCompleted;
     
     // Formatting date: e.g. "Sept 15, 2026"
-    final String dateStr = "${request.createdAt.day}/${request.createdAt.month}/${request.createdAt.year}";
+    final String dateStr = DateFormat('MMM dd, yyyy').format(request.createdAt);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -645,9 +647,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               _buildDetailRow(
                   Icons.calendar_today_outlined,
                   'Scheduled Date',
-                  request.processingDetails.scheduledDate!
-                      .toString()
-                      .split(' ')[0]),
+                  DateFormat('MMM dd, yyyy').format(request.processingDetails.scheduledDate!)),
             if (request.processingDetails.assignedOperatorIds.isNotEmpty)
               _buildDetailRow(
                   Icons.badge_outlined,
@@ -666,6 +666,25 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             ],
             if (isActionRequired) _buildReturnActionSection(request),
             if (isProcessingDone) _buildGoldHandoffSection(request),
+            if (request.status == ServiceRequestStatus.processing || 
+                request.status == ServiceRequestStatus.processingCompleted)
+              Padding(
+                padding: const EdgeInsets.only(top: 24),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonitoringPage(request: request))),
+                    icon: const Icon(Icons.insights_rounded, size: 20),
+                    label: const Text('MONITOR LIVE PROCESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kGold,
+                      foregroundColor: kBlack,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ),
             _buildSectionHeader('History'),
             FutureBuilder<Either<Failure, List<Map<String, dynamic>>>>(
               future: _repository.getAuditTrails(request.id),
@@ -883,10 +902,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
       }
     }
 
-    int? sacks = existingRequest?.materialDetails.numberOfSacks;
+    int? mSacks = existingRequest?.materialDetails.numberOfSacks;
     String notes = existingRequest?.materialDetails.notes ?? '';
-    List<PlatformFile> selectedPhotos = []; // Note: New photos only for simplicity or handle existing
-    List<String> existingPhotoUrls = existingRequest?.materialDetails.photoUrls ?? [];
+    List<PlatformFile> selectedPhotos = []; 
+    List<String> existingPhotoUrls = existingRequest != null ? List<String>.from(existingRequest.materialDetails.photoUrls) : [];
 
     final List<String> conditionOptions = ['Rocky', 'Muddy', 'Sandy', 'Mixed', 'Clay'];
     final List<String> stateOptions = ['Dry', 'Wet', 'Others'];
@@ -1193,9 +1212,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                             child: _buildValidatedInput(
                               label: 'Number of Sacks',
                               hint: 'Optional',
-                              initialValue: sacks?.toString(),
+                              initialValue: mSacks?.toString(),
                               keyboardType: TextInputType.number,
-                              onChanged: (v) => sacks = int.tryParse(v),
+                              onChanged: (v) => mSacks = int.tryParse(v),
                               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                             ),
                           ),
@@ -1358,7 +1377,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                     condition: condition,
                                     state: state == 'Others' ? otherState : state,
                                     sourceType: sourceType,
-                                    sacks: sacks,
+                                    sacks: mSacks,
                                     source: sourceDetails,
                                     notes: notes,
                                     miners: [currentUserId, ...participating],
@@ -1562,10 +1581,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               pin: pin,
               photoUrls: photoUrls,
             );
-            return result.fold((l) => l.message, (_) {
-               _loadData();
-               return null;
-            });
+            return result.fold((l) => l.message, (_) => null);
           } else {
             // CREATE WORKFLOW
             final result = await _service.createRequest(
@@ -1582,18 +1598,19 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               photoUrls: photoUrls,
             );
 
-            return result.fold(
-              (l) => l.message, 
-              (_) {
-                _loadData();
-                return null; 
-              },
-            );
+            return result.fold((l) => l.message, (_) => null);
           }
         },
       ),
     ).then((success) {
       if (success == true) {
+        // Close the Request Form Bottom Sheet
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+        
+        _loadData();
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(existingRequestId == null ? 'Request submitted successfully!' : 'Request updated successfully!'),

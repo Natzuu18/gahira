@@ -20,11 +20,16 @@ class ServiceRequestModel extends ServiceRequestEntity {
   });
 
   factory ServiceRequestModel.fromJson(Map<String, dynamic> json) {
-    // Parse user/miner info if it exists
+    // 1. Defensively parse user/miner info
     String? creatorName;
     if (json['users'] != null) {
       final u = json['users'];
-      creatorName = '${u['fname'] ?? ''} ${u['lname'] ?? ''}'.trim();
+      if (u is Map) {
+        creatorName = '${u['fname'] ?? ''} ${u['lname'] ?? ''}'.trim();
+      } else if (u is List && u.isNotEmpty) {
+        final first = u[0];
+        creatorName = '${first['fname'] ?? ''} ${first['lname'] ?? ''}'.trim();
+      }
     }
     
     // Parse verifications if they exist (from join on operator_verified_services)
@@ -47,6 +52,36 @@ class ServiceRequestModel extends ServiceRequestEntity {
       }
     }
 
+    // Parse mill_queue for scheduling info
+    DateTime? scheduledDate;
+    if (json['mill_queue'] != null) {
+      final mq = json['mill_queue'];
+      if (mq is List && mq.isNotEmpty) {
+        final first = mq[0];
+        if (first['scheduled_at'] != null) {
+          scheduledDate = DateTime.parse(first['scheduled_at']);
+        }
+      } else if (mq is Map && mq['scheduled_at'] != null) {
+        scheduledDate = DateTime.parse(mq['scheduled_at']);
+      }
+    }
+
+    // Parse processing estimate from the latest verification
+    String? estimatedTime;
+    String? finalCondition = json['material_condition']?.toString();
+    String? finalState = json['material_state']?.toString();
+    String? finalSource = json['material_source']?.toString();
+    int? finalSacks = json['quantity'] as int?;
+
+    if (verificationList.isNotEmpty) {
+      final latest = verificationList.last;
+      estimatedTime = latest.processingEstimate;
+      finalCondition = latest.condition;
+      finalState = latest.state;
+      finalSource = latest.source;
+      finalSacks = latest.actualSacks;
+    }
+
     return ServiceRequestModel(
       id: json['service_request_id']?.toString() ?? '',
       creatorId: json['user_id']?.toString() ?? '',
@@ -55,11 +90,11 @@ class ServiceRequestModel extends ServiceRequestEntity {
               .toList() ??
           [],
       materialDetails: MaterialDetails(
-        condition: json['material_condition']?.toString(),
-        state: json['material_state']?.toString(),
+        condition: finalCondition,
+        state: finalState,
         sourceType: json['material_source_type']?.toString(),
-        source: json['material_source']?.toString(),
-        numberOfSacks: json['quantity'] as int?,
+        source: finalSource,
+        numberOfSacks: finalSacks,
         notes: json['material_notes']?.toString(),
         documentUrl: null,
         photoUrls: (json['photo_urls'] as List<dynamic>?)
@@ -72,6 +107,11 @@ class ServiceRequestModel extends ServiceRequestEntity {
         requirements: json['material_notes']?.toString() ?? '',
         processingNotes: json['processing_notes']?.toString(),
         sackedQuantity: json['sacked_quantity'] as int?,
+        minerSacksProcessed: json['miner_sacks_processed'] as int? ?? 0,
+        unloadingStartedAt: json['unloading_started_at'] != null ? DateTime.parse(json['unloading_started_at']) : null,
+        unloadingCompletedAt: json['unloading_completed_at'] != null ? DateTime.parse(json['unloading_completed_at']) : null,
+        estimatedTime: estimatedTime,
+        scheduledDate: scheduledDate,
         assignedOperatorIds: [],
         currentStage: ProcessingStage.values.firstWhere(
           (e) => e.name == (json['current_processing_stage']?.toString()),
@@ -99,7 +139,7 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'service_type': 'Milling',
       'request_date': createdAt.toIso8601String().split('T')[0],
       'quantity': materialDetails.numberOfSacks ?? 0,
-      'status': status.toString().split('.').last,
+      'status': status.name,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'material_condition': materialDetails.condition,
@@ -113,9 +153,12 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'assisted_by_operator_id': assistedByOperatorId,
       'approved_by': approvedBy,
       'approved_at': approvedAt?.toIso8601String(),
-      'current_processing_stage': processingDetails.currentStage.toString().split('.').last,
+      'current_processing_stage': processingDetails.currentStage.name,
       'processing_notes': processingDetails.processingNotes,
       'sacked_quantity': processingDetails.sackedQuantity,
+      'miner_sacks_processed': processingDetails.minerSacksProcessed,
+      'unloading_started_at': processingDetails.unloadingStartedAt?.toIso8601String(),
+      'unloading_completed_at': processingDetails.unloadingCompletedAt?.toIso8601String(),
       'billing_id': billingId,
     };
   }

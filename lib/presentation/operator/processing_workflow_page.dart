@@ -10,6 +10,8 @@ import '../shared_widgets/themeToggleButton.dart';
 import 'operator_drawer.dart';
 import 'sacking_page.dart';
 
+enum WorkflowFilter { all, queued, scheduledToday }
+
 class ProcessingWorkflowPage extends StatefulWidget {
   const ProcessingWorkflowPage({super.key});
 
@@ -27,6 +29,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
   List<ServiceRequestEntity> _requests = [];
   List<UserEntity> _allUsers = [];
   bool _isLoading = true;
+  WorkflowFilter _currentFilter = WorkflowFilter.all;
 
   @override
   void initState() {
@@ -36,15 +39,45 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
   }
 
   Future<void> _loadTasks() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    final result = await _repository.getServiceRequests();
-    final usersResult = await _userRepository.getAllUsers();
     
-    setState(() {
-      _requests = result.getOrElse(() => []);
-      _allUsers = usersResult.fold((l) => [], (list) => list);
-      _isLoading = false;
-    });
+    try {
+      final result = await _repository.getServiceRequests();
+      final usersResult = await _userRepository.getAllUsers();
+      
+      if (!mounted) return;
+      
+      String? errorMessage;
+      result.fold(
+        (l) => errorMessage = 'Workflow: ${l.message}',
+        (list) => _requests = list,
+      );
+      
+      usersResult.fold(
+        (l) => errorMessage = (errorMessage ?? '') + ' Users: ${l.message}',
+        (list) => _allUsers = list,
+      );
+
+      if (errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $errorMessage'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+
+      setState(() => _isLoading = false);
+    } catch (e) {
+      print('Critical Workflow Load Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Workflow Error: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   String _getMinerName(ServiceRequestEntity request) {
@@ -64,14 +97,26 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Available Jobs: Requests that are 'queued' or 'scheduled' AND NOT in ongoing_services
-    final availableJobs = _requests.where((r) {
-      final isQueuedOrScheduled = r.status == ServiceRequestStatus.queued || r.status == ServiceRequestStatus.scheduled;
-      
-      // Check if it's already claimed in ongoing_services (from the join data)
-      // This logic assumes we fetch ongoing_services for all requests
-      // For now, if ongoing_services is empty in the joined data, it's available
-      return isQueuedOrScheduled; 
+    // 1. Available Jobs: Requests that are 'queued' or 'scheduled'
+    final allAvailable = _requests.where((r) {
+      return r.status == ServiceRequestStatus.queued || 
+             r.status == ServiceRequestStatus.scheduled;
+    }).toList();
+
+    final availableJobs = allAvailable.where((r) {
+      switch (_currentFilter) {
+        case WorkflowFilter.queued:
+          return r.status == ServiceRequestStatus.queued;
+        case WorkflowFilter.scheduledToday:
+          if (r.status != ServiceRequestStatus.scheduled) return false;
+          if (r.processingDetails.scheduledDate == null) return false;
+          final now = DateTime.now();
+          final sched = r.processingDetails.scheduledDate!;
+          return sched.year == now.year && sched.month == now.month && sched.day == now.day;
+        case WorkflowFilter.all:
+        default:
+          return true;
+      }
     }).toList();
 
     // 2. My Active Processing: Processing requests CLAIMED by ME
@@ -116,14 +161,68 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                   else
                     ...myActiveProcessing.map((r) => _buildJobCard(r, true)),
                   const SizedBox(height: 32),
-                  _buildSectionHeader('Available to Process', Icons.assignment_returned_rounded, kGold),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionHeader('Available to Process', Icons.assignment_returned_rounded, kGold),
+                      Text('${availableJobs.length} total', style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
+                    ],
+                  ),
+                  _buildFilterChips(),
+                  const SizedBox(height: 16),
                   if (availableJobs.isEmpty)
-                    _buildEmptySection('No unclaimed jobs in the queue.')
+                    _buildEmptySection(_getEmptyMessage())
                   else
                     ...availableJobs.map((r) => _buildAvailableJobCard(r)),
                 ],
               ),
             ),
+    );
+  }
+
+  String _getEmptyMessage() {
+    switch (_currentFilter) {
+      case WorkflowFilter.queued: return 'No queued jobs available.';
+      case WorkflowFilter.scheduledToday: return 'No jobs scheduled for today.';
+      case WorkflowFilter.all: return 'No unclaimed jobs in the queue.';
+    }
+  }
+
+  Widget _buildFilterChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _filterChip(WorkflowFilter.all, 'All Requests'),
+          const SizedBox(width: 8),
+          _filterChip(WorkflowFilter.queued, 'Queued'),
+          const SizedBox(width: 8),
+          _filterChip(WorkflowFilter.scheduledToday, 'Scheduled Today'),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(WorkflowFilter filter, String label) {
+    final isSelected = _currentFilter == filter;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(
+        color: isSelected ? kBlack : context.textColor,
+        fontSize: 12,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      )),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) setState(() => _currentFilter = filter);
+      },
+      selectedColor: kGold,
+      backgroundColor: context.surfaceColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: isSelected ? kGold : kGold.withOpacity(0.3)),
+      ),
+      elevation: isSelected ? 2 : 0,
+      pressElevation: 4,
     );
   }
 
@@ -164,6 +263,9 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
               ),
               const Divider(height: 24),
               _buildInfoRow(Icons.shopping_bag_outlined, 'Sacks', '${request.materialDetails.numberOfSacks ?? 0}'),
+              if (request.status == ServiceRequestStatus.scheduled && request.processingDetails.scheduledDate != null)
+                _buildInfoRow(Icons.event_available_rounded, 'Scheduled', 
+                  '${request.processingDetails.scheduledDate!.day}/${request.processingDetails.scheduledDate!.month} ${request.processingDetails.scheduledDate!.hour.toString().padLeft(2, '0')}:${request.processingDetails.scheduledDate!.minute.toString().padLeft(2, '0')}'),
               _buildInfoRow(Icons.history_rounded, 'Created', '${request.createdAt.day}/${request.createdAt.month}'),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -225,7 +327,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   Widget _buildJobCard(ServiceRequestEntity request, bool isActive) {
     final stage = request.processingDetails.currentStage;
-    final bool isSackingStage = stage == ProcessingStage.none || stage == ProcessingStage.rebagging;
+    final bool isSackingStage = stage == ProcessingStage.none || stage == ProcessingStage.rebagging || stage == ProcessingStage.millingCrushing;
     
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -238,13 +340,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         ],
       ),
       child: InkWell(
-        onTap: () {
-          if (isActive && isSackingStage) {
-            _navigateToSacking(request);
-          } else {
-            _showRequestDetails(request);
-          }
-        },
+        onTap: () => _showRequestDetails(request, isActive: isActive),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -291,7 +387,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                     minimumSize: const Size(double.infinity, 50),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                 child: Text(
-                  isSackingStage ? 'START SACKING' : _getActionLabel(request),
+                  isSackingStage ? (request.processingDetails.currentStage == ProcessingStage.millingCrushing ? 'MANAGE BATCHES' : 'START SACKING') : _getActionLabel(request),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -453,7 +549,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     );
   }
 
-  void _showRequestDetails(ServiceRequestEntity request) {
+  void _showRequestDetails(ServiceRequestEntity request, {bool isActive = false}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -531,6 +627,31 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                   Text(request.materialDetails.notes!, style: TextStyle(color: context.textColor, fontSize: 13, height: 1.5)),
                 ]),
               ],
+              const SizedBox(height: 32),
+              if (isActive && request.status == ServiceRequestStatus.processing && 
+                  (request.processingDetails.currentStage == ProcessingStage.none || 
+                   request.processingDetails.currentStage == ProcessingStage.rebagging ||
+                   request.processingDetails.currentStage == ProcessingStage.millingCrushing))
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _navigateToSacking(request);
+                    },
+                    icon: const Icon(Icons.shopping_bag_outlined, size: 20),
+                    label: Text(request.processingDetails.currentStage == ProcessingStage.millingCrushing 
+                      ? 'MANAGE BATCHES' 
+                      : 'START SACKING / MILLING', 
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kGold,
+                      foregroundColor: kBlack,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

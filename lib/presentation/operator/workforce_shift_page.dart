@@ -58,11 +58,14 @@ class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
     final task = _activeRequests.firstWhere(
       (r) => r.assistedByOperatorId == userId, 
       orElse: () => ServiceRequestEntity(
-        id: '', creatorId: '', participatingMinerIds: [], 
-        materialDetails: const MaterialDetails(), 
+        id: '', 
+        creatorId: '', 
+        participatingMinerIds: const [], 
+        materialDetails: const MaterialDetails(),
         processingDetails: const ProcessingDetails(requirements: '', assignedOperatorIds: []), 
         status: ServiceRequestStatus.draft, 
-        createdAt: DateTime.now(), updatedAt: DateTime.now()
+        createdAt: DateTime.now(), 
+        updatedAt: DateTime.now(),
       )
     );
     

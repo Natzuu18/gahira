@@ -18,7 +18,7 @@ class SupabaseServiceRequestRepository {
           .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*)');
       
       print('--- FETCHING SERVICE REQUESTS ---');
-      print('RAW DATA: $response');
+      // Removed big RAW DATA print to prevent hangs
 
       final list = (response as List).map((json) {
         try {
@@ -125,6 +125,94 @@ class SupabaseServiceRequestRepository {
       return Left(ServerFailure(e.toString()));
     }
   }
+
+  // --- BATCH SACK PROCESSING ---
+  Future<Either<Failure, List<Map<String, dynamic>>>> getMillingBatches(String requestId) async {
+    try {
+      final response = await _client
+          .from('milling_batches')
+          .select('*, machines(*), drums(*)')
+          .eq('service_request_id', requestId)
+          .order('created_at', ascending: true);
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> createMillingBatch({
+    required String requestId,
+    required String operatorId,
+    required String machineId,
+    required String drumId,
+    required int inputSacks,
+    required int outputSacks,
+    required int estimatedDurationMinutes,
+  }) async {
+    try {
+      // 1. Insert milling batch
+      await _client.from('milling_batches').insert({
+        'service_request_id': requestId,
+        'operator_id': operatorId,
+        'machine_id': machineId,
+        'drum_id': drumId,
+        'input_sacks': inputSacks,
+        'output_sacks': outputSacks,
+        'estimated_duration_minutes': estimatedDurationMinutes,
+        'status': 'milling',
+      });
+
+      // 2. Mark the specific drum as 'in_use'
+      await _client.from('drums').update({'status': 'in_use'}).eq('drum_id', drumId);
+
+      // 3. Check if all drums in this machine are now in use
+      final freeDrums = await _client
+          .from('drums')
+          .select('drum_id')
+          .eq('machine_id', machineId)
+          .eq('status', 'available');
+      
+      if ((freeDrums as List).isEmpty) {
+        // Machine is fully occupied
+        await _client.from('machines').update({'status': 'in_use'}).eq('machine_id', machineId);
+      }
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> completeMillingBatch({
+    required String batchId,
+    required String machineId,
+    required String drumId,
+  }) async {
+    try {
+      // 1. Complete batch status
+      await _client.from('milling_batches').update({'status': 'completed', 'completed_at': DateTime.now().toIso8601String()}).eq('batch_id', batchId);
+
+      // 2. Revert the specific drum back to 'available'
+      await _client.from('drums').update({'status': 'available'}).eq('drum_id', drumId);
+
+      // 3. Since at least this drum is now available, the machine is available for use
+      await _client.from('machines').update({'status': 'available'}).eq('machine_id', machineId);
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> updateMillingBatchDuration(String batchId, int newDuration) async {
+    try {
+      await _client.from('milling_batches').update({'estimated_duration_minutes': newDuration}).eq('batch_id', batchId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
 
   Future<Either<Failure, void>> updateMillQueueStatus({
     required String requestId,

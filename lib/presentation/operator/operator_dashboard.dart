@@ -210,7 +210,7 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
                     decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(12)),
                     child: ListTile(
                       title: Text('Ref: ${r.id.substring(0,8).toUpperCase()}', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 14)),
-                      subtitle: Text('${r.materialDetails.numberOfSacks} Sacks • ${r.status.name}', style: const TextStyle(fontSize: 12)),
+                      subtitle: Text('${r.materialDetails.numberOfSacks} Sacks • ${r.status.toString().split('.').last}', style: const TextStyle(fontSize: 12)),
                       trailing: const Icon(Icons.chevron_right, color: kGold),
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ServiceVerificationPage())),
                     ),

@@ -66,7 +66,7 @@ class _ActiveProcessingPageState extends State<ActiveProcessingPage> {
                         color: context.surfaceColor,
                         child: ListTile(
                           leading: const Icon(Icons.play_circle_fill, color: Colors.green),
-                          title: Text(t['service_requests']?['purpose'] ?? 'Processing', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+                          title: Text(t['service_requests']?['service_type'] ?? 'Processing', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
                           subtitle: Text('Machine: ${t['machines']?['machine_name']} | Operator: ${t['operator']?['fname']}', style: TextStyle(color: context.mutedTextColor)),
                           trailing: ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: kGold),

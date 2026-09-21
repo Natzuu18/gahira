@@ -44,7 +44,7 @@ class _SackingPageState extends State<SackingPage> {
       requestId: widget.request.id,
       operatorId: currentOperatorId,
       newStatus: ServiceRequestStatus.processing,
-      currentStatus: widget.request.status.name,
+      currentStatus: widget.request.status.toString().split('.').last,
       newStage: ProcessingStage.loading, // Move to next stage
       sackedQuantity: finalSacks,
       remarks: skipped ? 'Sacking skipped' : 'Sacking completed with $finalSacks sacks',

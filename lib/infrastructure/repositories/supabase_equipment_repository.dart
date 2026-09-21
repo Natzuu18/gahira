@@ -85,6 +85,15 @@ class SupabaseEquipmentRepository {
     }
   }
 
+  Future<Either<Failure, void>> updateMaintenance(String id, Map<String, dynamic> updates) async {
+    try {
+      await _client.from('maintenance_schedule').update(updates).eq('maintenance_id', id);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
   Future<Either<Failure, void>> updateMaintenanceStatus(String id, String status) async {
     try {
       await _client.from('maintenance_schedule').update({'status': status}).eq('maintenance_id', id);

@@ -8,6 +8,7 @@ import '../../domain/entities/user_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import 'operator_drawer.dart';
+import 'sacking_page.dart';
 
 class ProcessingWorkflowPage extends StatefulWidget {
   const ProcessingWorkflowPage({super.key});
@@ -63,8 +64,6 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   @override
   Widget build(BuildContext context) {
-    final currentOperatorId = Supabase.instance.client.auth.currentUser?.id;
-
     // 1. Available Jobs: Requests that are 'queued' or 'scheduled' AND NOT in ongoing_services
     final availableJobs = _requests.where((r) {
       final isQueuedOrScheduled = r.status == ServiceRequestStatus.queued || r.status == ServiceRequestStatus.scheduled;
@@ -159,7 +158,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                    child: Text(request.status.name.toUpperCase(), style: const TextStyle(color: Colors.orange, fontSize: 9, fontWeight: FontWeight.bold)),
+                    child: Text(request.status.toString().split('.').last.toUpperCase(), style: const TextStyle(color: Colors.orange, fontSize: 9, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -190,7 +189,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     final result = await _service.claimAndStartService(
       requestId: request.id,
       operatorId: currentOperatorId,
-      currentStatus: request.status.name,
+      currentStatus: request.status.toString().split('.').last,
     );
 
     result.fold(
@@ -334,7 +333,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         requestId: request.id,
         operatorId: currentOperatorId,
         newStatus: ServiceRequestStatus.processing,
-        currentStatus: request.status.name,
+        currentStatus: request.status.toString().split('.').last,
         newStage: ProcessingStage.rebagging,
       );
       result.fold(
@@ -352,7 +351,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         requestId: request.id,
         operatorId: currentOperatorId,
         newStatus: newStatus,
-        currentStatus: request.status.name,
+        currentStatus: request.status.toString().split('.').last,
         newStage: nextStage,
       );
       result.fold(

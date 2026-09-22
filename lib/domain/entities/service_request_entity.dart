@@ -14,7 +14,8 @@ enum ServiceRequestStatus {
   goldHandoff,
   partiallyPaid,
   completed,
-  cancelled
+  cancelled,
+  emergencyStop
 }
 
 enum ProcessingStage {
@@ -44,6 +45,9 @@ class ServiceRequestEntity extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? billingId;
+  final String? emergencyReason;
+  final DateTime? emergencyStoppedAt;
+  final DateTime? emergencyResolvedAt;
   final String? creatorName; // Optional display name
 
   const ServiceRequestEntity({
@@ -62,6 +66,9 @@ class ServiceRequestEntity extends Equatable {
     required this.createdAt,
     required this.updatedAt,
     this.billingId,
+    this.emergencyReason,
+    this.emergencyStoppedAt,
+    this.emergencyResolvedAt,
     this.creatorName,
   });
 
@@ -81,6 +88,9 @@ class ServiceRequestEntity extends Equatable {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? billingId,
+    String? emergencyReason,
+    DateTime? emergencyStoppedAt,
+    DateTime? emergencyResolvedAt,
     String? creatorName,
   }) {
     return ServiceRequestEntity(
@@ -100,6 +110,9 @@ class ServiceRequestEntity extends Equatable {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       billingId: billingId ?? this.billingId,
+      emergencyReason: emergencyReason ?? this.emergencyReason,
+      emergencyStoppedAt: emergencyStoppedAt ?? this.emergencyStoppedAt,
+      emergencyResolvedAt: emergencyResolvedAt ?? this.emergencyResolvedAt,
       creatorName: creatorName ?? this.creatorName,
     );
   }
@@ -121,6 +134,9 @@ class ServiceRequestEntity extends Equatable {
         createdAt,
         updatedAt,
         billingId,
+        emergencyReason,
+        emergencyStoppedAt,
+        emergencyResolvedAt,
         creatorName,
       ];
 }

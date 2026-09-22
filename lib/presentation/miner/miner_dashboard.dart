@@ -5,6 +5,7 @@ import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/pin_dialog.dart';
 import '../client/service_requests_page.dart';
+import '../shared_widgets/emergency_alert_banner.dart';
 import 'miner_drawer.dart';
 import '../../infrastructure/repositories/supabase_user_repository.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
@@ -29,15 +30,13 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
   late final ServiceRequestService _service;
 
   List<UserEntity> _otherMiners = [];
+  List<ServiceRequestEntity> _allRequests = [];
   UserEntity? _currentUser;
   bool _isLoadingMiners = false;
   bool _hasActionRequired = false;
 
-  // --- Example/Mock Data for UI ---
   final List<Map<String, dynamic>> _mockRequests = [
     {'ref': 'REQ-8A2F', 'material': 'Gold Ore', 'status': 'Pending', 'date': '2024-09-15', 'condition': 'Rocky', 'state': 'Dry', 'source': 'Associated Tunnel'},
-    {'ref': 'REQ-9B3C', 'material': 'Silver Ore', 'status': 'Approved', 'date': '2024-09-14', 'condition': 'Mixed', 'state': 'Wet', 'source': 'Partner Source'},
-    {'ref': 'REQ-4C2D', 'material': 'Raw Quartz', 'status': 'Verified', 'date': '2024-09-13', 'condition': 'Clay', 'state': 'Wet', 'source': 'Other'},
   ];
 
   final List<Map<String, dynamic>> _mockActiveOps = [
@@ -46,53 +45,49 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
 
   final List<Map<String, dynamic>> _mockHistory = [
     {'material': 'Gold Ore', 'yield': '12.4g', 'date': '2024-09-10', 'status': 'Completed'},
-    {'material': 'Mixed Ore', 'yield': '8.1g', 'date': '2024-09-08', 'status': 'Completed'},
   ];
 
   @override
   void initState() {
     super.initState();
     _service = ServiceRequestService(_requestRepository);
-    _loadMiners();
+    _loadData();
   }
 
-  Future<void> _loadMiners() async {
+  Future<void> _loadData() async {
     setState(() => _isLoadingMiners = true);
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     if (currentUserId == null) return;
 
-    // 1. Fetch current user profile
     final userResult = await _userRepository.getUserById(currentUserId);
     userResult.fold((l) => null, (user) => _currentUser = user);
 
-    // 2. Fetch other miners for group selection
-    final result = await _userRepository.getMinersAndClients();
+    final minersResult = await _userRepository.getMinersAndClients();
+    final requestsResult = await _requestRepository.getServiceRequests();
 
-    setState(() {
-      _otherMiners = result.fold(
-        (l) => [],
-        (users) => users
-            .where((u) => u.userId != currentUserId && u.roleId == 'miner')
-            .toList(),
-      );
-      _isLoadingMiners = false;
-    });
-
-    _checkActionRequired();
-  }
-
-  Future<void> _checkActionRequired() async {
-    final result = await _requestRepository.getServiceRequests();
-    result.fold((l) => null, (requests) {
+    if (mounted) {
       setState(() {
-        _hasActionRequired =
-            requests.any((r) => r.status == ServiceRequestStatus.returnedToMiner);
+        _otherMiners = minersResult.fold(
+          (l) => [],
+          (users) => users.where((u) => u.userId != currentUserId && u.roleId == 'miner').toList(),
+        );
+        
+        _allRequests = requestsResult.fold((_) => [], (list) => list.where((r) => r.creatorId == currentUserId).toList());
+        _hasActionRequired = _allRequests.any((r) => r.status == ServiceRequestStatus.returnedToMiner);
+        _isLoadingMiners = false;
       });
-    });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final activeCount = _allRequests.where((r) => 
+      r.status == ServiceRequestStatus.processing || 
+      r.status == ServiceRequestStatus.assigned ||
+      r.status == ServiceRequestStatus.scheduled ||
+      r.status == ServiceRequestStatus.verified
+    ).length;
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: context.bgColor,
@@ -106,11 +101,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
         ),
         title: const Text(
           'GAHIRA',
-          style: TextStyle(
-              color: kGold,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 3,
-              fontSize: 16),
+          style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 3, fontSize: 16),
         ),
         iconTheme: const IconThemeData(color: kGold),
         actions: [
@@ -127,149 +118,101 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const ServiceRequestsPage()),
-          );
+          Navigator.push(context, MaterialPageRoute(builder: (context) => const ServiceRequestsPage()));
         },
         backgroundColor: kGold,
         foregroundColor: kBlack,
         child: const Icon(Icons.add_rounded),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Welcome back,',
-                        style: TextStyle(color: context.mutedTextColor, fontSize: 14)),
-                    Text(widget.minerName,
-                        style: TextStyle(
-                            color: context.textColor,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold)),
+      body: Column(
+        children: [
+          const EmergencyAlertBanner(),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Welcome back,', style: TextStyle(color: context.mutedTextColor, fontSize: 14)),
+                          Text(widget.minerName, style: TextStyle(color: context.textColor, fontSize: 24, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const Spacer(),
+                      _buildAccountStatusBadge(),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 1.5,
+                    children: [
+                      _buildSummaryMetric('My Total Requests', _allRequests.length.toString(), Icons.description_outlined, kGold),
+                      _buildSummaryMetric('Active Jobs', activeCount.toString(), Icons.settings_input_component_rounded, Colors.green),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  if (_hasActionRequired) ...[
+                    _buildActionRequiredCard(),
+                    const SizedBox(height: 32),
                   ],
-                ),
-                const Spacer(),
-                _buildAccountStatusBadge(),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // --- Summary Metrics ---
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.5,
-              children: [
-                _buildSummaryMetric('My Total Requests', '12', Icons.description_outlined, kGold),
-                _buildSummaryMetric('Active Jobs', '1', Icons.settings_input_component_rounded, Colors.green),
-              ],
-            ),
-
-            const SizedBox(height: 32),
-
-            if (_hasActionRequired) ...[
-              _buildActionRequiredCard(),
-              const SizedBox(height: 32),
-            ],
-
-            // --- Quick Actions ---
-            Text('Quick Actions',
-                style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildQuickActionButton(
-                      'New Request', Icons.add_circle_outline, () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const ServiceRequestsPage()),
-                    );
+                  Text('Quick Actions', style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: _buildQuickActionButton('New Request', Icons.add_circle_outline, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ServiceRequestsPage()));
+                      })),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildQuickActionButton('History', Icons.history_rounded, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ServiceRequestsPage()));
+                      })),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader('Recent Requests', () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceRequestsPage()));
                   }),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildQuickActionButton(
-                      'History', Icons.history_rounded, () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const ServiceRequestsPage()),
-                    );
-                  }),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  ..._mockRequests.map((r) => _buildRequestListItem(r)),
+                  const SizedBox(height: 32),
+                  Text('Active Operations', style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  if (_mockActiveOps.isEmpty)
+                    _buildEmptyState('No active processing at the moment.')
+                  else
+                    ..._mockActiveOps.map((op) => _buildActiveOpCard(op)),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader('Completion History', () {}),
+                  const SizedBox(height: 12),
+                  ..._mockHistory.map((h) => _buildHistoryListItem(h)),
+                  const SizedBox(height: 80),
+                ],
+              ),
             ),
-
-            const SizedBox(height: 32),
-
-            // --- My Service Requests (Status) ---
-            _buildSectionHeader('Recent Requests', () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceRequestsPage()));
-            }),
-            const SizedBox(height: 12),
-            ..._mockRequests.map((r) => _buildRequestListItem(r)),
-
-            const SizedBox(height: 32),
-
-            // --- Active Processing Service ---
-            Text('Active Operations',
-                style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            if (_mockActiveOps.isEmpty)
-              _buildEmptyState('No active processing at the moment.')
-            else
-              ..._mockActiveOps.map((op) => _buildActiveOpCard(op)),
-
-            const SizedBox(height: 32),
-
-            // --- Service History ---
-            _buildSectionHeader('Completion History', () {}),
-            const SizedBox(height: 12),
-            ..._mockHistory.map((h) => _buildHistoryListItem(h)),
-
-            const SizedBox(height: 80), // Space for FAB
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // --- Helper Widgets ---
-
   Widget _buildAccountStatusBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: kGold.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: kGold.withOpacity(0.3)),
-      ),
-      child: Row(
+      decoration: BoxDecoration(color: kGold.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: kGold.withOpacity(0.3))),
+      child: const Row(
         children: [
-          const Icon(Icons.circle, color: Colors.green, size: 8),
-          const SizedBox(width: 8),
-          Text(
-            'Account Active',
-            style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.w600),
-          ),
+          Icon(Icons.circle, color: Colors.green, size: 8),
+          SizedBox(width: 8),
+          Text('Account Active', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -278,11 +221,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
   Widget _buildSummaryMetric(String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.1)),
-      ),
+      decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: kGold.withOpacity(0.1))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -314,11 +253,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kGold.withOpacity(0.05)),
-      ),
+      decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: kGold.withOpacity(0.05))),
       child: Row(
         children: [
           Container(
@@ -345,11 +280,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
   Widget _buildActiveOpCard(Map<String, dynamic> op) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green.withOpacity(0.2)),
-      ),
+      decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.green.withOpacity(0.2))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -363,12 +294,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
             ],
           ),
           const SizedBox(height: 16),
-          LinearProgressIndicator(
-            value: op['progress'],
-            backgroundColor: Colors.green.withOpacity(0.1),
-            color: Colors.green,
-            borderRadius: BorderRadius.circular(4),
-          ),
+          LinearProgressIndicator(value: op['progress'], backgroundColor: Colors.green.withOpacity(0.1), color: Colors.green, borderRadius: BorderRadius.circular(4)),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -386,11 +312,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.textColor.withOpacity(0.05)),
-      ),
+      decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.textColor.withOpacity(0.05))),
       child: Row(
         children: [
           const Icon(Icons.check_circle_outline_rounded, color: Colors.green, size: 20),
@@ -432,11 +354,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
-      ),
+      decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red.withOpacity(0.3))),
       child: Row(
         children: [
           const Icon(Icons.warning_amber_rounded, color: Colors.red),
@@ -445,50 +363,30 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Action Required',
-                    style: TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.bold)),
-                Text('One or more requests were returned for corrections.',
-                    style:
-                        TextStyle(color: context.textColor, fontSize: 12)),
+                const Text('Action Required', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                Text('One or more requests were returned for corrections.', style: TextStyle(color: context.textColor, fontSize: 12)),
               ],
             ),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const ServiceRequestsPage()),
-              );
-            },
-            child: const Text('View',
-                style:
-                    TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
+          TextButton(onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ServiceRequestsPage()));
+          }, child: const Text('View', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
         ],
       ),
     );
   }
 
-  Widget _buildQuickActionButton(
-      String label, IconData icon, VoidCallback onTap) {
+  Widget _buildQuickActionButton(String label, IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
-        decoration: BoxDecoration(
-          color: context.surfaceColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: kGold.withOpacity(0.1)),
-        ),
+        decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: kGold.withOpacity(0.1))),
         child: Column(
           children: [
             Icon(icon, color: kGold, size: 28),
             const SizedBox(height: 8),
-            Text(label,
-                style: TextStyle(
-                    color: context.textColor, fontWeight: FontWeight.w500)),
+            Text(label, style: TextStyle(color: context.textColor, fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -497,33 +395,9 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
 
   Widget _buildLogoMark() {
     return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: kGold, width: 1.6),
-        color: context.bgColor,
-      ),
-      child: const Icon(Icons.settings_input_component_rounded,
-          color: kGold, size: 16),
-    );
-  }
-
-  Widget _buildReviewItem(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
-          Text(value,
-              style: TextStyle(
-                  color: context.textColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14)),
-        ],
-      ),
+      width: 34, height: 34,
+      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: kGold, width: 1.6), color: context.bgColor),
+      child: const Icon(Icons.settings_input_component_rounded, color: kGold, size: 16),
     );
   }
 }

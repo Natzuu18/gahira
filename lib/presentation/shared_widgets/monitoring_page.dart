@@ -81,6 +81,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_effectiveRequest.status == ServiceRequestStatus.emergencyStop)
+                  _buildEmergencyAlert(),
                 _buildStatusHeader(),
                 const SizedBox(height: 24),
                 _buildWorkflowProgress(),
@@ -95,6 +97,39 @@ class _MonitoringPageState extends State<MonitoringPage> {
               ],
             ),
           ),
+    );
+  }
+
+  Widget _buildEmergencyAlert() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.4), blurRadius: 12, spreadRadius: 2)],
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.emergency_share_rounded, color: Colors.white, size: 48),
+          const SizedBox(height: 16),
+          const Text('EMERGENCY STOP ACTIVE', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Text(_effectiveRequest.emergencyReason ?? 'No reason provided', 
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 14, fontStyle: FontStyle.italic)),
+          if (_effectiveRequest.emergencyStoppedAt != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text('Stopped at: ${DateFormat('hh:mm:ss a').format(_effectiveRequest.emergencyStoppedAt!.toLocal())}', 
+                style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 11)),
+            ),
+          const SizedBox(height: 20),
+          const Text('Operations have been halted. Technical team notified.', 
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+        ],
+      ),
     );
   }
 
@@ -307,6 +342,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 
   IconData _getStageIcon(ProcessingStage stage) {
+    if (_effectiveRequest.status == ServiceRequestStatus.emergencyStop) return Icons.emergency_share_rounded;
     switch (stage) {
       case ProcessingStage.rebagging: return Icons.shopping_bag_outlined;
       case ProcessingStage.loading: return Icons.upload_file_rounded;
@@ -320,6 +356,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 
   String _getStageName(ProcessingStage stage) {
+    if (_effectiveRequest.status == ServiceRequestStatus.emergencyStop) return 'Emergency Stop';
     switch (stage) {
       case ProcessingStage.rebagging: return 'Sacking';
       case ProcessingStage.loading: return 'Loading';

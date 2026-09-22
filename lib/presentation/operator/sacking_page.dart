@@ -35,15 +35,17 @@ class _SackingPageState extends State<SackingPage> {
   final _outputSacksController = TextEditingController();
   final _estDurationController = TextEditingController(text: '30');
   Timer? _refreshTimer;
+  bool _isSaving = false;
+  bool _isResuming = false;
 
   @override
   void initState() {
     super.initState();
     _service = ServiceRequestService(_requestRepo);
     _loadData();
-    // Periodically refresh the UI to update timer statuses and top-bar alerts
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted) setState(() {});
+    // Periodically refresh the data from server to catch admin resolutions
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) _loadData(showLoading: false);
     });
   }
 
@@ -53,24 +55,27 @@ class _SackingPageState extends State<SackingPage> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData({bool showLoading = true}) async {
+    if (showLoading) setState(() => _isLoading = true);
+    
     final machinesRes = await _equipRepo.getMachines();
     final batchesRes = await _requestRepo.getMillingBatches(widget.request.id);
     final requestRes = await _requestRepo.getServiceRequests();
     
-    setState(() {
-      _machines = machinesRes.getOrElse(() => []);
-      _existingBatches = batchesRes.getOrElse(() => []);
-      
-      requestRes.fold((_) => null, (list) {
-        try {
-          _currentRequest = list.firstWhere((r) => r.id == widget.request.id);
-        } catch (_) {}
-      });
+    if (mounted) {
+      setState(() {
+        _machines = machinesRes.getOrElse(() => []);
+        _existingBatches = batchesRes.getOrElse(() => []);
+        
+        requestRes.fold((_) => null, (list) {
+          try {
+            _currentRequest = list.firstWhere((r) => r.id == widget.request.id);
+          } catch (_) {}
+        });
 
-      _isLoading = false;
-    });
+        _isLoading = false;
+      });
+    }
   }
 
   ServiceRequestEntity get _effectiveRequest => _currentRequest ?? widget.request;
@@ -259,14 +264,16 @@ class _SackingPageState extends State<SackingPage> {
           
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: _handleStartBatch,
+            onPressed: _isSaving ? null : _handleStartBatch,
             style: ElevatedButton.styleFrom(
               backgroundColor: kGold, 
               foregroundColor: kBlack,
               minimumSize: const Size(double.infinity, 50),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Start Batch Milling', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: _isSaving 
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: kBlack))
+              : const Text('Start Batch Milling', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -279,25 +286,37 @@ class _SackingPageState extends State<SackingPage> {
       runSpacing: 8,
       children: _machines.map((m) {
         final isSelected = _selectedMachineId == m['machine_id'];
-        final inUse = m['status'] == 'in_use';
+        final status = m['status']?.toString().toLowerCase();
+        final inUse = status == 'in_use';
+        final isEmergency = status == 'emergency_stop';
         
+        Color bgColor = Colors.green.withOpacity(0.1);
+        Color textColor = Colors.green;
+        if (inUse) {
+          bgColor = Colors.red.withOpacity(0.1);
+          textColor = Colors.red;
+        } else if (isEmergency) {
+          bgColor = Colors.orange.withOpacity(0.1);
+          textColor = Colors.orange;
+        }
+
         return ChoiceChip(
           label: Text(m['machine_name']),
           selected: isSelected,
-          onSelected: (val) {
+          onSelected: isEmergency ? null : (val) {
             setState(() {
               _selectedMachineId = val ? m['machine_id'] : null;
               _selectedDrumId = null;
             });
           },
           selectedColor: kGold,
-          backgroundColor: inUse ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+          backgroundColor: bgColor,
           labelStyle: TextStyle(
-            color: isSelected ? kBlack : (inUse ? Colors.red : Colors.green), 
+            color: isSelected ? kBlack : textColor, 
             fontSize: 12,
             fontWeight: FontWeight.bold,
           ),
-          side: BorderSide(color: isSelected ? kGold : (inUse ? Colors.red.withOpacity(0.3) : Colors.green.withOpacity(0.3))),
+          side: BorderSide(color: isSelected ? kGold : textColor.withOpacity(0.3)),
         );
       }).toList(),
     );
@@ -312,22 +331,34 @@ class _SackingPageState extends State<SackingPage> {
       runSpacing: 8,
       children: drums.map((d) {
         final isSelected = _selectedDrumId == d['drum_id'];
-        final inUse = d['status'] == 'in_use';
+        final status = d['status']?.toString().toLowerCase();
+        final inUse = status == 'in_use';
+        final isEmergency = status == 'emergency_stop';
+
+        Color bgColor = Colors.green.withOpacity(0.1);
+        Color textColor = Colors.green;
+        if (inUse) {
+          bgColor = Colors.red.withOpacity(0.1);
+          textColor = Colors.red;
+        } else if (isEmergency) {
+          bgColor = Colors.orange.withOpacity(0.1);
+          textColor = Colors.orange;
+        }
         
         return ChoiceChip(
           label: Text(d['drum_name']),
           selected: isSelected,
-          onSelected: inUse ? null : (val) {
+          onSelected: (inUse || isEmergency) ? null : (val) {
             setState(() => _selectedDrumId = val ? d['drum_id'] : null);
           },
           selectedColor: kGold,
-          backgroundColor: inUse ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+          backgroundColor: bgColor,
           labelStyle: TextStyle(
-            color: isSelected ? kBlack : (inUse ? Colors.red : Colors.green), 
+            color: isSelected ? kBlack : textColor, 
             fontSize: 12,
             fontWeight: FontWeight.bold,
           ),
-          side: BorderSide(color: isSelected ? kGold : (inUse ? Colors.red.withOpacity(0.3) : Colors.green.withOpacity(0.3))),
+          side: BorderSide(color: isSelected ? kGold : textColor.withOpacity(0.3)),
         );
       }).toList(),
     );
@@ -357,6 +388,21 @@ class _SackingPageState extends State<SackingPage> {
 
   Widget _buildBatchCard(Map<String, dynamic> batch) {
     final isMilling = batch['status'] == 'milling';
+    final drumStatus = batch['drums']?['status']?.toString().toLowerCase();
+    final isDrumEmergency = drumStatus == 'emergency_stop';
+    final isSREmergency = _effectiveRequest.status == ServiceRequestStatus.emergencyStop;
+    
+    // Resolved logic: If Admin set the timestamp, we treat it as resolved 
+    // even if the background equipment sync is still processing.
+    final isResolved = _effectiveRequest.emergencyResolvedAt != null;
+    
+    // Halted logic: If physically stopped AND not resolved yet.
+    // If resolved, we want the "Continue" UI regardless of the request status.
+    final isHalted = (isDrumEmergency || isSREmergency) && !isResolved;
+    
+    // Resume UI: If logically stopped (emergencyStop status) BUT physically ready (isResolved)
+    final showResumeUI = isSREmergency && isResolved;
+
     final createdAt = DateTime.parse(batch['created_at']).toLocal();
     final durationMinutes = batch['estimated_duration_minutes'] as int? ?? 30;
 
@@ -366,12 +412,16 @@ class _SackingPageState extends State<SackingPage> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isMilling ? Colors.green.withOpacity(0.3) : context.textColor.withOpacity(0.05)),
+        border: Border.all(color: (isHalted || showResumeUI) ? (isResolved ? Colors.orange.withOpacity(0.3) : Colors.red.withOpacity(0.3)) : (isMilling ? Colors.green.withOpacity(0.3) : context.textColor.withOpacity(0.05))),
       ),
       child: Row(
         children: [
           if (isMilling)
-            MillingTimerCircle(startTime: createdAt, durationMinutes: durationMinutes)
+            MillingTimerCircle(
+              startTime: createdAt, 
+              durationMinutes: durationMinutes,
+              isPaused: isHalted || showResumeUI,
+            )
           else
             const Icon(Icons.check_circle, color: Colors.green, size: 40),
           const SizedBox(width: 16),
@@ -380,12 +430,18 @@ class _SackingPageState extends State<SackingPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Batch: ${batch['machines']?['machine_name']} - ${batch['drums']?['drum_name']}', 
-                  style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                  style: TextStyle(color: (isHalted || showResumeUI) ? (isResolved ? Colors.orange : Colors.red) : context.textColor, fontWeight: FontWeight.bold, fontSize: 13)),
                 Text('Input: ${batch['input_sacks']} sacks → Output: ${batch['output_sacks']} sacks', 
                   style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
                 if (isMilling)
-                  Text('Started at: ${DateFormat('hh:mm a').format(createdAt)}', 
-                    style: TextStyle(color: context.mutedTextColor, fontSize: 10)),
+                  Text((isHalted || showResumeUI) ? (isResolved ? 'ISSUE RESOLVED' : 'EMERGENCY PAUSED') : 'Started at: ${DateFormat('hh:mm a').format(createdAt)}', 
+                    style: TextStyle(color: (isHalted || showResumeUI) ? (isResolved ? Colors.orange : Colors.red) : context.mutedTextColor, fontSize: 10, fontWeight: (isHalted || showResumeUI) ? FontWeight.bold : FontWeight.normal)),
+                if (isHalted || showResumeUI)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(isResolved ? 'Admin fixed the issue. You can continue.' : 'Wait for admin to resolve.', 
+                      style: TextStyle(color: isResolved ? Colors.orange : Colors.red, fontSize: 9, fontStyle: FontStyle.italic, fontWeight: FontWeight.w500)),
+                  ),
                 if (!isMilling && batch['completed_at'] != null)
                   Text('Milled for: ${_calculateMillingDuration(createdAt, DateTime.parse(batch['completed_at']).toLocal())}',
                     style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold)),
@@ -396,21 +452,66 @@ class _SackingPageState extends State<SackingPage> {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextButton(
-                  onPressed: () => _handleCompleteBatch(batch),
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                  child: const Text('Complete', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
-                ),
-                TextButton(
-                  onPressed: () => _handleExtendBatch(batch),
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                  child: const Text('Extend', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
+                if (showResumeUI)
+                  ElevatedButton.icon(
+                    onPressed: _isResuming ? null : () => _handleResumeProcessing(),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                    label: const Text('CONTINUE PROCESSING', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      minimumSize: const Size(120, 36),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  )
+                else if (isHalted)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.withOpacity(0.3))),
+                    child: const Text('SYSTEM HALTED', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
+                  )
+                else ...[
+                  TextButton(
+                    onPressed: () => _handleCompleteBatch(batch),
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    child: const Text('Complete', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                  TextButton(
+                    onPressed: () => _handleExtendBatch(batch),
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    child: const Text('Extend', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ],
             ),
+          if (isHalted || showResumeUI)
+            Icon(isResolved ? Icons.check_circle_rounded : Icons.emergency_rounded, color: isResolved ? Colors.orange : Colors.red, size: 28),
         ],
       ),
     );
+  }
+
+  void _handleResumeProcessing() async {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) return;
+
+    setState(() => _isResuming = true);
+    
+    final result = await _requestRepo.resumeProcessing(
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
+    );
+
+    if (mounted) {
+      result.fold(
+        (l) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message)));
+          setState(() => _isResuming = false);
+        },
+        (_) => _loadData(),
+      );
+    }
   }
 
   String _calculateMillingDuration(DateTime start, DateTime end) {
@@ -718,6 +819,8 @@ class _SackingPageState extends State<SackingPage> {
   }
 
   void _handleStartBatch() async {
+    if (_isSaving) return;
+    
     if (_selectedMachineId == null || _selectedDrumId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select machine and drum')));
       return;
@@ -749,6 +852,8 @@ class _SackingPageState extends State<SackingPage> {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     if (operatorId == null) return;
 
+    setState(() => _isSaving = true);
+
     final result = await _service.startBatchMilling(
       requestId: widget.request.id,
       operatorId: operatorId,
@@ -760,12 +865,16 @@ class _SackingPageState extends State<SackingPage> {
     );
 
     result.fold(
-      (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+      (l) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message)));
+        setState(() => _isSaving = false);
+      },
       (_) {
         _inputSacksController.clear();
         _outputSacksController.clear();
         _selectedMachineId = null;
         _selectedDrumId = null;
+        _isSaving = false;
         _loadData();
       },
     );
@@ -793,8 +902,14 @@ class _SackingPageState extends State<SackingPage> {
 class MillingTimerCircle extends StatefulWidget {
   final DateTime startTime;
   final int durationMinutes;
+  final bool isPaused;
 
-  const MillingTimerCircle({super.key, required this.startTime, required this.durationMinutes});
+  const MillingTimerCircle({
+    super.key, 
+    required this.startTime, 
+    required this.durationMinutes,
+    this.isPaused = false,
+  });
 
   @override
   State<MillingTimerCircle> createState() => _MillingTimerCircleState();
@@ -802,8 +917,8 @@ class MillingTimerCircle extends StatefulWidget {
 
 class _MillingTimerCircleState extends State<MillingTimerCircle> {
   late Timer _timer;
-  late double _percentage;
-  late String _timeLeft;
+  double _percentage = 0.0;
+  String _timeLeft = "00:00";
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _alertSounded = false;
 
@@ -812,7 +927,7 @@ class _MillingTimerCircleState extends State<MillingTimerCircle> {
     super.initState();
     _calculateProgress();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
+      if (mounted && !widget.isPaused) {
         setState(() => _calculateProgress());
       }
     });
@@ -820,7 +935,7 @@ class _MillingTimerCircleState extends State<MillingTimerCircle> {
 
   void _calculateProgress() {
     final now = DateTime.now(); // Local time
-    final endTime = widget.startTime.add(Duration(minutes: widget.durationMinutes)); // startTime is now converted toLocal() in parent
+    final endTime = widget.startTime.add(Duration(minutes: widget.durationMinutes)); 
     final totalDuration = endTime.difference(widget.startTime).inSeconds;
     final elapsed = now.difference(widget.startTime).inSeconds;
 
@@ -831,7 +946,7 @@ class _MillingTimerCircleState extends State<MillingTimerCircle> {
       final s = (over % 60).toString().padLeft(2, '0');
       _timeLeft = "+$m:$s";
       
-      if (!_alertSounded) {
+      if (!_alertSounded && !widget.isPaused) {
         print('Timer complete: Playing alert sound');
         _playAlertSound();
         _alertSounded = true;
@@ -848,6 +963,7 @@ class _MillingTimerCircleState extends State<MillingTimerCircle> {
   }
 
   Future<void> _playAlertSound() async {
+    if (widget.isPaused) return;
     try {
       print('DEBUG: Attempting to play alert sound from assets/sounds/emergency.mp3');
       await _audioPlayer.setReleaseMode(ReleaseMode.loop);
@@ -856,6 +972,14 @@ class _MillingTimerCircleState extends State<MillingTimerCircle> {
     } catch (e) {
       print('AUDIO ERROR: Could not play emergency sound. Details: $e');
       print('Make sure the file exists at assets/sounds/emergency.mp3 and is registered in pubspec.yaml');
+    }
+  }
+
+  @override
+  void didUpdateWidget(MillingTimerCircle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isPaused) {
+      _audioPlayer.stop();
     }
   }
 
@@ -870,6 +994,8 @@ class _MillingTimerCircleState extends State<MillingTimerCircle> {
   @override
   Widget build(BuildContext context) {
     final bool isOverdue = _timeLeft.startsWith('+');
+    final Color displayColor = widget.isPaused ? Colors.red : (isOverdue ? Colors.red : kGold);
+
     return SizedBox(
       width: 54,
       height: 54,
@@ -878,14 +1004,14 @@ class _MillingTimerCircleState extends State<MillingTimerCircle> {
         children: [
           CircularProgressIndicator(
             value: _percentage,
-            backgroundColor: kGold.withOpacity(0.1),
-            color: isOverdue ? Colors.red : kGold,
+            backgroundColor: displayColor.withOpacity(0.1),
+            color: displayColor,
             strokeWidth: 4,
           ),
           Text(_timeLeft, style: TextStyle(
             fontSize: 9, 
             fontWeight: FontWeight.bold, 
-            color: isOverdue ? Colors.red : kGold,
+            color: displayColor,
           )),
         ],
       ),

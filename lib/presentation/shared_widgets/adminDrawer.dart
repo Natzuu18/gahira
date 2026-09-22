@@ -20,6 +20,7 @@ import '../admin/processing/completed_processing_page.dart';
 import '../admin/equipment/machine_page.dart';
 import '../admin/equipment/drum_page.dart';
 import '../admin/equipment/maintenance_page.dart';
+import '../admin/emergency_monitor_page.dart';
 
 // Shared drawer menu used across every admin page.
 // Drop <AdminDrawer currentMenu: AdminMenu.xxx> into any page's
@@ -38,6 +39,7 @@ enum AdminMenu {
   calendar,
   activeProcessing,
   completedProcessing,
+  emergencyMonitor,
   // Equipment
   machines,
   drums,
@@ -196,7 +198,8 @@ class AdminDrawer extends StatelessWidget {
                       menus: [
                         AdminMenu.calendar,
                         AdminMenu.activeProcessing,
-                        AdminMenu.completedProcessing
+                        AdminMenu.completedProcessing,
+                        AdminMenu.emergencyMonitor,
                       ],
                       children: [
                         _buildSubItem(
@@ -212,6 +215,13 @@ class AdminDrawer extends StatelessWidget {
                           label: 'Active Processing',
                           menu: AdminMenu.activeProcessing,
                           page: const ActiveProcessingPage(),
+                        ),
+                        _buildSubItem(
+                          context,
+                          icon: Icons.emergency_share_outlined,
+                          label: 'Emergency Monitor',
+                          menu: AdminMenu.emergencyMonitor,
+                          page: const EmergencyMonitorPage(),
                         ),
                         _buildSubItem(
                           context,

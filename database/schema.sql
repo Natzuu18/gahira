@@ -87,7 +87,7 @@ CREATE TABLE public.machines (
   machine_type character varying,
   description text,
   location character varying,
-  status character varying NOT NULL DEFAULT 'available'::character varying CHECK (status::text = ANY (ARRAY['available'::character varying, 'in_use'::character varying, 'maintenance'::character varying, 'inactive'::character varying]::text[])),
+  status character varying NOT NULL DEFAULT 'available'::character varying CHECK (status::text = ANY (ARRAY['available'::character varying, 'in_use'::character varying, 'maintenance'::character varying, 'inactive'::character varying, 'emergency_stop'::character varying]::text[])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT machines_pkey PRIMARY KEY (machine_id)
@@ -99,7 +99,7 @@ CREATE TABLE public.drums (
   drum_code character varying NOT NULL UNIQUE,
   capacity character varying,
   description text,
-  status character varying NOT NULL DEFAULT 'available'::character varying CHECK (status::text = ANY (ARRAY['available'::character varying, 'in_use'::character varying, 'maintenance'::character varying, 'inactive'::character varying]::text[])),
+  status character varying NOT NULL DEFAULT 'available'::character varying CHECK (status::text = ANY (ARRAY['available'::character varying, 'in_use'::character varying, 'maintenance'::character varying, 'inactive'::character varying, 'emergency_stop'::character varying]::text[])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT drums_pkey PRIMARY KEY (drum_id),
@@ -173,7 +173,7 @@ CREATE TABLE public.service_requests (
   start_time time without time zone,
   end_time time without time zone,
   quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
-  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::text, 'pending'::text, 'pendingOperatorVerification'::text, 'returnedToMiner'::text, 'accepted'::text, 'verified'::text, 'queued'::text, 'scheduled'::text, 'assigned'::text, 'processing'::text, 'processingCompleted'::text, 'goldHandoff'::text, 'partiallyPaid'::text, 'completed'::text, 'cancelled'::text])),
+  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::character varying, 'pending'::character varying, 'pendingOperatorVerification'::character varying, 'returnedToMiner'::character varying, 'accepted'::character varying, 'verified'::character varying, 'queued'::character varying, 'scheduled'::character varying, 'assigned'::character varying, 'processing'::character varying, 'processingCompleted'::character varying, 'goldHandoff'::character varying, 'partiallyPaid'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'emergencyStop'::character varying]::text[])),
   approved_by uuid,
   approved_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -183,6 +183,7 @@ CREATE TABLE public.service_requests (
   material_source_type text,
   material_source text,
   material_notes text,
+  material_weight double precision,
   photo_urls ARRAY DEFAULT '{}'::text[],
   participating_miners ARRAY DEFAULT '{}'::uuid[],
   is_operator_assisted boolean DEFAULT false,
@@ -191,9 +192,14 @@ CREATE TABLE public.service_requests (
   processing_notes text,
   billing_id text,
   sacked_quantity integer,
+  actual_weight double precision,
   miner_sacks_processed integer DEFAULT 0,
   unloading_started_at timestamp with time zone,
   unloading_completed_at timestamp with time zone,
+
+  -- Emergency Stop Fields
+  emergency_reason text,
+  emergency_stopped_at timestamp with time zone,
 
   -- Financial Handling Fields (Owner App)
   gold_weight_grams numeric(10,2),
@@ -208,6 +214,7 @@ CREATE TABLE public.service_requests (
   remaining_balance numeric(10,2) DEFAULT 0,
   payment_receipt_url text,
   payment_date timestamp with time zone,
+  emergency_resolved_at timestamp with time zone,
 
   CONSTRAINT service_requests_pkey PRIMARY KEY (service_request_id),
   CONSTRAINT fk_service_request_user FOREIGN KEY (user_id) REFERENCES public.users(userId),
@@ -216,46 +223,6 @@ CREATE TABLE public.service_requests (
   CONSTRAINT service_requests_assisted_by_operator_id_fkey FOREIGN KEY (assisted_by_operator_id) REFERENCES public.users(userId)
 );
 
-CREATE TABLE public.service_participant_financials (
-    participant_financial_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    service_request_id uuid REFERENCES public.service_requests(service_request_id) ON DELETE CASCADE,
-    user_id uuid REFERENCES public.users(userId),
-    share_amount numeric(10,2) DEFAULT 0,
-    individual_expenses numeric(10,2) DEFAULT 0,
-    total_due numeric(10,2) DEFAULT 0,
-    amount_paid numeric(10,2) DEFAULT 0,
-    status text DEFAULT 'unpaid',
-    last_payment_at timestamp with time zone,
-    UNIQUE(service_request_id, user_id)
-);
-
-CREATE TABLE public.participant_payments (
-    payment_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    participant_financial_id uuid REFERENCES public.service_participant_financials(participant_financial_id) ON DELETE CASCADE,
-    amount numeric(10,2) NOT NULL,
-    receipt_url text,
-    payment_date timestamp with time zone DEFAULT now(),
-    recorded_by uuid REFERENCES public.users(userId)
-);
-
-CREATE TABLE public.service_billing_items (
-    item_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    service_request_id uuid REFERENCES public.service_requests(service_request_id) ON DELETE CASCADE,
-    item_name text NOT NULL,
-    amount numeric(10,2) NOT NULL,
-    category text DEFAULT 'other', -- 'processing', 'maintenance', 'material', 'other'
-    created_at timestamp with time zone DEFAULT now()
-);
-
-CREATE TABLE public.refinery_overhead_expenses (
-    expense_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    description text NOT NULL,
-    amount numeric(10,2) NOT NULL,
-    category text NOT NULL, -- 'Utilities', 'Maintenance', 'Supplies', 'Salaries', etc.
-    expense_date date NOT NULL DEFAULT CURRENT_DATE,
-    recorded_by uuid REFERENCES public.users(userId),
-    created_at timestamp with time zone DEFAULT now()
-);
 CREATE TABLE public.audit_trails (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   service_request_id uuid,
@@ -314,7 +281,6 @@ CREATE TABLE public.ongoing_services (
   CONSTRAINT fk_ongoing_machine FOREIGN KEY (machine_id) REFERENCES public.machines(machine_id),
   CONSTRAINT fk_ongoing_drum FOREIGN KEY (drum_id) REFERENCES public.drums(drum_id)
 );
-
 CREATE TABLE public.milling_batches (
   batch_id uuid NOT NULL DEFAULT gen_random_uuid(),
   service_request_id uuid NOT NULL,
@@ -323,13 +289,64 @@ CREATE TABLE public.milling_batches (
   drum_id uuid NOT NULL,
   input_sacks integer NOT NULL,
   output_sacks integer NOT NULL,
-  estimated_duration_minutes integer,
   status character varying NOT NULL DEFAULT 'milling'::character varying CHECK (status::text = ANY (ARRAY['milling'::text, 'completed'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   completed_at timestamp with time zone,
+  estimated_duration_minutes integer DEFAULT 30,
   CONSTRAINT milling_batches_pkey PRIMARY KEY (batch_id),
   CONSTRAINT fk_mb_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
   CONSTRAINT fk_mb_operator FOREIGN KEY (operator_id) REFERENCES public.users(userId),
   CONSTRAINT fk_mb_machine FOREIGN KEY (machine_id) REFERENCES public.machines(machine_id),
   CONSTRAINT fk_mb_drum FOREIGN KEY (drum_id) REFERENCES public.drums(drum_id)
+);
+CREATE TABLE public.service_participant_financials (
+  participant_financial_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  service_request_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  share_amount numeric NOT NULL DEFAULT 0,
+  individual_expenses numeric NOT NULL DEFAULT 0,
+  total_due numeric NOT NULL DEFAULT 0,
+  amount_paid numeric NOT NULL DEFAULT 0,
+  status text NOT NULL DEFAULT 'unpaid'::text,
+  last_payment_at timestamp with time zone,
+  individual_expense_reason text,
+  CONSTRAINT service_participant_financials_pkey PRIMARY KEY (participant_financial_id),
+  CONSTRAINT service_participant_financials_service_request_id_fkey FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
+  CONSTRAINT service_participant_financials_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(userId)
+);
+CREATE TABLE public.participant_payments (
+  payment_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  participant_financial_id uuid,
+  service_request_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  amount numeric NOT NULL CHECK (amount > 0::numeric),
+  receipt_url text,
+  payment_date timestamp with time zone NOT NULL DEFAULT now(),
+  recorded_by uuid,
+  CONSTRAINT participant_payments_pkey PRIMARY KEY (payment_id),
+  CONSTRAINT participant_payments_participant_financial_id_fkey FOREIGN KEY (participant_financial_id) REFERENCES public.service_participant_financials(participant_financial_id),
+  CONSTRAINT participant_payments_service_request_id_fkey FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
+  CONSTRAINT participant_payments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(userId),
+  CONSTRAINT participant_payments_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(userId)
+);
+CREATE TABLE public.service_billing_items (
+  item_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  service_request_id uuid NOT NULL,
+  item_name text NOT NULL,
+  amount numeric NOT NULL CHECK (amount >= 0::numeric),
+  category text NOT NULL DEFAULT 'other'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT service_billing_items_pkey PRIMARY KEY (item_id),
+  CONSTRAINT service_billing_items_service_request_id_fkey FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id)
+);
+CREATE TABLE public.refinery_overhead_expenses (
+  expense_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  description text NOT NULL,
+  amount numeric NOT NULL CHECK (amount >= 0::numeric),
+  category text NOT NULL,
+  expense_date date NOT NULL DEFAULT CURRENT_DATE,
+  recorded_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT refinery_overhead_expenses_pkey PRIMARY KEY (expense_id),
+  CONSTRAINT refinery_overhead_expenses_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(userId)
 );

@@ -16,6 +16,9 @@ class ServiceRequestModel extends ServiceRequestEntity {
     required super.createdAt,
     required super.updatedAt,
     super.billingId,
+    super.emergencyReason,
+    super.emergencyStoppedAt,
+    super.emergencyResolvedAt,
     super.creatorName,
   });
 
@@ -35,7 +38,9 @@ class ServiceRequestModel extends ServiceRequestEntity {
     // Parse verifications if they exist (from join on operator_verified_services)
     final List<OperatorVerification> verificationList = [];
     if (json['operator_verified_services'] != null) {
-      final List<dynamic> verificationsRaw = json['operator_verified_services'] as List;
+      final raw = json['operator_verified_services'];
+      final List verificationsRaw = raw is List ? raw : [raw];
+
       for (var v in verificationsRaw) {
         verificationList.add(OperatorVerification(
           id: v['verification_id']?.toString() ?? '',
@@ -82,6 +87,19 @@ class ServiceRequestModel extends ServiceRequestEntity {
       finalSacks = latest.actualSacks;
     }
 
+    // Parse ongoing services for assigned operators
+    final List<String> assignedOperators = [];
+    if (json['ongoing_services'] != null) {
+      final raw = json['ongoing_services'];
+      final List ongoingRaw = raw is List ? raw : [raw];
+
+      for (var o in ongoingRaw) {
+        if (o['operator_id'] != null) {
+          assignedOperators.add(o['operator_id'].toString());
+        }
+      }
+    }
+
     return ServiceRequestModel(
       id: json['service_request_id']?.toString() ?? '',
       creatorId: json['user_id']?.toString() ?? '',
@@ -112,7 +130,7 @@ class ServiceRequestModel extends ServiceRequestEntity {
         unloadingCompletedAt: json['unloading_completed_at'] != null ? DateTime.parse(json['unloading_completed_at']) : null,
         estimatedTime: estimatedTime,
         scheduledDate: scheduledDate,
-        assignedOperatorIds: [],
+        assignedOperatorIds: assignedOperators,
         currentStage: ProcessingStage.values.firstWhere(
           (e) => e.name == (json['current_processing_stage']?.toString()),
           orElse: () => ProcessingStage.none,
@@ -129,6 +147,9 @@ class ServiceRequestModel extends ServiceRequestEntity {
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : DateTime.now(),
       billingId: json['billing_id']?.toString(),
+      emergencyReason: json['emergency_reason']?.toString(),
+      emergencyStoppedAt: json['emergency_stopped_at'] != null ? DateTime.parse(json['emergency_stopped_at']) : null,
+      emergencyResolvedAt: json['emergency_resolved_at'] != null ? DateTime.parse(json['emergency_resolved_at']) : null,
       creatorName: creatorName,
     );
   }
@@ -159,6 +180,9 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'miner_sacks_processed': processingDetails.minerSacksProcessed,
       'unloading_started_at': processingDetails.unloadingStartedAt?.toIso8601String(),
       'unloading_completed_at': processingDetails.unloadingCompletedAt?.toIso8601String(),
+      'emergency_reason': emergencyReason,
+      'emergency_stopped_at': emergencyStoppedAt?.toIso8601String(),
+      'emergency_resolved_at': emergencyResolvedAt?.toIso8601String(),
       'billing_id': billingId,
     };
   }
@@ -179,6 +203,10 @@ class ServiceRequestModel extends ServiceRequestEntity {
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
       billingId: entity.billingId,
+      emergencyReason: entity.emergencyReason,
+      emergencyStoppedAt: entity.emergencyStoppedAt,
+      emergencyResolvedAt: entity.emergencyResolvedAt,
+      creatorName: entity.creatorName,
     );
   }
 }

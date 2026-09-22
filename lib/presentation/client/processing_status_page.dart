@@ -121,4 +121,3 @@ class _ProcessingStatusPageState extends State<ProcessingStatusPage> {
     );
   }
 }
-}

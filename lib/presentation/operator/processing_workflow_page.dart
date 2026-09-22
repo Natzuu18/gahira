@@ -97,6 +97,8 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   @override
   Widget build(BuildContext context) {
+    final String? currentOperatorId = Supabase.instance.client.auth.currentUser?.id;
+
     // 1. Available Jobs: Requests that are 'queued' or 'scheduled'
     final allAvailable = _requests.where((r) {
       return r.status == ServiceRequestStatus.queued || 
@@ -121,8 +123,9 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
     // 2. My Active Processing: Processing requests CLAIMED by ME
     final myActiveProcessing = _requests.where((r) => 
-      r.status == ServiceRequestStatus.processing
-      // Additional check: operator_id in ongoing_services matches ME (if we had that logic)
+      (r.status == ServiceRequestStatus.processing || r.status == ServiceRequestStatus.emergencyStop) &&
+      currentOperatorId != null &&
+      r.processingDetails.assignedOperatorIds.contains(currentOperatorId)
     ).toList();
 
     return Scaffold(
@@ -155,7 +158,17 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  _buildSectionHeader('My Active Processing', Icons.play_circle_fill_rounded, Colors.green),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionHeader('My Active Processing', Icons.play_circle_fill_rounded, Colors.green),
+                      TextButton.icon(
+                        onPressed: () => _showHistory(currentOperatorId),
+                        icon: const Icon(Icons.history_rounded, size: 18, color: Colors.blue),
+                        label: const Text('Claim History', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ],
+                  ),
                   if (myActiveProcessing.isEmpty)
                     _buildEmptySection('You are not currently processing any jobs.')
                   else
@@ -406,6 +419,83 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     if (result == true) {
       _loadTasks();
     }
+  }
+
+  void _showHistory(String? operatorId) {
+    if (operatorId == null) return;
+    
+    final myHistory = _requests.where((r) => 
+      (r.status == ServiceRequestStatus.processingCompleted || 
+       r.status == ServiceRequestStatus.goldHandoff || 
+       r.status == ServiceRequestStatus.completed) &&
+      r.processingDetails.assignedOperatorIds.contains(operatorId)
+    ).toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.bgColor,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: context.mutedTextColor.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded, color: kGold),
+                  SizedBox(width: 12),
+                  Text('CLAIM HISTORY', style: TextStyle(color: kGold, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: myHistory.isEmpty 
+                ? Center(child: Text('No completed claims found.', style: TextStyle(color: context.mutedTextColor)))
+                : ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: myHistory.length,
+                    itemBuilder: (context, index) {
+                      final r = myHistory[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: context.surfaceColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.textColor.withOpacity(0.05)),
+                        ),
+                        child: Row(
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(r.materialDetails.sourceType ?? 'N/A', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+                                Text('ID: ${r.id.substring(0,8).toUpperCase()}', style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
+                              ],
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                              child: Text(r.status.name.toUpperCase(), style: const TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _getActionLabel(ServiceRequestEntity request) {

@@ -213,6 +213,104 @@ class SupabaseServiceRequestRepository {
     }
   }
 
+  Future<Either<Failure, void>> triggerEmergencyStop({
+    String? requestId,
+    required String operatorId,
+    required String reason,
+    String? machineId,
+    String? drumId,
+    bool stopEntireMachine = false,
+  }) async {
+    try {
+      final now = DateTime.now().toIso8601String();
+
+      if (stopEntireMachine && machineId != null) {
+        // --- MACHINE-WIDE STOP ---
+        
+        // 1. Mark Machine as emergency stop
+        await _client.from('machines').update({'status': 'emergency_stop'}).eq('machine_id', machineId);
+
+        // 2. Mark ALL Drums of this machine as emergency stop
+        await _client.from('drums').update({'status': 'emergency_stop'}).eq('machine_id', machineId);
+
+        // 3. Find all active service requests currently using ANY drum on this machine
+        final drumsResponse = await _client.from('drums').select('drum_id').eq('machine_id', machineId);
+        final drumIds = (drumsResponse as List).map((d) => d['drum_id'].toString()).toList();
+
+        if (drumIds.isNotEmpty) {
+          final activeBatches = await _client
+              .from('milling_batches')
+              .select('service_request_id')
+              .filter('drum_id', 'in', drumIds)
+              .eq('status', 'milling');
+          
+          final requestIds = (activeBatches as List).map((b) => b['service_request_id'].toString()).toSet().toList();
+
+          // 4. Update all these service requests to emergencyStop
+          if (requestIds.isNotEmpty) {
+            await _client.from('service_requests').update({
+              'status': 'emergencyStop',
+              'emergency_reason': 'MACHINE FAILURE: $reason',
+              'emergency_stopped_at': now,
+              'updated_at': now,
+            }).filter('service_request_id', 'in', requestIds);
+
+            for (final rid in requestIds) {
+              await logAuditTrail(
+                requestId: rid,
+                userId: operatorId,
+                action: 'EMERGENCY_STOP_MACHINE',
+                previousStatus: 'processing',
+                newStatus: 'emergencyStop',
+                remarks: reason,
+              );
+            }
+          }
+        }
+      } else if (drumId != null) {
+        // --- SPECIFIC DRUM STOP ---
+        
+        // 1. Mark the specific drum
+        await _client.from('drums').update({'status': 'emergency_stop'}).eq('drum_id', drumId);
+
+        // 2. Find the active service request using this drum
+        final activeBatchResponse = await _client
+            .from('milling_batches')
+            .select('service_request_id')
+            .eq('drum_id', drumId)
+            .eq('status', 'milling');
+        
+        final List batches = activeBatchResponse as List;
+        
+        if (batches.isNotEmpty) {
+          final rid = batches.first['service_request_id'].toString();
+          
+          // 3. Update the specific service request
+          await _client.from('service_requests').update({
+            'status': 'emergencyStop',
+            'emergency_reason': 'DRUM FAILURE: $reason',
+            'emergency_stopped_at': now,
+            'updated_at': now,
+          }).eq('service_request_id', rid);
+
+          // 4. Log Audit
+          await logAuditTrail(
+            requestId: rid,
+            userId: operatorId,
+            action: 'EMERGENCY_STOP_DRUM',
+            previousStatus: 'processing',
+            newStatus: 'emergencyStop',
+            remarks: reason,
+          );
+        }
+      }
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
 
   Future<Either<Failure, void>> updateMillQueueStatus({
     required String requestId,
@@ -354,6 +452,102 @@ class SupabaseServiceRequestRepository {
       return Right(urls);
     } catch (e) {
       return Left(ServerFailure('Photo upload failed: ${e.toString()}'));
+    }
+  }
+
+  Future<Either<Failure, void>> resolveEmergencyStop({
+    required String requestId,
+    required String adminId,
+  }) async {
+    try {
+      final now = DateTime.now().toIso8601String();
+
+      // 1. Get the current request to check reason and find equipment
+      final srRes = await _client.from('service_requests').select('*').eq('service_request_id', requestId).single();
+      final reason = srRes['emergency_reason']?.toString() ?? '';
+      final isMachineFailure = reason.contains('MACHINE FAILURE:');
+
+      // 2. Resolve the SR
+      await _client.from('service_requests').update({
+        'emergency_resolved_at': now,
+        'updated_at': now,
+      }).eq('service_request_id', requestId);
+
+      // 3. Reset Equipment
+      final batchesRes = await getMillingBatches(requestId);
+      await batchesRes.fold((_) async {}, (batches) async {
+        final active = batches.where((b) => b['status'] == 'milling').toList();
+        if (active.isNotEmpty) {
+          final drumId = active.first['drum_id'];
+          final machineId = active.first['machine_id'];
+
+          if (isMachineFailure && machineId != null) {
+            // Reset entire machine and all its drums
+            await _client.from('machines').update({'status': 'in_use'}).eq('machine_id', machineId);
+            await _client.from('drums').update({'status': 'in_use'}).eq('machine_id', machineId);
+            
+            // Also mark other SRs on this machine as resolved
+            final drumsOfMachine = await _client.from('drums').select('drum_id').eq('machine_id', machineId);
+            final dIds = (drumsOfMachine as List).map((d) => d['drum_id'].toString()).toList();
+            
+            final otherBatches = await _client.from('milling_batches').select('service_request_id').filter('drum_id', 'in', dIds).eq('status', 'milling');
+            final otherSrs = (otherBatches as List).map((b) => b['service_request_id'].toString()).toSet().toList();
+            
+            if (otherSrs.isNotEmpty) {
+              await _client.from('service_requests').update({'emergency_resolved_at': now}).filter('service_request_id', 'in', otherSrs);
+            }
+          } else {
+            // Reset only this specific drum
+            await _client.from('drums').update({'status': 'in_use'}).eq('drum_id', drumId);
+            if (machineId != null) {
+              await _client.from('machines').update({'status': 'in_use'}).eq('machine_id', machineId);
+            }
+          }
+        }
+      });
+
+      await logAuditTrail(
+        requestId: requestId,
+        userId: adminId,
+        action: 'EMERGENCY_RESOLVED',
+        previousStatus: 'emergencyStop',
+        newStatus: 'emergencyStop',
+        remarks: 'Admin resolved issue. Systems restored.',
+      );
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> resumeProcessing({
+    required String requestId,
+    required String operatorId,
+  }) async {
+    try {
+      final now = DateTime.now().toIso8601String();
+
+      await _client.from('service_requests').update({
+        'status': 'processing',
+        'emergency_reason': null,
+        'emergency_stopped_at': null,
+        'emergency_resolved_at': null,
+        'updated_at': now,
+      }).eq('service_request_id', requestId);
+
+      await logAuditTrail(
+        requestId: requestId,
+        userId: operatorId,
+        action: 'RESUME_PROCESSING',
+        previousStatus: 'emergencyStop',
+        newStatus: 'processing',
+        remarks: 'Operator resumed processing.',
+      );
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
     }
   }
 }

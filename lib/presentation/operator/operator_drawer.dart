@@ -11,6 +11,7 @@ import 'equipment_maintenance_page.dart';
 import 'workforce_shift_page.dart';
 import 'operator_billing_page.dart';
 import 'sms_notification_page.dart';
+import 'emergency_stop_dialog.dart';
 
 enum OperatorMenu { 
   dashboard, 
@@ -151,6 +152,26 @@ class OperatorDrawer extends StatelessWidget {
             ),
 
             const Spacer(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => const EmergencyStopDialog(),
+                  );
+                },
+                icon: const Icon(Icons.warning_amber_rounded),
+                label: const Text('EMERGENCY STOP', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Divider(color: kGold.withOpacity(0.15)),

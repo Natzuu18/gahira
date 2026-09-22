@@ -538,4 +538,36 @@ class ServiceRequestService {
       },
     );
   }
+
+  Future<Either<Failure, void>> triggerEmergencyStop({
+    String? requestId,
+    required String operatorId,
+    required String reason,
+    String? machineId,
+    String? drumId,
+    bool stopEntireMachine = false,
+  }) async {
+    return _repository.triggerEmergencyStop(
+      requestId: requestId,
+      operatorId: operatorId,
+      reason: reason,
+      machineId: machineId,
+      drumId: drumId,
+      stopEntireMachine: stopEntireMachine,
+    );
+  }
+
+  Future<Either<Failure, void>> resolveEmergencyStop({
+    required String requestId,
+    required String adminId,
+  }) async {
+    return _repository.resolveEmergencyStop(requestId: requestId, adminId: adminId);
+  }
+
+  Future<Either<Failure, void>> resumeProcessing({
+    required String requestId,
+    required String operatorId,
+  }) async {
+    return _repository.resumeProcessing(requestId: requestId, operatorId: operatorId);
+  }
 }

@@ -173,7 +173,7 @@ CREATE TABLE public.service_requests (
   start_time time without time zone,
   end_time time without time zone,
   quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
-  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::text, 'pending'::text, 'pendingOperatorVerification'::text, 'returnedToMiner'::text, 'accepted'::text, 'verified'::text, 'queued'::text, 'scheduled'::text, 'assigned'::text, 'processing'::text, 'processingCompleted'::text, 'goldHandoff'::text, 'completed'::text, 'cancelled'::text])),
+  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::text, 'pending'::text, 'pendingOperatorVerification'::text, 'returnedToMiner'::text, 'accepted'::text, 'verified'::text, 'queued'::text, 'scheduled'::text, 'assigned'::text, 'processing'::text, 'processingCompleted'::text, 'goldHandoff'::text, 'partiallyPaid'::text, 'completed'::text, 'cancelled'::text])),
   approved_by uuid,
   approved_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -194,11 +194,67 @@ CREATE TABLE public.service_requests (
   miner_sacks_processed integer DEFAULT 0,
   unloading_started_at timestamp with time zone,
   unloading_completed_at timestamp with time zone,
+
+  -- Financial Handling Fields (Owner App)
+  gold_weight_grams numeric(10,2),
+  gold_buying_price numeric(10,2),
+  gold_purchase_value numeric(10,2),
+  deduct_bill_from_gold boolean DEFAULT false,
+  processing_fee numeric(10,2) DEFAULT 0,
+  other_expenses numeric(10,2) DEFAULT 0,
+  total_bill numeric(10,2) DEFAULT 0,
+  amount_to_miner numeric(10,2) DEFAULT 0,
+  payment_amount numeric(10,2) DEFAULT 0,
+  remaining_balance numeric(10,2) DEFAULT 0,
+  payment_receipt_url text,
+  payment_date timestamp with time zone,
+
   CONSTRAINT service_requests_pkey PRIMARY KEY (service_request_id),
   CONSTRAINT fk_service_request_user FOREIGN KEY (user_id) REFERENCES public.users(userId),
   CONSTRAINT fk_service_request_availability FOREIGN KEY (service_availability_id) REFERENCES public.service_availability(service_availability_id),
   CONSTRAINT fk_service_request_approved_by FOREIGN KEY (approved_by) REFERENCES public.users(userId),
   CONSTRAINT service_requests_assisted_by_operator_id_fkey FOREIGN KEY (assisted_by_operator_id) REFERENCES public.users(userId)
+);
+
+CREATE TABLE public.service_participant_financials (
+    participant_financial_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_request_id uuid REFERENCES public.service_requests(service_request_id) ON DELETE CASCADE,
+    user_id uuid REFERENCES public.users(userId),
+    share_amount numeric(10,2) DEFAULT 0,
+    individual_expenses numeric(10,2) DEFAULT 0,
+    total_due numeric(10,2) DEFAULT 0,
+    amount_paid numeric(10,2) DEFAULT 0,
+    status text DEFAULT 'unpaid',
+    last_payment_at timestamp with time zone,
+    UNIQUE(service_request_id, user_id)
+);
+
+CREATE TABLE public.participant_payments (
+    payment_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    participant_financial_id uuid REFERENCES public.service_participant_financials(participant_financial_id) ON DELETE CASCADE,
+    amount numeric(10,2) NOT NULL,
+    receipt_url text,
+    payment_date timestamp with time zone DEFAULT now(),
+    recorded_by uuid REFERENCES public.users(userId)
+);
+
+CREATE TABLE public.service_billing_items (
+    item_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_request_id uuid REFERENCES public.service_requests(service_request_id) ON DELETE CASCADE,
+    item_name text NOT NULL,
+    amount numeric(10,2) NOT NULL,
+    category text DEFAULT 'other', -- 'processing', 'maintenance', 'material', 'other'
+    created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.refinery_overhead_expenses (
+    expense_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    description text NOT NULL,
+    amount numeric(10,2) NOT NULL,
+    category text NOT NULL, -- 'Utilities', 'Maintenance', 'Supplies', 'Salaries', etc.
+    expense_date date NOT NULL DEFAULT CURRENT_DATE,
+    recorded_by uuid REFERENCES public.users(userId),
+    created_at timestamp with time zone DEFAULT now()
 );
 CREATE TABLE public.audit_trails (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

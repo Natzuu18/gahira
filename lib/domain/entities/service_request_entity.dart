@@ -12,6 +12,7 @@ enum ServiceRequestStatus {
   processing,
   processingCompleted,
   goldHandoff,
+  partiallyPaid,
   completed,
   cancelled
 }
@@ -34,6 +35,7 @@ class ServiceRequestEntity extends Equatable {
   final MaterialDetails materialDetails;
   final ProcessingDetails processingDetails;
   final VerificationDetails? verificationDetails;
+  final FinancialDetails? financialDetails;
   final ServiceRequestStatus status;
   final bool isOperatorAssisted;
   final String? assistedByOperatorId;
@@ -51,6 +53,7 @@ class ServiceRequestEntity extends Equatable {
     required this.materialDetails,
     required this.processingDetails,
     this.verificationDetails,
+    this.financialDetails,
     required this.status,
     this.isOperatorAssisted = false,
     this.assistedByOperatorId,
@@ -69,6 +72,7 @@ class ServiceRequestEntity extends Equatable {
     MaterialDetails? materialDetails,
     ProcessingDetails? processingDetails,
     VerificationDetails? verificationDetails,
+    FinancialDetails? financialDetails,
     ServiceRequestStatus? status,
     bool? isOperatorAssisted,
     String? assistedByOperatorId,
@@ -87,6 +91,7 @@ class ServiceRequestEntity extends Equatable {
       materialDetails: materialDetails ?? this.materialDetails,
       processingDetails: processingDetails ?? this.processingDetails,
       verificationDetails: verificationDetails ?? this.verificationDetails,
+      financialDetails: financialDetails ?? this.financialDetails,
       status: status ?? this.status,
       isOperatorAssisted: isOperatorAssisted ?? this.isOperatorAssisted,
       assistedByOperatorId: assistedByOperatorId ?? this.assistedByOperatorId,
@@ -107,6 +112,7 @@ class ServiceRequestEntity extends Equatable {
         materialDetails,
         processingDetails,
         verificationDetails,
+        financialDetails,
         status,
         isOperatorAssisted,
         assistedByOperatorId,
@@ -278,6 +284,82 @@ class ProcessingDetails extends Equatable {
   @override
   List<Object?> get props =>
       [requirements, processingNotes, sackedQuantity, minerSacksProcessed, unloadingStartedAt, unloadingCompletedAt, estimatedTime, scheduledDate, assignedOperatorIds, currentStage];
+}
+
+class FinancialDetails extends Equatable {
+  final double? goldWeightGrams;
+  final double? goldBuyingPrice;
+  final double? goldPurchaseValue;
+  final bool deductBillFromGold;
+  
+  final double processingFee;
+  final double otherExpenses;
+  final double totalBill;
+  
+  final double amountToMiner;
+  
+  final double paymentAmount;
+  final String? paymentReceiptUrl;
+  final DateTime? paymentDate;
+  
+  // Group-specific fields
+  final List<ParticipantFinancial>? participantBreakdown;
+
+  const FinancialDetails({
+    this.goldWeightGrams,
+    this.goldBuyingPrice,
+    this.goldPurchaseValue,
+    this.deductBillFromGold = false,
+    this.processingFee = 0,
+    this.otherExpenses = 0,
+    this.totalBill = 0,
+    this.amountToMiner = 0,
+    this.paymentAmount = 0,
+    this.paymentReceiptUrl,
+    this.paymentDate,
+    this.participantBreakdown,
+  });
+
+  @override
+  List<Object?> get props => [
+        goldWeightGrams,
+        goldBuyingPrice,
+        goldPurchaseValue,
+        deductBillFromGold,
+        processingFee,
+        otherExpenses,
+        totalBill,
+        amountToMiner,
+        paymentAmount,
+        paymentReceiptUrl,
+        paymentDate,
+        participantBreakdown,
+      ];
+}
+
+class ParticipantFinancial extends Equatable {
+  final String userId;
+  final String? userName;
+  final double shareAmount;
+  final double individualExpenses;
+  final String? individualExpenseReason;
+  final double totalDue;
+  final double amountPaid;
+  final String status; // paid, partial, unpaid
+
+  const ParticipantFinancial({
+    required this.userId,
+    this.userName,
+    this.shareAmount = 0,
+    this.individualExpenses = 0,
+    this.individualExpenseReason,
+    this.totalDue = 0,
+    this.amountPaid = 0,
+    this.status = 'unpaid',
+  });
+
+  @override
+  List<Object?> get props => [userId, userName, shareAmount, individualExpenses, individualExpenseReason, totalDue, amountPaid, status];
 }
 
 class VerificationDetails extends Equatable {

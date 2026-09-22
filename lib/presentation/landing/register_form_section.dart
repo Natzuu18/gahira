@@ -947,7 +947,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           ],
         ),
 
-        // --- OTP entry, shown after a code has been sent ---
+          // --- OTP entry, shown after a code has been sent ---
         if (_otpSent && !_isPhoneVerified) ...[
           const SizedBox(height: 10),
           Row(

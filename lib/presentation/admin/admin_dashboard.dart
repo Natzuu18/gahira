@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/adminDrawer.dart';
+import 'billing_page.dart';
 
 // Gahira Ball Mill Management System - Admin Dashboard
 // Placeholder landing page shown after a successful login.
@@ -109,7 +110,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               // --- FINANCIALS ---
               _buildSectionTitle('Financials', Icons.account_balance_wallet_outlined),
               _buildFinancialItem('Payment Verifications', '02 awaiting', kGold, Icons.fact_check_outlined),
-              _buildFinancialItem('Pending Billing', '04 invoices', Colors.orange, Icons.receipt_long_outlined),
+              _buildFinancialItem(
+                'Financial Handling', 
+                '04 pending', 
+                Colors.orange, 
+                Icons.receipt_long_outlined,
+                onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+              ),
+              _buildFinancialItem('Total Gold Purchased', '₱128,500.00', Colors.green, Icons.paid_outlined),
               _buildFinancialItem('Unpaid/Partial Bills', '₱45,200.00', Colors.redAccent, Icons.money_off_csred_rounded),
               const SizedBox(height: 24),
 
@@ -226,30 +234,39 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-  Widget _buildFinancialItem(String label, String value, Color color, IconData icon) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.textColor.withOpacity(0.05)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: color.withOpacity(0.7)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.w500),
+  Widget _buildFinancialItem(String label, String value, Color color, IconData icon, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: context.textColor.withOpacity(0.05)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color.withOpacity(0.7)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
             ),
-          ),
-          Text(
-            value,
-            style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
-          ),
-        ],
+            Text(
+              value,
+              style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+            if (onTap != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Icon(Icons.chevron_right, size: 16, color: context.mutedTextColor),
+              ),
+          ],
+        ),
       ),
     );
   }

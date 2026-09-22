@@ -13,6 +13,7 @@ import '../shared_widgets/appColor.dart';
 import '../shared_widgets/adminDrawer.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/audit_trail_viewer.dart';
+import '../admin/billing_page.dart';
 import '../shared_widgets/monitoring_page.dart';
 
 class ServiceRequestPage extends StatefulWidget {
@@ -334,19 +335,39 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
               request.status == ServiceRequestStatus.processingCompleted)
             Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonitoringPage(request: request, title: 'ADMIN MONITORING'))),
-                  icon: const Icon(Icons.monitor_heart_outlined, size: 18),
-                  label: const Text('MONITOR LIVE PROCESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.withOpacity(0.1),
-                    foregroundColor: Colors.blue,
-                    side: BorderSide(color: Colors.blue.withOpacity(0.3)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonitoringPage(request: request, title: 'ADMIN MONITORING'))),
+                      icon: const Icon(Icons.monitor_heart_outlined, size: 18),
+                      label: const Text('MONITOR LIVE PROCESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.withOpacity(0.1),
+                        foregroundColor: Colors.blue,
+                        side: BorderSide(color: Colors.blue.withOpacity(0.3)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
                   ),
-                ),
+                  if (request.status == ServiceRequestStatus.processingCompleted) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+                        icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                        label: const Text('PROCEED TO FINANCIAL HANDLING', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kGold,
+                          foregroundColor: kBlack,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           const Divider(),
@@ -395,19 +416,39 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
               request.status == ServiceRequestStatus.processingCompleted)
             Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonitoringPage(request: request, title: 'ADMIN MONITORING'))),
-                  icon: const Icon(Icons.monitor_heart_outlined, size: 18),
-                  label: const Text('MONITOR LIVE PROCESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.withOpacity(0.1),
-                    foregroundColor: Colors.blue,
-                    side: BorderSide(color: Colors.blue.withOpacity(0.3)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonitoringPage(request: request, title: 'ADMIN MONITORING'))),
+                      icon: const Icon(Icons.monitor_heart_outlined, size: 18),
+                      label: const Text('MONITOR LIVE PROCESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.withOpacity(0.1),
+                        foregroundColor: Colors.blue,
+                        side: BorderSide(color: Colors.blue.withOpacity(0.3)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
                   ),
-                ),
+                  if (request.status == ServiceRequestStatus.processingCompleted) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+                        icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                        label: const Text('PROCEED TO FINANCIAL HANDLING', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kGold,
+                          foregroundColor: kBlack,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           const Divider(),

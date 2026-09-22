@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../infrastructure/repositories/supabase_processing_repository.dart';
 import '../../shared_widgets/appColor.dart';
 import '../../shared_widgets/adminDrawer.dart';
+import '../billing_page.dart';
 import '../../shared_widgets/themeToggleButton.dart';
 
 class CompletedProcessingPage extends StatefulWidget {
@@ -94,6 +95,11 @@ class _CompletedProcessingPageState extends State<CompletedProcessingPage> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          ElevatedButton(
+            onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+            style: ElevatedButton.styleFrom(backgroundColor: kGold, foregroundColor: kBlack),
+            child: const Text('Proceed to Billing'),
+          ),
         ],
       ),
     );

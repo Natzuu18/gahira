@@ -15,7 +15,7 @@ class SupabaseServiceRequestRepository {
     try {
       final response = await _client
           .from('service_requests')
-          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*)');
+          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))');
       
       print('--- FETCHING SERVICE REQUESTS ---');
       // Removed big RAW DATA print to prevent hangs
@@ -318,6 +318,67 @@ class SupabaseServiceRequestRepository {
   }) async {
     try {
       await _client.from('mill_queue').update({'status': status}).eq('service_request_id', requestId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> upsertParticipantFinancials(List<Map<String, dynamic>> records) async {
+    try {
+      await _client.from('service_participant_financials').upsert(records);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> saveBillingItems(List<Map<String, dynamic>> items) async {
+    try {
+      await _client.from('service_billing_items').insert(items);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>> getAllBillingExpenses() async {
+    try {
+      final response = await _client
+          .from('service_billing_items')
+          .select('*, service_requests(service_request_id, user_id, users(fname, lname))')
+          .order('created_at', ascending: false);
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> recordParticipantPayment(Map<String, dynamic> payment) async {
+    try {
+      await _client.from('participant_payments').insert(payment);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> updateParticipantFinancial({
+    required String requestId,
+    required String userId,
+    required double amountPaid,
+    required String status,
+  }) async {
+    try {
+      await _client
+          .from('service_participant_financials')
+          .update({
+            'amount_paid': amountPaid,
+            'status': status,
+            'last_payment_at': DateTime.now().toIso8601String(),
+          })
+          .eq('service_request_id', requestId)
+          .eq('user_id', userId);
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));

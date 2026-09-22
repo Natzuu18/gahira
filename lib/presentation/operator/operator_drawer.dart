@@ -9,7 +9,6 @@ import 'client_service_page.dart';
 import 'processing_workflow_page.dart';
 import 'equipment_maintenance_page.dart';
 import 'workforce_shift_page.dart';
-import 'operator_billing_page.dart';
 import 'sms_notification_page.dart';
 import 'emergency_stop_dialog.dart';
 
@@ -19,8 +18,7 @@ enum OperatorMenu {
   clientService, 
   processing, 
   equipment, 
-  workforce, 
-  billing, 
+  workforce,
   sms 
 }
 
@@ -135,13 +133,6 @@ class OperatorDrawer extends StatelessWidget {
               label: 'Workforce & Shifts',
               menu: OperatorMenu.workforce,
               page: const WorkforceShiftPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.receipt_long_outlined,
-              label: 'Billing',
-              menu: OperatorMenu.billing,
-              page: const OperatorBillingPage(),
             ),
             _buildItem(
               context,

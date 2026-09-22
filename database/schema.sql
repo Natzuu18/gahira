@@ -173,7 +173,7 @@ CREATE TABLE public.service_requests (
   start_time time without time zone,
   end_time time without time zone,
   quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
-  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::character varying, 'pending'::character varying, 'pendingOperatorVerification'::character varying, 'returnedToMiner'::character varying, 'accepted'::character varying, 'verified'::character varying, 'queued'::character varying, 'scheduled'::character varying, 'assigned'::character varying, 'processing'::character varying, 'processingCompleted'::character varying, 'goldHandoff'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'emergencyStop'::character varying]::text[])),
+  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::character varying, 'pending'::character varying, 'pendingOperatorVerification'::character varying, 'returnedToMiner'::character varying, 'accepted'::character varying, 'verified'::character varying, 'queued'::character varying, 'scheduled'::character varying, 'assigned'::character varying, 'processing'::character varying, 'processingCompleted'::character varying, 'goldHandoff'::character varying, 'partiallyPaid'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'emergencyStop'::character varying]::text[])),
   approved_by uuid,
   approved_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -196,27 +196,33 @@ CREATE TABLE public.service_requests (
   miner_sacks_processed integer DEFAULT 0,
   unloading_started_at timestamp with time zone,
   unloading_completed_at timestamp with time zone,
+
+  -- Emergency Stop Fields
   emergency_reason text,
   emergency_stopped_at timestamp with time zone,
-  gold_weight_grams numeric,
-  gold_buying_price numeric,
-  gold_purchase_value numeric,
+
+  -- Financial Handling Fields (Owner App)
+  gold_weight_grams numeric(10,2),
+  gold_buying_price numeric(10,2),
+  gold_purchase_value numeric(10,2),
   deduct_bill_from_gold boolean DEFAULT false,
-  processing_fee numeric DEFAULT 0,
-  other_expenses numeric DEFAULT 0,
-  total_bill numeric DEFAULT 0,
-  amount_to_miner numeric DEFAULT 0,
-  payment_amount numeric DEFAULT 0,
-  remaining_balance numeric DEFAULT 0,
+  processing_fee numeric(10,2) DEFAULT 0,
+  other_expenses numeric(10,2) DEFAULT 0,
+  total_bill numeric(10,2) DEFAULT 0,
+  amount_to_miner numeric(10,2) DEFAULT 0,
+  payment_amount numeric(10,2) DEFAULT 0,
+  remaining_balance numeric(10,2) DEFAULT 0,
   payment_receipt_url text,
   payment_date timestamp with time zone,
   emergency_resolved_at timestamp with time zone,
+
   CONSTRAINT service_requests_pkey PRIMARY KEY (service_request_id),
   CONSTRAINT fk_service_request_user FOREIGN KEY (user_id) REFERENCES public.users(userId),
   CONSTRAINT fk_service_request_availability FOREIGN KEY (service_availability_id) REFERENCES public.service_availability(service_availability_id),
   CONSTRAINT fk_service_request_approved_by FOREIGN KEY (approved_by) REFERENCES public.users(userId),
   CONSTRAINT service_requests_assisted_by_operator_id_fkey FOREIGN KEY (assisted_by_operator_id) REFERENCES public.users(userId)
 );
+
 CREATE TABLE public.audit_trails (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   service_request_id uuid,

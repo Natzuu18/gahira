@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../shared_widgets/appColor.dart';

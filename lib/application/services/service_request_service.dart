@@ -33,7 +33,9 @@ class ServiceRequestService {
     // 1. Verify PIN
     final pinValid = await _repository.verifyUserPin(creatorId, pin);
     if (pinValid.isLeft()) return Left((pinValid as Left<Failure, bool>).value);
-    if (!(pinValid as Right<Failure, bool>).value) return const Left(ValidationFailure('Incorrect PIN'));
+    if (!(pinValid as Right<Failure, bool>).value) {
+      return const Left(ValidationFailure('Incorrect PIN'));
+    }
 
     // 2. Create Request model
     final model = ServiceRequestModel(
@@ -68,38 +70,39 @@ class ServiceRequestService {
 
     // 3. Save to Repository
     final result = await _repository.createServiceRequest(model);
-    if (result.isLeft()) return result;
-    
-    final created = (result as Right<Failure, ServiceRequestEntity>).value;
+    return result.fold(
+      (l) => Left(l),
+      (created) async {
+        // 4. Direct Verification if assisted
+        if (isOperatorAssisted && assistedByOperatorId != null) {
+          await _repository.submitOperatorVerification(
+            requestId: created.id,
+            operatorId: assistedByOperatorId,
+            actualSacks: numberOfSacks ?? 0,
+            condition: materialCondition ?? 'Rocky',
+            state: materialState ?? 'Dry',
+            source: source ?? 'N/A',
+            isAccurate: true,
+            processingEstimate: estimatedTime ?? '3 Hours',
+            notes: '${assistedByOperatorName ?? "Operator"} operator assisted request',
+          );
+        }
 
-    // 4. Direct Verification if assisted
-    if (isOperatorAssisted && assistedByOperatorId != null) {
-      await _repository.submitOperatorVerification(
-        requestId: created.id,
-        operatorId: assistedByOperatorId,
-        actualSacks: numberOfSacks ?? 0,
-        condition: materialCondition ?? 'Rocky',
-        state: materialState ?? 'Dry',
-        source: source ?? 'N/A',
-        isAccurate: true,
-        processingEstimate: estimatedTime ?? '3 Hours',
-        notes: '${assistedByOperatorName ?? "Operator"} operator assisted request',
-      );
-    }
+        // 5. Log Audit Trail
+        await _repository.logAuditTrail(
+          requestId: created.id,
+          userId: assistedByOperatorId ?? creatorId,
+          action: isOperatorAssisted ? 'OPERATOR_ASSISTED_CREATE' : 'CREATE_REQUEST',
+          previousStatus: 'None',
+          newStatus: _enumName(model.status),
+          remarks: isOperatorAssisted
+              ? 'Created by Operator $assistedByOperatorId on behalf of Miner $creatorId'
+              : null,
+        );
 
-    // 5. Log Audit Trail
-    await _repository.logAuditTrail(
-      requestId: created.id,
-      userId: assistedByOperatorId ?? creatorId,
-      action: isOperatorAssisted ? 'OPERATOR_ASSISTED_CREATE' : 'CREATE_REQUEST',
-      previousStatus: 'None',
-      newStatus: _enumName(model.status),
-      remarks: isOperatorAssisted
-          ? 'Created by Operator $assistedByOperatorId on behalf of Miner $creatorId'
-          : null,
+        return Right(created);
+      },
     );
-
-    return Right(created);
   }
 
   Future<Either<Failure, ServiceRequestEntity>> updateRequest({
@@ -118,7 +121,9 @@ class ServiceRequestService {
     // 1. Verify PIN
     final pinValid = await _repository.verifyUserPin(creatorId, pin);
     if (pinValid.isLeft()) return Left((pinValid as Left<Failure, bool>).value);
-    if (!(pinValid as Right<Failure, bool>).value) return const Left(ValidationFailure('Incorrect PIN'));
+    if (!(pinValid as Right<Failure, bool>).value) {
+      return const Left(ValidationFailure('Incorrect PIN'));
+    }
 
     final model = ServiceRequestModel(
       id: requestId,
@@ -143,20 +148,20 @@ class ServiceRequestService {
     );
 
     final result = await _repository.updateServiceRequest(model);
-    if (result.isLeft()) return result;
-
-    final updated = (result as Right<Failure, ServiceRequestEntity>).value;
-
-    await _repository.logAuditTrail(
-      requestId: updated.id,
-      userId: creatorId,
-      action: 'UPDATE_REQUEST',
-      previousStatus: 'Unknown',
-      newStatus: _enumName(updated.status),
-      remarks: 'Request details updated by miner',
+    return result.fold(
+      (l) => Left(l),
+      (updated) async {
+        await _repository.logAuditTrail(
+          requestId: updated.id,
+          userId: creatorId,
+          action: 'UPDATE_REQUEST',
+          previousStatus: 'Unknown',
+          newStatus: _enumName(updated.status),
+          remarks: 'Request details updated by miner',
+        );
+        return Right(updated);
+      },
     );
-
-    return Right(updated);
   }
 
   Future<Either<Failure, void>> verifyMaterial({
@@ -175,7 +180,9 @@ class ServiceRequestService {
     // 1. Verify PIN
     final pinValid = await _repository.verifyUserPin(operatorId, pin);
     if (pinValid.isLeft()) return Left((pinValid as Left<Failure, bool>).value);
-    if (!(pinValid as Right<Failure, bool>).value) return const Left(ValidationFailure('Incorrect PIN'));
+    if (!(pinValid as Right<Failure, bool>).value) {
+      return const Left(ValidationFailure('Incorrect PIN'));
+    }
 
     const newStatus = ServiceRequestStatus.verified;
 
@@ -232,16 +239,19 @@ class ServiceRequestService {
       userId: minerId,
     );
 
-    if (result.isLeft()) return result;
-
-    await _repository.logAuditTrail(
-      requestId: requestId,
-      userId: minerId,
-      action: accept ? 'ACCEPT_CORRECTIONS' : 'CANCEL_REQUEST',
-      previousStatus: currentStatus,
-      newStatus: _enumName(newStatus),
+    return result.fold(
+      (l) => Left(l),
+      (_) async {
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: minerId,
+          action: accept ? 'ACCEPT_CORRECTIONS' : 'CANCEL_REQUEST',
+          previousStatus: currentStatus,
+          newStatus: _enumName(newStatus),
+        );
+        return const Right(null);
+      },
     );
-    return const Right(null);
   }
 
   Future<Either<Failure, void>> addToGeneralQueue({
@@ -255,25 +265,31 @@ class ServiceRequestService {
       userId: userId,
     );
 
-    if (statusResult.isLeft()) return statusResult;
+    return statusResult.fold(
+      (l) => Left(l),
+      (_) async {
+        final queueResult = await _repository.addToMillQueue(
+          requestId: requestId,
+          userId: userId,
+          queueType: 'general',
+        );
 
-    final queueResult = await _repository.addToMillQueue(
-      requestId: requestId,
-      userId: userId,
-      queueType: 'general',
+        return queueResult.fold(
+          (l) => Left(l),
+          (_) async {
+            await _repository.logAuditTrail(
+              requestId: requestId,
+              userId: userId,
+              action: 'ADD_TO_QUEUE',
+              previousStatus: currentStatus,
+              newStatus: _enumName(ServiceRequestStatus.queued),
+              remarks: 'Moved to general mill queue by admin',
+            );
+            return const Right(null);
+          },
+        );
+      },
     );
-
-    if (queueResult.isLeft()) return queueResult;
-
-    await _repository.logAuditTrail(
-      requestId: requestId,
-      userId: userId,
-      action: 'ADD_TO_QUEUE',
-      previousStatus: currentStatus,
-      newStatus: _enumName(ServiceRequestStatus.queued),
-      remarks: 'Moved to general mill queue by admin',
-    );
-    return const Right(null);
   }
 
   Future<Either<Failure, void>> ownerScheduleAndAssign({
@@ -293,26 +309,32 @@ class ServiceRequestService {
       },
     );
 
-    if (result.isLeft()) return result;
+    return result.fold(
+      (l) => Left(l),
+      (_) async {
+        final queueResult = await _repository.addToMillQueue(
+          requestId: requestId,
+          userId: ownerId,
+          queueType: 'scheduled',
+          scheduledAt: scheduledDate,
+        );
 
-    final queueResult = await _repository.addToMillQueue(
-      requestId: requestId,
-      userId: ownerId,
-      queueType: 'scheduled',
-      scheduledAt: scheduledDate,
+        return queueResult.fold(
+          (l) => Left(l),
+          (_) async {
+            await _repository.logAuditTrail(
+              requestId: requestId,
+              userId: ownerId,
+              action: 'SCHEDULE_AND_ASSIGN',
+              previousStatus: currentStatus,
+              newStatus: _enumName(ServiceRequestStatus.scheduled),
+              remarks: 'Assigned to ${assignedOperatorIds.length} operators and added to mill queue',
+            );
+            return const Right(null);
+          },
+        );
+      },
     );
-
-    if (queueResult.isLeft()) return queueResult;
-
-    await _repository.logAuditTrail(
-      requestId: requestId,
-      userId: ownerId,
-      action: 'SCHEDULE_AND_ASSIGN',
-      previousStatus: currentStatus,
-      newStatus: _enumName(ServiceRequestStatus.scheduled),
-      remarks: 'Assigned to ${assignedOperatorIds.length} operators and added to mill queue',
-    );
-    return const Right(null);
   }
 
   Future<Either<Failure, void>> updateProcessingStatus({
@@ -337,27 +359,30 @@ class ServiceRequestService {
       },
     );
 
-    if (result.isLeft()) return result;
+    return result.fold(
+      (l) => Left(l),
+      (_) async {
+        if (newStatus == ServiceRequestStatus.processing) {
+          try {
+            await _repository.updateMillQueueStatus(requestId: requestId, status: 'in_progress');
+          } catch (_) {}
+        } else if (newStatus == ServiceRequestStatus.processingCompleted) {
+          try {
+            await _repository.updateMillQueueStatus(requestId: requestId, status: 'completed');
+          } catch (_) {}
+        }
 
-    if (newStatus == ServiceRequestStatus.processing) {
-      try {
-        await _repository.updateMillQueueStatus(requestId: requestId, status: 'in_progress');
-      } catch (_) {}
-    } else if (newStatus == ServiceRequestStatus.processingCompleted) {
-      try {
-        await _repository.updateMillQueueStatus(requestId: requestId, status: 'completed');
-      } catch (_) {}
-    }
-
-    await _repository.logAuditTrail(
-      requestId: requestId,
-      userId: operatorId,
-      action: 'UPDATE_PROCESSING',
-      previousStatus: currentStatus,
-      newStatus: _enumName(newStatus),
-      remarks: newStage != null ? 'Moved to stage: ${_enumName(newStage)}' : remarks,
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: operatorId,
+          action: 'UPDATE_PROCESSING',
+          previousStatus: currentStatus,
+          newStatus: _enumName(newStatus),
+          remarks: newStage != null ? 'Moved to stage: ${_enumName(newStage)}' : remarks,
+        );
+        return const Right(null);
+      },
     );
-    return const Right(null);
   }
 
   Future<Either<Failure, void>> claimAndStartService({
@@ -372,51 +397,192 @@ class ServiceRequestService {
       additionalData: {'current_processing_stage': _enumName(ProcessingStage.rebagging)},
     );
 
-    if (statusResult.isLeft()) return statusResult;
+    return statusResult.fold(
+      (l) => Left(l),
+      (_) async {
+        final ongoingResult = await _repository.claimServiceRequest(
+          requestId: requestId,
+          operatorId: operatorId,
+        );
 
-    final ongoingResult = await _repository.claimServiceRequest(
-      requestId: requestId,
-      operatorId: operatorId,
+        return ongoingResult.fold(
+          (l) => Left(l),
+          (_) async {
+            await _repository.updateMillQueueStatus(requestId: requestId, status: 'in_progress');
+
+            await _repository.logAuditTrail(
+              requestId: requestId,
+              userId: operatorId,
+              action: 'CLAIM_SERVICE',
+              previousStatus: currentStatus,
+              newStatus: _enumName(ServiceRequestStatus.processing),
+              remarks: 'Service claimed and started by operator',
+            );
+            return const Right(null);
+          },
+        );
+      },
     );
-
-    if (ongoingResult.isLeft()) return ongoingResult;
-
-    await _repository.updateMillQueueStatus(requestId: requestId, status: 'in_progress');
-
-    await _repository.logAuditTrail(
-      requestId: requestId,
-      userId: operatorId,
-      action: 'CLAIM_SERVICE',
-      previousStatus: currentStatus,
-      newStatus: _enumName(ServiceRequestStatus.processing),
-      remarks: 'Service claimed and started by operator',
-    );
-    return const Right(null);
   }
 
-  Future<Either<Failure, void>> completeBilling({
+  Future<Either<Failure, void>> submitFinancialHandling({
     required String requestId,
     required String ownerId,
-    required String billingId,
+    double? goldWeight,
+    double? buyingPrice,
+    double? goldValue,
+    bool deductBillFromGold = false,
+    required double processingFee,
+    required double otherExpenses,
+    required double totalBill,
+    required double amountToMiner,
     required String currentStatus,
+    List<ParticipantFinancial>? participantBreakdown,
+    List<Map<String, dynamic>>? billingItems,
   }) async {
     final result = await _repository.updateRequestStatus(
       requestId: requestId,
-      status: _enumName(ServiceRequestStatus.completed),
+      status: _enumName(ServiceRequestStatus.goldHandoff),
       userId: ownerId,
-      additionalData: {'billing_id': billingId},
+      additionalData: {
+        'gold_weight_grams': goldWeight,
+        'gold_buying_price': buyingPrice,
+        'gold_purchase_value': goldValue,
+        'deduct_bill_from_gold': deductBillFromGold,
+        'processing_fee': processingFee,
+        'other_expenses': otherExpenses,
+        'total_bill': totalBill,
+        'amount_to_miner': amountToMiner,
+      },
     );
 
-    if (result.isLeft()) return result;
+    return result.fold(
+      (l) => Left(l),
+      (_) async {
+        // 2. If itemized billing items provided, save them
+        if (billingItems != null && billingItems.isNotEmpty) {
+          final itemsToSave = billingItems.map((item) => {
+            'service_request_id': requestId,
+            'item_name': item['name'],
+            'amount': item['amount'],
+            'category': item['category'] ?? 'other',
+          }).toList();
+          await _repository.saveBillingItems(itemsToSave);
+        }
 
-    await _repository.logAuditTrail(
+        // 3. If group request, upsert participant financials
+        if (participantBreakdown != null && participantBreakdown.isNotEmpty) {
+           final records = participantBreakdown.map((p) => {
+             'service_request_id': requestId,
+             'user_id': p.userId,
+             'share_amount': p.shareAmount,
+             'individual_expenses': p.individualExpenses,
+             'individual_expense_reason': p.individualExpenseReason,
+             'total_due': p.totalDue,
+             'amount_paid': p.amountPaid,
+             'status': p.status,
+           }).toList();
+           await _repository.upsertParticipantFinancials(records);
+        }
+
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: ownerId,
+          action: 'FINANCIAL_HANDLING',
+          previousStatus: currentStatus,
+          newStatus: _enumName(ServiceRequestStatus.goldHandoff),
+          remarks: 'Financial details recorded. Total Bill: $totalBill',
+        );
+        return const Right(null);
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> recordPayment({
+    required String requestId,
+    required String ownerId,
+    required double paymentAmount,
+    required double remainingBalance,
+    String? receiptUrl,
+    required DateTime paymentDate,
+    required String currentStatus,
+  }) async {
+    final newStatus = remainingBalance <= 0 
+        ? ServiceRequestStatus.completed 
+        : ServiceRequestStatus.partiallyPaid;
+
+    final result = await _repository.updateRequestStatus(
       requestId: requestId,
+      status: _enumName(newStatus),
       userId: ownerId,
-      action: 'COMPLETE_BILLING',
-      previousStatus: currentStatus,
-      newStatus: _enumName(ServiceRequestStatus.completed),
+      additionalData: {
+        'payment_amount': paymentAmount,
+        'remaining_balance': remainingBalance,
+        'payment_receipt_url': receiptUrl,
+        'payment_date': paymentDate.toIso8601String(),
+        if (newStatus == ServiceRequestStatus.completed) 'billing_id': 'BILL-${DateTime.now().millisecondsSinceEpoch}',
+      },
     );
-    return const Right(null);
+
+    return result.fold(
+      (l) => Left(l),
+      (_) async {
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: ownerId,
+          action: 'RECORD_PAYMENT',
+          previousStatus: currentStatus,
+          newStatus: _enumName(newStatus),
+          remarks: 'Payment of $paymentAmount recorded. Remaining: $remainingBalance',
+        );
+        return const Right(null);
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> recordIndividualPayment({
+    required String requestId,
+    required String ownerId,
+    required String participantId,
+    required double paymentAmount,
+    required double remainingBalance,
+    String? receiptUrl,
+    required String currentStatus,
+  }) async {
+    // 1. Record in participant table
+    final result = await _repository.recordParticipantPayment({
+      'service_request_id': requestId,
+      'user_id': participantId,
+      'amount': paymentAmount,
+      'receipt_url': receiptUrl,
+      'recorded_by': ownerId,
+    });
+
+    return result.fold(
+      (l) => Left(l),
+      (_) async {
+        // 2. Update the participant's financial record status/amount
+        final status = remainingBalance <= 0 ? 'paid' : 'partial';
+        
+        await _repository.updateParticipantFinancial(
+           requestId: requestId,
+           userId: participantId,
+           amountPaid: paymentAmount, 
+           status: status,
+        );
+
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: ownerId,
+          action: 'PARTICIPANT_PAYMENT',
+          previousStatus: currentStatus,
+          newStatus: currentStatus,
+          remarks: 'Recorded payment of $paymentAmount for participant $participantId',
+        );
+        
+        return const Right(null);
+      },
+    );
   }
 
   Future<Either<Failure, void>> startBatchMilling({
@@ -443,7 +609,6 @@ class ServiceRequestService {
       (l) => Left(l),
       (_) async {
         // 2. Update the main request with current total sacked quantity
-        // First get all batches for this request
         final batchesRes = await _repository.getMillingBatches(requestId);
         int totalOutputSacks = 0;
         batchesRes.fold((_) => null, (list) {
@@ -454,11 +619,11 @@ class ServiceRequestService {
 
         await _repository.updateRequestStatus(
           requestId: requestId,
-          status: ServiceRequestStatus.processing.name,
+          status: _enumName(ServiceRequestStatus.processing),
           userId: operatorId,
           additionalData: {
             'sacked_quantity': totalOutputSacks,
-            'current_processing_stage': ProcessingStage.millingCrushing.name,
+            'current_processing_stage': _enumName(ProcessingStage.millingCrushing),
           },
         );
 
@@ -467,8 +632,8 @@ class ServiceRequestService {
           requestId: requestId,
           userId: operatorId,
           action: 'START_BATCH',
-          previousStatus: ServiceRequestStatus.processing.name,
-          newStatus: ServiceRequestStatus.processing.name,
+          previousStatus: _enumName(ServiceRequestStatus.processing),
+          newStatus: _enumName(ServiceRequestStatus.processing),
           remarks: 'Started batch milling with $inputSacks sacks (Resacked to $outputSacks)',
         );
         
@@ -530,8 +695,8 @@ class ServiceRequestService {
           requestId: requestId,
           userId: operatorId,
           action: 'COMPLETE_BATCH',
-          previousStatus: ServiceRequestStatus.processing.name,
-          newStatus: ServiceRequestStatus.processing.name,
+          previousStatus: _enumName(ServiceRequestStatus.processing),
+          newStatus: _enumName(ServiceRequestStatus.processing),
           remarks: 'Completed batch milling',
         );
         return const Right(null);

@@ -11,6 +11,9 @@ import '../admin/availability_page.dart';
 import '../admin/miner_client_list_page.dart';
 import '../admin/add_miner_page.dart';
 import '../admin/service_request_page.dart';
+import '../admin/gold_transactions_page.dart';
+import '../admin/expenses_page.dart';
+import '../admin/payments_history_page.dart';
 import '../admin/processing/processing_calendar_page.dart';
 import '../admin/processing/active_processing_page.dart';
 import '../admin/processing/completed_processing_page.dart';
@@ -278,12 +281,12 @@ class AdminDrawer extends StatelessWidget {
                           icon: Icons.paid_outlined,
                           label: 'Gold Transactions',
                           menu: AdminMenu.goldTransactions,
-                          page: _PlaceholderPage(title: 'Gold Transactions'),
+                          page: const GoldTransactionsPage(),
                         ),
                         _buildSubItem(
                           context,
                           icon: Icons.receipt_long_outlined,
-                          label: 'Bills',
+                          label: 'Financial Handling',
                           menu: AdminMenu.bills,
                           page: const BillingPage(),
                         ),
@@ -292,14 +295,14 @@ class AdminDrawer extends StatelessWidget {
                           icon: Icons.trending_down_rounded,
                           label: 'Expenses',
                           menu: AdminMenu.expenses,
-                          page: _PlaceholderPage(title: 'Expenses'),
+                          page: const ExpensesPage(),
                         ),
                         _buildSubItem(
                           context,
                           icon: Icons.payments_outlined,
                           label: 'Payments',
                           menu: AdminMenu.payments,
-                          page: _PlaceholderPage(title: 'Payments'),
+                          page: const PaymentsHistoryPage(),
                         ),
                       ],
                     ),

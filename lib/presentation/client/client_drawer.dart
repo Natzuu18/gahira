@@ -20,7 +20,7 @@ enum ClientMenu {
   processingStatus,
   billing,
   transactionHistory,
-  profile
+  profile,
 }
 
 class ClientDrawer extends StatelessWidget {
@@ -64,7 +64,10 @@ class ClientDrawer extends StatelessWidget {
                           border: Border.all(color: kGold, width: 1.6),
                           color: context.surfaceColor,
                         ),
-                        child: Icon(Icons.person, color: kGold.withOpacity(0.9)),
+                        child: Icon(
+                          Icons.person,
+                          color: kGold.withOpacity(0.9),
+                        ),
                       ),
                       const ThemeToggleButton(),
                     ],
@@ -91,58 +94,64 @@ class ClientDrawer extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 8),
-
-            _buildItem(
-              context,
-              icon: Icons.dashboard_rounded,
-              label: 'Dashboard',
-              menu: ClientMenu.dashboard,
-              page: ClientDashboardPage(clientName: clientName),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  _buildItem(
+                    context,
+                    icon: Icons.dashboard_rounded,
+                    label: 'Dashboard',
+                    menu: ClientMenu.dashboard,
+                    page: ClientDashboardPage(clientName: clientName),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.description_outlined,
+                    label: 'Service Requests',
+                    menu: ClientMenu.serviceRequests,
+                    page: const ServiceRequestsPage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.settings_input_component_rounded,
+                    label: 'Processing Status',
+                    menu: ClientMenu.processingStatus,
+                    page: const ProcessingStatusPage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.receipt_long_outlined,
+                    label: 'Billing',
+                    menu: ClientMenu.billing,
+                    page: const BillingPage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: 'Transaction History',
+                    menu: ClientMenu.transactionHistory,
+                    page: const TransactionHistoryPage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.person_outline,
+                    label: 'Profile',
+                    menu: ClientMenu.profile,
+                    page: const ClientProfilePage(),
+                  ),
+                ],
+              ),
             ),
-            _buildItem(
-              context,
-              icon: Icons.description_outlined,
-              label: 'Service Requests',
-              menu: ClientMenu.serviceRequests,
-              page: const ServiceRequestsPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.settings_input_component_rounded,
-              label: 'Processing Status',
-              menu: ClientMenu.processingStatus,
-              page: const ProcessingStatusPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.receipt_long_outlined,
-              label: 'Billing',
-              menu: ClientMenu.billing,
-              page: const BillingPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.account_balance_wallet_outlined,
-              label: 'Transaction History',
-              menu: ClientMenu.transactionHistory,
-              page: const TransactionHistoryPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.person_outline,
-              label: 'Profile',
-              menu: ClientMenu.profile,
-              page: const ClientProfilePage(),
-            ),
-
-            const Spacer(),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Divider(color: kGold.withOpacity(0.15)),
             ),
             ListTile(
-              leading: Icon(Icons.logout_rounded, color: kGold.withOpacity(0.7)),
+              leading: Icon(
+                Icons.logout_rounded,
+                color: kGold.withOpacity(0.7),
+              ),
               title: Text(
                 'Log out',
                 style: TextStyle(color: context.textColor.withOpacity(0.85)),
@@ -183,9 +192,9 @@ class ClientDrawer extends StatelessWidget {
       onTap: () {
         Navigator.of(context).pop(); // close drawer first
         if (!selected) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => page),
-          );
+          Navigator.of(
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => page));
         }
       },
     );

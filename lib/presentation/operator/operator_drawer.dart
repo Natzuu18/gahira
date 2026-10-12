@@ -12,14 +12,14 @@ import 'workforce_shift_page.dart';
 import 'sms_notification_page.dart';
 import 'emergency_stop_dialog.dart';
 
-enum OperatorMenu { 
-  dashboard, 
+enum OperatorMenu {
+  dashboard,
   serviceVerification,
-  clientService, 
-  processing, 
-  equipment, 
+  clientService,
+  processing,
+  equipment,
   workforce,
-  sms 
+  sms,
 }
 
 class OperatorDrawer extends StatelessWidget {
@@ -63,7 +63,10 @@ class OperatorDrawer extends StatelessWidget {
                           border: Border.all(color: kGold, width: 1.6),
                           color: context.surfaceColor,
                         ),
-                        child: Icon(Icons.person, color: kGold.withOpacity(0.9)),
+                        child: Icon(
+                          Icons.person,
+                          color: kGold.withOpacity(0.9),
+                        ),
                       ),
                       const ThemeToggleButton(),
                     ],
@@ -90,59 +93,62 @@ class OperatorDrawer extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 8),
-
-            _buildItem(
-              context,
-              icon: Icons.dashboard_rounded,
-              label: 'Dashboard',
-              menu: OperatorMenu.dashboard,
-              page: OperatorDashboardPage(operatorName: operatorName),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  _buildItem(
+                    context,
+                    icon: Icons.dashboard_rounded,
+                    label: 'Dashboard',
+                    menu: OperatorMenu.dashboard,
+                    page: OperatorDashboardPage(operatorName: operatorName),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.fact_check_outlined,
+                    label: 'Service Verification',
+                    menu: OperatorMenu.serviceVerification,
+                    page: const ServiceVerificationPage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.people_outline_rounded,
+                    label: 'Miner Services',
+                    menu: OperatorMenu.clientService,
+                    page: const ClientServicePage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.settings_input_component_rounded,
+                    label: 'Processing Workflow',
+                    menu: OperatorMenu.processing,
+                    page: const ProcessingWorkflowPage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.build_circle_outlined,
+                    label: 'Equipment & Maintenance',
+                    menu: OperatorMenu.equipment,
+                    page: const EquipmentMaintenancePage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.schedule_rounded,
+                    label: 'Workforce & Shifts',
+                    menu: OperatorMenu.workforce,
+                    page: const WorkforceShiftPage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.sms_outlined,
+                    label: 'SMS Notifications',
+                    menu: OperatorMenu.sms,
+                    page: const SMSNotificationPage(),
+                  ),
+                ],
+              ),
             ),
-            _buildItem(
-              context,
-              icon: Icons.fact_check_outlined,
-              label: 'Service Verification',
-              menu: OperatorMenu.serviceVerification,
-              page: const ServiceVerificationPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.people_outline_rounded,
-              label: 'Miner Services',
-              menu: OperatorMenu.clientService,
-              page: const ClientServicePage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.settings_input_component_rounded,
-              label: 'Processing Workflow',
-              menu: OperatorMenu.processing,
-              page: const ProcessingWorkflowPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.build_circle_outlined,
-              label: 'Equipment & Maintenance',
-              menu: OperatorMenu.equipment,
-              page: const EquipmentMaintenancePage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.schedule_rounded,
-              label: 'Workforce & Shifts',
-              menu: OperatorMenu.workforce,
-              page: const WorkforceShiftPage(),
-            ),
-            _buildItem(
-              context,
-              icon: Icons.sms_outlined,
-              label: 'SMS Notifications',
-              menu: OperatorMenu.sms,
-              page: const SMSNotificationPage(),
-            ),
-
-            const Spacer(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ElevatedButton.icon(
@@ -153,12 +159,17 @@ class OperatorDrawer extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.warning_amber_rounded),
-                label: const Text('EMERGENCY STOP', style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'EMERGENCY STOP',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 48),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -168,7 +179,10 @@ class OperatorDrawer extends StatelessWidget {
               child: Divider(color: kGold.withOpacity(0.15)),
             ),
             ListTile(
-              leading: Icon(Icons.logout_rounded, color: kGold.withOpacity(0.7)),
+              leading: Icon(
+                Icons.logout_rounded,
+                color: kGold.withOpacity(0.7),
+              ),
               title: Text(
                 'Log out',
                 style: TextStyle(color: context.textColor.withOpacity(0.85)),
@@ -209,9 +223,9 @@ class OperatorDrawer extends StatelessWidget {
       onTap: () {
         Navigator.of(context).pop();
         if (!selected) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => page),
-          );
+          Navigator.of(
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => page));
         }
       },
     );

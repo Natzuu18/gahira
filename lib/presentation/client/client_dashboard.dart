@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../../domain/entities/service_request_entity.dart';
+import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import 'client_drawer.dart';
 import 'service_requests_page.dart';
 
@@ -19,6 +22,41 @@ class ClientDashboardPage extends StatefulWidget {
 
 class _ClientDashboardPageState extends State<ClientDashboardPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final SupabaseServiceRequestRepository _requestRepository =
+      SupabaseServiceRequestRepository();
+  List<ServiceRequestEntity> _requests = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRequests();
+  }
+
+  Future<void> _loadRequests() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+    final result = await _requestRepository.getServiceRequests();
+    if (!mounted) return;
+    setState(() {
+      _requests = result.fold(
+        (_) => <ServiceRequestEntity>[],
+        (requests) =>
+            requests
+                .where(
+                  (request) =>
+                      request.creatorId == userId ||
+                      request.participatingMinerIds.contains(userId),
+                )
+                .toList()
+              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
+      );
+      _isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +98,9 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const ServiceRequestsPage()),
+            MaterialPageRoute(
+              builder: (context) => const ServiceRequestsPage(),
+            ),
           ).then((_) {
             // Ideally refresh stats here
           });
@@ -70,184 +110,261 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
         child: const Icon(Icons.add_rounded),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome section
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Welcome back,',
-                      style: TextStyle(
-                        color: context.mutedTextColor,
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      widget.clientName,
-                      style: TextStyle(
-                        color: context.textColor,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: kGold.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: kGold.withOpacity(0.3)),
-                  ),
-                  child: Row(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1120),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Welcome section
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      const Icon(Icons.circle, color: Colors.green, size: 8),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Account Active',
-                        style: TextStyle(
-                          color: kGold,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Welcome back,',
+                            style: TextStyle(
+                              color: context.mutedTextColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            widget.clientName,
+                            style: TextStyle(
+                              color: context.textColor,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kGold.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: kGold.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.circle,
+                              color: Colors.green,
+                              size: 8,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Account Active',
+                              style: TextStyle(
+                                color: kGold,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
+                  const SizedBox(height: 32),
 
-            // Metrics Summary Cards
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.5,
-              children: [
-                _buildMetricCard(
-                  'Active Requests',
-                  '3',
-                  Icons.description_outlined,
-                  kGold,
-                ),
-                _buildMetricCard(
-                  'Processing Jobs',
-                  '2',
-                  Icons.settings_input_component_rounded,
-                  Colors.green,
-                ),
-                _buildMetricCard(
-                  'Pending Bills',
-                  '1',
-                  Icons.receipt_long_outlined,
-                  Colors.orange,
-                ),
-                _buildMetricCard(
-                  'Total Transactions',
-                  '24',
-                  Icons.account_balance_wallet_outlined,
-                  Colors.blue,
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // Quick Actions
-            Text(
-              'Quick Actions',
-              style: TextStyle(
-                color: context.textColor,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildQuickActionButton(
-                    'New Request',
-                    Icons.add_circle_outline,
-                    () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const ServiceRequestsPage()),
+                  // Metrics Summary Cards
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final columns = constraints.maxWidth >= 900
+                          ? 4
+                          : constraints.maxWidth >= 600
+                          ? 3
+                          : 2;
+                      return GridView.count(
+                        crossAxisCount: columns,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: constraints.maxWidth < 360
+                            ? 1.25
+                            : 1.5,
+                        children: [
+                          _buildMetricCard(
+                            'My Requests',
+                            _isLoading ? '...' : '${_requests.length}',
+                            Icons.description_outlined,
+                            kGold,
+                          ),
+                          _buildMetricCard(
+                            'In Progress',
+                            _isLoading
+                                ? '...'
+                                : '${_requests.where((request) => request.status == ServiceRequestStatus.processing || request.status == ServiceRequestStatus.assigned || request.status == ServiceRequestStatus.scheduled).length}',
+                            Icons.settings_input_component_rounded,
+                            Colors.blue,
+                          ),
+                          _buildMetricCard(
+                            'Needs Attention',
+                            _isLoading
+                                ? '...'
+                                : '${_requests.where((request) => request.status == ServiceRequestStatus.returnedToMiner).length}',
+                            Icons.priority_high_rounded,
+                            Colors.orange,
+                          ),
+                          _buildMetricCard(
+                            'Completed',
+                            _isLoading
+                                ? '...'
+                                : '${_requests.where((request) => request.status == ServiceRequestStatus.completed).length}',
+                            Icons.task_alt_rounded,
+                            Colors.green,
+                          ),
+                        ],
                       );
                     },
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildQuickActionButton(
-                    'View Status',
-                    Icons.visibility_outlined,
-                    () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const ServiceRequestsPage()),
+                  const SizedBox(height: 32),
+
+                  // Quick Actions
+                  Text(
+                    'Quick Actions',
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final actions = [
+                        _buildQuickActionButton(
+                          'New Request',
+                          Icons.add_circle_outline,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const ServiceRequestsPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildQuickActionButton(
+                          'View Status',
+                          Icons.visibility_outlined,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const ServiceRequestsPage(),
+                              ),
+                            );
+                          },
+                        ),
+                      ];
+                      if (constraints.maxWidth >= 600) {
+                        return Row(
+                          children: [
+                            Expanded(child: actions[0]),
+                            const SizedBox(width: 12),
+                            Expanded(child: actions[1]),
+                          ],
+                        );
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          actions[0],
+                          const SizedBox(height: 12),
+                          actions[1],
+                        ],
                       );
                     },
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
+                  const SizedBox(height: 32),
 
-            // Recent Service Requests
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Recent Service Requests',
-                  style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                  // Recent Service Requests
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Recent Service Requests',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ServiceRequestsPage(),
+                          ),
+                        ),
+                        child: const Text(
+                          'View All',
+                          style: TextStyle(color: kGold),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('View All', style: TextStyle(color: kGold)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildServiceRequestItem('Gold Ore Processing', 'In Progress', '2024-01-15'),
-            _buildServiceRequestItem('Silver Refining', 'Scheduled', '2024-01-18'),
-            _buildServiceRequestItem('Copper Concentration', 'Pending', '2024-01-20'),
+                  const SizedBox(height: 12),
+                  if (_isLoading)
+                    const Center(child: CircularProgressIndicator(color: kGold))
+                  else if (_requests.isEmpty)
+                    _buildEmptyState('Your service requests will appear here.')
+                  else
+                    ..._requests.take(3).map(_buildServiceRequestItem),
 
-            const SizedBox(height: 32),
+                  const SizedBox(height: 32),
 
-            // Recent Activity
-            Text(
-              'Recent Activity',
-              style: TextStyle(
-                color: context.textColor,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                  // Recent Activity
+                  Text(
+                    'Recent Activity',
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_requests.isEmpty && !_isLoading)
+                    _buildEmptyState(
+                      'Updates will appear here as your requests progress.',
+                    )
+                  else
+                    ..._requests.take(3).map(_buildRequestActivity),
+                  const SizedBox(height: 80), // Space for FAB
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            _buildActivityLog('Payment received for Invoice #INV-2024-001', '2 hours ago'),
-            _buildActivityLog('Service request #REQ-2024-015 approved', '5 hours ago'),
-            _buildActivityLog('Processing job #JOB-2024-008 completed', 'Yesterday'),
-            const SizedBox(height: 80), // Space for FAB
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -273,10 +390,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
               ),
               Text(
                 title,
-                style: TextStyle(
-                  color: context.mutedTextColor,
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: context.mutedTextColor, fontSize: 12),
               ),
             ],
           ),
@@ -285,7 +399,11 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
     );
   }
 
-  Widget _buildQuickActionButton(String label, IconData icon, VoidCallback onPressed) {
+  Widget _buildQuickActionButton(
+    String label,
+    IconData icon,
+    VoidCallback onPressed,
+  ) {
     return Container(
       height: 80,
       decoration: BoxDecoration(
@@ -318,10 +436,18 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
     );
   }
 
-  Widget _buildServiceRequestItem(String title, String status, String date) {
-    final Color statusColor = status == 'In Progress'
+  Widget _buildServiceRequestItem(ServiceRequestEntity request) {
+    final String title =
+        request.materialDetails.sourceType ?? 'Service request';
+    final String status = _statusLabel(request.status);
+    final String date = MaterialLocalizations.of(
+      context,
+    ).formatShortDate(request.createdAt);
+    final Color statusColor = request.status == ServiceRequestStatus.completed
         ? Colors.green
-        : (status == 'Scheduled' ? Colors.blue : Colors.orange);
+        : (request.status == ServiceRequestStatus.processing
+              ? Colors.blue
+              : Colors.orange);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -360,10 +486,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                 ),
                 Text(
                   'Date: $date',
-                  style: TextStyle(
-                    color: context.mutedTextColor,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: context.mutedTextColor, fontSize: 12),
                 ),
               ],
             ),
@@ -388,6 +511,47 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
     );
   }
 
+  Widget _buildRequestActivity(ServiceRequestEntity request) {
+    final reference = request.id.length > 8
+        ? request.id.substring(0, 8).toUpperCase()
+        : request.id.toUpperCase();
+    return _buildActivityLog(
+      'Request $reference: ${_statusLabel(request.status)}',
+      MaterialLocalizations.of(context).formatShortDate(request.updatedAt),
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Text(message, style: TextStyle(color: context.mutedTextColor)),
+    );
+  }
+
+  String _statusLabel(ServiceRequestStatus status) {
+    switch (status) {
+      case ServiceRequestStatus.pendingOperatorVerification:
+        return 'Awaiting verification';
+      case ServiceRequestStatus.returnedToMiner:
+        return 'Needs attention';
+      case ServiceRequestStatus.processingCompleted:
+        return 'Processing complete';
+      default:
+        return status.name
+            .replaceAllMapped(
+              RegExp(r'([A-Z])'),
+              (match) => ' ${match.group(0)!.toLowerCase()}',
+            )
+            .trim();
+    }
+  }
+
   Widget _buildActivityLog(String message, String time) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -410,17 +574,11 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
               children: [
                 Text(
                   message,
-                  style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: context.textColor, fontSize: 14),
                 ),
                 Text(
                   time,
-                  style: TextStyle(
-                    color: context.mutedTextColor,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: context.mutedTextColor, fontSize: 12),
                 ),
               ],
             ),

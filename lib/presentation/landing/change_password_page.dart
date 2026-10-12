@@ -97,7 +97,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                     style: TextStyle(color: context.mutedTextColor, fontSize: 14),
                   ),
                   const SizedBox(height: 32),
-                  
+
                   _buildLabel('New Password'),
                   const SizedBox(height: 8),
                   _buildTextField(
@@ -138,7 +138,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                         foregroundColor: kBlack,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: _isLoading 
+                      child: _isLoading
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: kBlack))
                         : const Text('UPDATE PASSWORD', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
                     ),

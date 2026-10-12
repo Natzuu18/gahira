@@ -17,6 +17,7 @@ import '../shared_widgets/pin_dialog.dart';
 import '../shared_widgets/audit_trail_viewer.dart';
 import '../shared_widgets/monitoring_page.dart';
 import '../miner/miner_drawer.dart';
+import 'client_drawer.dart';
 
 class ServiceRequestsPage extends StatefulWidget {
   const ServiceRequestsPage({super.key});
@@ -27,7 +28,8 @@ class ServiceRequestsPage extends StatefulWidget {
 
 class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final SupabaseServiceRequestRepository _repository = SupabaseServiceRequestRepository();
+  final SupabaseServiceRequestRepository _repository =
+      SupabaseServiceRequestRepository();
   late final ServiceRequestService _service;
   final SupabaseUserRepository _userRepository = SupabaseUserRepository();
 
@@ -49,16 +51,31 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     setState(() => _isLoading = true);
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
 
-    final requestsResult = await _repository.getServiceRequests();
-    final minersResult = await _userRepository.getMinersAndClients();
-    
-    if (currentUserId != null) {
-      final userResult = await _userRepository.getUserById(currentUserId);
-      userResult.fold((l) => null, (user) => _currentUser = user);
+    if (currentUserId == null) {
+      if (mounted) {
+        setState(() {
+          _requests = [];
+          _isLoading = false;
+        });
+      }
+      return;
     }
 
+    final requestsResult = await _repository.getServiceRequests();
+    final minersResult = await _userRepository.getMinersAndClients();
+    final userResult = await _userRepository.getUserById(currentUserId);
+    userResult.fold((_) => null, (user) => _currentUser = user);
+
+    if (!mounted) return;
     setState(() {
-      _requests = requestsResult.getOrElse(() => []);
+      _requests = requestsResult
+          .getOrElse(() => [])
+          .where(
+            (request) =>
+                request.creatorId == currentUserId ||
+                request.participatingMinerIds.contains(currentUserId),
+          )
+          .toList();
 
       _availableMiners = minersResult.getOrElse(() => []);
       _isLoading = false;
@@ -106,10 +123,11 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         title: const Text(
           'MY SERVICES',
           style: TextStyle(
-              color: kGold,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-              fontSize: 18),
+            color: kGold,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+            fontSize: 18,
+          ),
         ),
         iconTheme: const IconThemeData(color: kGold),
         actions: [
@@ -121,8 +139,15 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           const SizedBox(width: 8),
         ],
       ),
-      endDrawer: MinerDrawer(
-          currentMenu: MinerMenu.serviceRequests, minerName: 'Miner'),
+      endDrawer: _currentUser?.roleId == 'client'
+          ? ClientDrawer(
+              currentMenu: ClientMenu.serviceRequests,
+              clientName: _currentUser?.fname ?? 'Client',
+            )
+          : MinerDrawer(
+              currentMenu: MinerMenu.serviceRequests,
+              minerName: _currentUser?.fname ?? 'Miner',
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showRequestWorkflow(),
         backgroundColor: kGold,
@@ -146,28 +171,48 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                         Text(
                           'Track your requests',
                           style: TextStyle(
-                              color: context.textColor,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold),
+                            color: context.textColor,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextField(
-                          onChanged: (value) => setState(() => _searchQuery = value),
-                          style: TextStyle(color: context.textColor, fontSize: 14),
+                          onChanged: (value) =>
+                              setState(() => _searchQuery = value),
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 14,
+                          ),
                           decoration: InputDecoration(
                             hintText: 'Search by ID...',
-                            hintStyle: TextStyle(color: context.mutedTextColor, fontSize: 14),
-                            prefixIcon: const Icon(Icons.search_rounded, color: kGold, size: 20),
+                            hintStyle: TextStyle(
+                              color: context.mutedTextColor,
+                              fontSize: 14,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.search_rounded,
+                              color: kGold,
+                              size: 20,
+                            ),
                             filled: true,
                             fillColor: context.surfaceColor,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: kGold.withOpacity(0.1)),
+                              borderSide: BorderSide(
+                                color: kGold.withOpacity(0.1),
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: kGold, width: 1.5),
+                              borderSide: const BorderSide(
+                                color: kGold,
+                                width: 1.5,
+                              ),
                             ),
                           ),
                         ),
@@ -201,9 +246,13 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                 if (_filteredRequests.isEmpty) {
                                   return _buildEmptyState();
                                 }
-                                return _buildRequestCard(_filteredRequests[index]);
+                                return _buildRequestCard(
+                                  _filteredRequests[index],
+                                );
                               },
-                              childCount: _filteredRequests.isEmpty ? 1 : _filteredRequests.length,
+                              childCount: _filteredRequests.isEmpty
+                                  ? 1
+                                  : _filteredRequests.length,
                             ),
                           ),
                         ),
@@ -234,31 +283,46 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     });
 
     if (_searchQuery.isNotEmpty) {
-      list = list.where((r) => 
-        r.id.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        (r.materialDetails.source?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false)
-      ).toList();
+      list = list
+          .where(
+            (r) =>
+                r.id.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                (r.materialDetails.source?.toLowerCase().contains(
+                      _searchQuery.toLowerCase(),
+                    ) ??
+                    false),
+          )
+          .toList();
     }
 
     if (_selectedFilter == 'All') return list;
-    
+
     if (_selectedFilter == 'Needs Attention') {
-      return list.where((r) => r.status == ServiceRequestStatus.returnedToMiner).toList();
-    }
-    
-    if (_selectedFilter == 'In Progress') {
-      return list.where((r) => 
-        r.status != ServiceRequestStatus.completed && 
-        r.status != ServiceRequestStatus.cancelled &&
-        r.status != ServiceRequestStatus.returnedToMiner
-      ).toList();
-    }
-    
-    if (_selectedFilter == 'Completed') {
-      return list.where((r) => r.status == ServiceRequestStatus.completed).toList();
+      return list
+          .where((r) => r.status == ServiceRequestStatus.returnedToMiner)
+          .toList();
     }
 
-    return list.where((r) => _getStatusLabel(r.status) == _selectedFilter).toList();
+    if (_selectedFilter == 'In Progress') {
+      return list
+          .where(
+            (r) =>
+                r.status != ServiceRequestStatus.completed &&
+                r.status != ServiceRequestStatus.cancelled &&
+                r.status != ServiceRequestStatus.returnedToMiner,
+          )
+          .toList();
+    }
+
+    if (_selectedFilter == 'Completed') {
+      return list
+          .where((r) => r.status == ServiceRequestStatus.completed)
+          .toList();
+    }
+
+    return list
+        .where((r) => _getStatusLabel(r.status) == _selectedFilter)
+        .toList();
   }
 
   Widget _buildFilterChip(String label) {
@@ -301,16 +365,20 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 color: kGold.withOpacity(0.05),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.auto_awesome_motion_rounded,
-                  size: 64, color: kGold.withOpacity(0.3)),
+              child: Icon(
+                Icons.auto_awesome_motion_rounded,
+                size: 64,
+                color: kGold.withOpacity(0.3),
+              ),
             ),
             const SizedBox(height: 24),
             Text(
               'Nothing to show here',
               style: TextStyle(
-                  color: context.textColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600),
+                color: context.textColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 10),
             Text(
@@ -319,7 +387,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   : 'Try changing your filter or create a new request.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: context.mutedTextColor, fontSize: 14, height: 1.5),
+                color: context.mutedTextColor,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
             if (_searchQuery.isNotEmpty || _selectedFilter != 'All')
               Padding(
@@ -329,8 +400,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     _searchQuery = '';
                     _selectedFilter = 'All';
                   }),
-                  child: const Text('Clear all filters',
-                      style: TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Clear all filters',
+                    style: TextStyle(color: kGold, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
           ],
@@ -359,10 +432,11 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           Text(
             label.toUpperCase(),
             style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8),
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
           ),
         ],
       ),
@@ -398,7 +472,14 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   Widget _buildStepLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 8),
-      child: Text(text, style: TextStyle(color: context.mutedTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: context.mutedTextColor,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
@@ -411,10 +492,11 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           Text(
             title.toUpperCase(),
             style: const TextStyle(
-                color: kGold,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5),
+              color: kGold,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
           ),
           const SizedBox(height: 6),
           Divider(color: kGold.withOpacity(0.15), thickness: 1),
@@ -430,15 +512,18 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         children: [
           Icon(icon, size: 18, color: kGold.withOpacity(0.6)),
           const SizedBox(width: 14),
-          Text(label,
-              style: TextStyle(color: context.mutedTextColor, fontSize: 14)),
+          Text(
+            label,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 14),
+          ),
           const Spacer(),
           Text(
             value,
             style: TextStyle(
-                color: context.textColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w600),
+              color: context.textColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -450,7 +535,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         request.status == ServiceRequestStatus.returnedToMiner;
     final bool isProcessingDone =
         request.status == ServiceRequestStatus.processingCompleted;
-    
+
     // Formatting date: e.g. "Sept 15, 2026"
     final String dateStr = DateFormat('MMM dd, yyyy').format(request.createdAt);
 
@@ -484,13 +569,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isActionRequired ? Colors.red.withOpacity(0.1) : kGold.withOpacity(0.1),
+                  color: isActionRequired
+                      ? Colors.red.withOpacity(0.1)
+                      : kGold.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  isActionRequired ? Icons.priority_high_rounded : Icons.inventory_2_rounded, 
-                  color: isActionRequired ? Colors.red : kGold, 
-                  size: 20
+                  isActionRequired
+                      ? Icons.priority_high_rounded
+                      : Icons.inventory_2_rounded,
+                  color: isActionRequired ? Colors.red : kGold,
+                  size: 20,
                 ),
               ),
               const SizedBox(width: 16),
@@ -501,16 +590,18 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     Text(
                       'Ref: ${request.id.substring(0, 8).toUpperCase()}',
                       style: TextStyle(
-                          color: context.textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16),
+                        color: context.textColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       dateStr,
                       style: TextStyle(
-                          color: context.mutedTextColor,
-                          fontSize: 11),
+                        color: context.mutedTextColor,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
@@ -518,11 +609,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (request.status == ServiceRequestStatus.pendingOperatorVerification || 
+                  if (request.status ==
+                          ServiceRequestStatus.pendingOperatorVerification ||
                       request.status == ServiceRequestStatus.returnedToMiner)
                     IconButton(
-                      icon: const Icon(Icons.edit_note_rounded, color: kGold, size: 24),
-                      onPressed: () => _showRequestWorkflow(existingRequest: request),
+                      icon: const Icon(
+                        Icons.edit_note_rounded,
+                        color: kGold,
+                        size: 24,
+                      ),
+                      onPressed: () =>
+                          _showRequestWorkflow(existingRequest: request),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -531,8 +628,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     Text(
                       '${request.materialDetails.numberOfSacks} sacks',
                       style: TextStyle(
-                          color: context.mutedTextColor,
-                          fontSize: 10),
+                        color: context.mutedTextColor,
+                        fontSize: 10,
+                      ),
                     ),
                 ],
               ),
@@ -540,11 +638,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 12.0),
-            child: Row(
-              children: [
-                _buildStatusBadge(request.status),
-              ],
-            ),
+            child: Row(children: [_buildStatusBadge(request.status)]),
           ),
           childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           children: [
@@ -553,54 +647,84 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             if (request.materialDetails.condition != null &&
                 request.materialDetails.condition!.isNotEmpty)
               _buildDetailRow(
-                  Icons.info_outline, 'Condition', request.materialDetails.condition!),
+                Icons.info_outline,
+                'Condition',
+                request.materialDetails.condition!,
+              ),
             if (request.materialDetails.state != null &&
                 request.materialDetails.state!.isNotEmpty)
               _buildDetailRow(
-                  Icons.water_drop_outlined, 'State', request.materialDetails.state!),
+                Icons.water_drop_outlined,
+                'State',
+                request.materialDetails.state!,
+              ),
             if (request.materialDetails.sourceType != null &&
                 request.materialDetails.sourceType!.isNotEmpty)
               _buildDetailRow(
-                  Icons.source_outlined, 'Source Type', request.materialDetails.sourceType!),
+                Icons.source_outlined,
+                'Source Type',
+                request.materialDetails.sourceType!,
+              ),
             if (request.materialDetails.source != null &&
                 request.materialDetails.source!.isNotEmpty)
               _buildDetailRow(
-                  Icons.location_on_outlined, 'Source Details', request.materialDetails.source!),
+                Icons.location_on_outlined,
+                'Source Details',
+                request.materialDetails.source!,
+              ),
             if (request.materialDetails.photoUrls.isNotEmpty)
-              _buildDetailRow(Icons.photo_library_outlined, 'Photos', '${request.materialDetails.photoUrls.length} Attached'),
+              _buildDetailRow(
+                Icons.photo_library_outlined,
+                'Photos',
+                '${request.materialDetails.photoUrls.length} Attached',
+              ),
             if (request.participatingMinerIds.length > 1)
               _buildParticipantsDropdown(request.participatingMinerIds),
             if (request.materialDetails.numberOfSacks != null)
-              _buildDetailRow(Icons.shopping_bag_outlined, 'Quantity',
-                  '${request.materialDetails.numberOfSacks} Sacks'),
+              _buildDetailRow(
+                Icons.shopping_bag_outlined,
+                'Quantity',
+                '${request.materialDetails.numberOfSacks} Sacks',
+              ),
             _buildSectionHeader('Processing & Timeline'),
             if (request.processingDetails.estimatedTime != null)
-              _buildDetailRow(Icons.timer_outlined, 'Est. Duration',
-                  request.processingDetails.estimatedTime!),
+              _buildDetailRow(
+                Icons.timer_outlined,
+                'Est. Duration',
+                request.processingDetails.estimatedTime!,
+              ),
             if (request.processingDetails.scheduledDate != null)
               _buildDetailRow(
-                  Icons.calendar_today_outlined,
-                  'Scheduled Date',
-                  DateFormat('MMM dd, yyyy').format(request.processingDetails.scheduledDate!)),
+                Icons.calendar_today_outlined,
+                'Scheduled Date',
+                DateFormat(
+                  'MMM dd, yyyy',
+                ).format(request.processingDetails.scheduledDate!),
+              ),
             if (request.processingDetails.assignedOperatorIds.isNotEmpty)
               _buildDetailRow(
-                  Icons.badge_outlined,
-                  'Assigned Team',
-                  '${request.processingDetails.assignedOperatorIds.length} Operator(s)'),
+                Icons.badge_outlined,
+                'Assigned Team',
+                '${request.processingDetails.assignedOperatorIds.length} Operator(s)',
+              ),
             _buildDetailRow(
-                Icons.notes_rounded,
-                'Instructions',
-                request.processingDetails.requirements.isEmpty
-                    ? 'None'
-                    : request.processingDetails.requirements),
+              Icons.notes_rounded,
+              'Instructions',
+              request.processingDetails.requirements.isEmpty
+                  ? 'None'
+                  : request.processingDetails.requirements,
+            ),
             if (request.billingId != null) ...[
               _buildSectionHeader('Billing Reference'),
-              _buildDetailRow(Icons.receipt_long_outlined, 'Invoice ID',
-                  request.billingId!.substring(0, 8).toUpperCase()),
+              _buildDetailRow(
+                Icons.receipt_long_outlined,
+                'Invoice ID',
+                request.billingId!.substring(0, 8).toUpperCase(),
+              ),
             ],
             if (isActionRequired) _buildReturnActionSection(request),
             if (isProcessingDone) _buildGoldHandoffSection(request),
-            if (request.status == ServiceRequestStatus.processing || 
+            if (request.status == ServiceRequestStatus.processing ||
                 request.status == ServiceRequestStatus.processingCompleted)
               Padding(
                 padding: const EdgeInsets.only(top: 24),
@@ -608,13 +732,27 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonitoringPage(request: request))),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MonitoringPage(request: request),
+                      ),
+                    ),
                     icon: const Icon(Icons.insights_rounded, size: 20),
-                    label: const Text('MONITOR LIVE PROCESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1)),
+                    label: const Text(
+                      'MONITOR LIVE PROCESS',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        letterSpacing: 1,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kGold,
                       foregroundColor: kBlack,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
@@ -627,18 +765,26 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),
                     child: Center(
-                        child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: kGold))),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: kGold,
+                        ),
+                      ),
+                    ),
                   );
                 }
                 if (snapshot.hasData) {
                   return snapshot.data!.fold(
-                    (l) => Text('History unavailable',
-                        style: TextStyle(
-                            color: Colors.red.shade300, fontSize: 12)),
+                    (l) => Text(
+                      'History unavailable',
+                      style: TextStyle(
+                        color: Colors.red.shade300,
+                        fontSize: 12,
+                      ),
+                    ),
                     (trails) => Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -672,18 +818,29 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.red,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               const Text(
                 'Action Required: Request Returned',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
             'Reason: ${request.materialDetails.verifications.isNotEmpty ? request.materialDetails.verifications.last.notes ?? "Incomplete information" : "Incomplete information"}',
-            style: TextStyle(color: context.textColor.withOpacity(0.9), fontSize: 13),
+            style: TextStyle(
+              color: context.textColor.withOpacity(0.9),
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -695,10 +852,15 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Accept & Resubmit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  label: const Text(
+                    'Accept & Resubmit',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -709,10 +871,15 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     side: const BorderSide(color: Colors.red),
                     foregroundColor: Colors.red,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: const Icon(Icons.close_rounded, size: 18),
-                  label: const Text('Cancel Request', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  label: const Text(
+                    'Cancel Request',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                 ),
               ),
             ],
@@ -740,14 +907,22 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               const SizedBox(width: 8),
               const Text(
                 'Gold Hand-off Required',
-                style: TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(
+                  color: kGold,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             'Processing is complete. Please submit the recovered gold to the Owner to finalize buying and billing.',
-            style: TextStyle(color: context.textColor.withOpacity(0.9), fontSize: 13, height: 1.4),
+            style: TextStyle(
+              color: context.textColor.withOpacity(0.9),
+              fontSize: 13,
+              height: 1.4,
+            ),
           ),
         ],
       ),
@@ -762,11 +937,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
       currentStatus: request.status.name,
     );
     result.fold(
-      (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+      (l) => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.message))),
       (_) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(accept ? 'Corrections accepted. Request sent for Owner review.' : 'Request cancelled.'),
+            content: Text(
+              accept
+                  ? 'Corrections accepted. Request sent for Owner review.'
+                  : 'Request cancelled.',
+            ),
             backgroundColor: accept ? Colors.green : Colors.orange,
             behavior: SnackBarBehavior.floating,
           ),
@@ -806,29 +987,35 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     final formKey = GlobalKey<FormState>();
 
     // Step 1: Miner Selection
-    bool forMyselfOnly = existingRequest == null || existingRequest.participatingMinerIds.length <= 1;
-    bool isPickerOpen = false; 
-    List<String> participating = existingRequest != null 
-      ? existingRequest.participatingMinerIds.where((id) => id != currentUserId).toList() 
-      : [];
+    bool forMyselfOnly =
+        existingRequest == null ||
+        existingRequest.participatingMinerIds.length <= 1;
+    bool isPickerOpen = false;
+    List<String> participating = existingRequest != null
+        ? existingRequest.participatingMinerIds
+              .where((id) => id != currentUserId)
+              .toList()
+        : [];
     String minerSearchQuery = '';
 
     // Step 2: Material Information
     String condition = existingRequest?.materialDetails.condition ?? 'Rocky';
     String state = existingRequest?.materialDetails.state ?? 'Dry';
     String otherState = ''; // For "Others" option
-    
+
     // If editing, check if state is custom
     if (existingRequest != null && state != 'Dry' && state != 'Wet') {
       otherState = state;
       state = 'Others';
     }
 
-    String sourceType = existingRequest?.materialDetails.sourceType ?? 'Associated Ball Mill';
+    String sourceType =
+        existingRequest?.materialDetails.sourceType ?? 'Associated Ball Mill';
     String sourceDetails = existingRequest?.materialDetails.source ?? '';
 
     if (existingRequest == null) {
-      if (_currentUser?.miningUnitType == 'Ball Mill' || _currentUser?.miningUnitType == 'Processing Plant') {
+      if (_currentUser?.miningUnitType == 'Ball Mill' ||
+          _currentUser?.miningUnitType == 'Processing Plant') {
         sourceType = 'Associated Ball Mill';
         sourceDetails = _currentUser?.miningUnitName ?? '';
       } else {
@@ -838,16 +1025,24 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
 
     int? mSacks = existingRequest?.materialDetails.numberOfSacks;
     String notes = existingRequest?.materialDetails.notes ?? '';
-    List<PlatformFile> selectedPhotos = []; 
-    List<String> existingPhotoUrls = existingRequest != null ? List<String>.from(existingRequest.materialDetails.photoUrls) : [];
+    List<PlatformFile> selectedPhotos = [];
+    List<String> existingPhotoUrls = existingRequest != null
+        ? List<String>.from(existingRequest.materialDetails.photoUrls)
+        : [];
 
-    final List<String> conditionOptions = ['Rocky', 'Muddy', 'Sandy', 'Mixed', 'Clay'];
+    final List<String> conditionOptions = [
+      'Rocky',
+      'Muddy',
+      'Sandy',
+      'Mixed',
+      'Clay',
+    ];
     final List<String> stateOptions = ['Dry', 'Wet', 'Others'];
     final List<String> sourceOptions = [
       'Associated Ball Mill',
       'Ball Mill / Processing Plant',
       'Partner Source',
-      'Other'
+      'Other',
     ];
 
     showModalBottomSheet(
@@ -855,15 +1050,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
       isScrollControlled: true,
       backgroundColor: context.bgColor,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           return Container(
             padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                left: 20,
-                right: 20,
-                top: 12),
+              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 12,
+            ),
             child: Form(
               key: formKey,
               child: SingleChildScrollView(
@@ -876,8 +1073,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                         width: 40,
                         height: 4,
                         decoration: BoxDecoration(
-                            color: kGold.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(2)),
+                          color: kGold.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -889,56 +1087,75 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                               ? 'Step 1: Miner Selection'
                               : 'Step 2: Material Information',
                           style: const TextStyle(
-                              color: kGold,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold),
+                            color: kGold,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         Text(
                           '$currentStep / 2',
                           style: TextStyle(
-                              color: context.mutedTextColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold),
+                            color: context.mutedTextColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 20),
                     if (currentStep == 1) ...[
-                      Text('Are you creating this request as a group?',
-                          style: TextStyle(
-                              color: context.textColor,
-                              fontWeight: FontWeight.bold)),
+                      Text(
+                        'Are you creating this request as a group?',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       RadioListTile<bool>(
-                        title: Text('Create for myself only',
-                            style: TextStyle(
-                                color: context.textColor, fontSize: 14)),
+                        title: Text(
+                          'Create for myself only',
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 14,
+                          ),
+                        ),
                         value: true,
                         groupValue: forMyselfOnly,
                         activeColor: kGold,
                         contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setModalState(() => forMyselfOnly = v!),
+                        onChanged: (v) =>
+                            setModalState(() => forMyselfOnly = v!),
                       ),
                       RadioListTile<bool>(
-                        title: Text('Add another Miner (Group)',
-                            style: TextStyle(
-                                color: context.textColor, fontSize: 14)),
+                        title: Text(
+                          'Add another Miner (Group)',
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 14,
+                          ),
+                        ),
                         value: false,
                         groupValue: forMyselfOnly,
                         activeColor: kGold,
                         contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setModalState(() => forMyselfOnly = v!),
+                        onChanged: (v) =>
+                            setModalState(() => forMyselfOnly = v!),
                       ),
                       if (!forMyselfOnly) ...[
                         const SizedBox(height: 16),
                         _buildStepLabel('Selected Participants'),
-                        
+
                         // "Dropdown" Header
                         InkWell(
-                          onTap: () => setModalState(() => isPickerOpen = !isPickerOpen),
+                          onTap: () =>
+                              setModalState(() => isPickerOpen = !isPickerOpen),
                           child: Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: context.surfaceColor,
                               borderRadius: BorderRadius.circular(12),
@@ -950,33 +1167,67 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                   child: SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
                                     child: Row(
-                                      children: participating.isEmpty 
-                                        ? [Text('Tap to select miners...', style: TextStyle(color: context.mutedTextColor, fontSize: 13))]
-                                        : participating.map((id) {
-                                            UserEntity? miner;
-                                            for (var m in _availableMiners) {
-                                              if (m.userId == id) {
-                                                miner = m;
-                                                break;
-                                              }
-                                            }
-                                            final name = miner != null ? '${miner.fname} ${miner.lname}' : 'Unknown';
-                                            return Padding(
-                                              padding: const EdgeInsets.only(right: 8.0),
-                                              child: Chip(
-                                                label: Text(name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                                                backgroundColor: kGold.withOpacity(0.1),
-                                                padding: EdgeInsets.zero,
-                                                visualDensity: VisualDensity.compact,
-                                                side: BorderSide(color: kGold.withOpacity(0.3)),
-                                                onDeleted: () => setModalState(() => participating.remove(id)),
+                                      children: participating.isEmpty
+                                          ? [
+                                              Text(
+                                                'Tap to select miners...',
+                                                style: TextStyle(
+                                                  color: context.mutedTextColor,
+                                                  fontSize: 13,
+                                                ),
                                               ),
-                                            );
-                                          }).toList(),
+                                            ]
+                                          : participating.map((id) {
+                                              UserEntity? miner;
+                                              for (var m in _availableMiners) {
+                                                if (m.userId == id) {
+                                                  miner = m;
+                                                  break;
+                                                }
+                                              }
+                                              final name = miner != null
+                                                  ? '${miner.fname} ${miner.lname}'
+                                                  : 'Unknown';
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                  right: 8.0,
+                                                ),
+                                                child: Chip(
+                                                  label: Text(
+                                                    name,
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  backgroundColor: kGold
+                                                      .withOpacity(0.1),
+                                                  padding: EdgeInsets.zero,
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                  side: BorderSide(
+                                                    color: kGold.withOpacity(
+                                                      0.3,
+                                                    ),
+                                                  ),
+                                                  onDeleted: () =>
+                                                      setModalState(
+                                                        () => participating
+                                                            .remove(id),
+                                                      ),
+                                                ),
+                                              );
+                                            }).toList(),
                                     ),
                                   ),
                                 ),
-                                Icon(isPickerOpen ? Icons.arrow_drop_up_rounded : Icons.arrow_drop_down_rounded, color: kGold),
+                                Icon(
+                                  isPickerOpen
+                                      ? Icons.arrow_drop_up_rounded
+                                      : Icons.arrow_drop_down_rounded,
+                                  color: kGold,
+                                ),
                               ],
                             ),
                           ),
@@ -990,7 +1241,13 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                               color: context.surfaceColor.withOpacity(0.8),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: kGold.withOpacity(0.1)),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))],
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                             child: Column(
                               children: [
@@ -999,34 +1256,78 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                   child: TextField(
                                     decoration: InputDecoration(
                                       hintText: 'Search miners...',
-                                      prefixIcon: const Icon(Icons.search, color: kGold, size: 18),
+                                      prefixIcon: const Icon(
+                                        Icons.search,
+                                        color: kGold,
+                                        size: 18,
+                                      ),
                                       isDense: true,
                                       contentPadding: EdgeInsets.zero,
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
                                     ),
-                                    style: TextStyle(color: context.textColor, fontSize: 12),
-                                    onChanged: (v) => setModalState(() => minerSearchQuery = v),
+                                    style: TextStyle(
+                                      color: context.textColor,
+                                      fontSize: 12,
+                                    ),
+                                    onChanged: (v) => setModalState(
+                                      () => minerSearchQuery = v,
+                                    ),
                                   ),
                                 ),
                                 Container(
-                                  constraints: const BoxConstraints(maxHeight: 200),
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 200,
+                                  ),
                                   child: ListView(
                                     shrinkWrap: true,
                                     children: _availableMiners
-                                        .where((m) =>
-                                            m.userId != currentUserId &&
-                                            (m.fname.toLowerCase().contains(minerSearchQuery.toLowerCase()) ||
-                                                m.lname.toLowerCase().contains(minerSearchQuery.toLowerCase())))
-                                        .map((m) => CheckboxListTile(
-                                              title: Text('${m.fname} ${m.lname}', style: TextStyle(color: context.textColor, fontSize: 13)),
-                                              value: participating.contains(m.userId),
-                                              dense: true,
-                                              visualDensity: VisualDensity.compact,
-                                              onChanged: (v) => setModalState(() => v! ? participating.add(m.userId) : participating.remove(m.userId)),
-                                              activeColor: kGold,
-                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                                              controlAffinity: ListTileControlAffinity.leading,
-                                            ))
+                                        .where(
+                                          (m) =>
+                                              m.userId != currentUserId &&
+                                              (m.fname.toLowerCase().contains(
+                                                    minerSearchQuery
+                                                        .toLowerCase(),
+                                                  ) ||
+                                                  m.lname
+                                                      .toLowerCase()
+                                                      .contains(
+                                                        minerSearchQuery
+                                                            .toLowerCase(),
+                                                      )),
+                                        )
+                                        .map(
+                                          (m) => CheckboxListTile(
+                                            title: Text(
+                                              '${m.fname} ${m.lname}',
+                                              style: TextStyle(
+                                                color: context.textColor,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            value: participating.contains(
+                                              m.userId,
+                                            ),
+                                            dense: true,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            onChanged: (v) => setModalState(
+                                              () => v!
+                                                  ? participating.add(m.userId)
+                                                  : participating.remove(
+                                                      m.userId,
+                                                    ),
+                                            ),
+                                            activeColor: kGold,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                ),
+                                            controlAffinity:
+                                                ListTileControlAffinity.leading,
+                                          ),
+                                        )
                                         .toList(),
                                   ),
                                 ),
@@ -1038,40 +1339,66 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     ] else ...[
                       // Material Condition (Bullets)
                       _buildStepLabel('Material Condition'),
-                      ...conditionOptions.map((c) => RadioListTile<String>(
-                        title: Text(c, style: TextStyle(color: context.textColor, fontSize: 13)),
-                        value: c,
-                        groupValue: condition,
-                        activeColor: kGold,
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setModalState(() => condition = v!),
-                      )).toList(),
+                      ...conditionOptions
+                          .map(
+                            (c) => RadioListTile<String>(
+                              title: Text(
+                                c,
+                                style: TextStyle(
+                                  color: context.textColor,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              value: c,
+                              groupValue: condition,
+                              activeColor: kGold,
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (v) =>
+                                  setModalState(() => condition = v!),
+                            ),
+                          )
+                          .toList(),
                       const SizedBox(height: 16),
 
                       // Material State (Bullets)
                       _buildStepLabel('Material State'),
-                      ...stateOptions.map((s) => RadioListTile<String>(
-                        title: Text(s, style: TextStyle(color: context.textColor, fontSize: 13)),
-                        value: s,
-                        groupValue: state,
-                        activeColor: kGold,
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setModalState(() => state = v!),
-                      )).toList(),
+                      ...stateOptions
+                          .map(
+                            (s) => RadioListTile<String>(
+                              title: Text(
+                                s,
+                                style: TextStyle(
+                                  color: context.textColor,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              value: s,
+                              groupValue: state,
+                              activeColor: kGold,
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (v) => setModalState(() => state = v!),
+                            ),
+                          )
+                          .toList(),
                       if (state == 'Others')
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: TextFormField(
                             initialValue: otherState,
                             onChanged: (v) => otherState = v,
-                            style: TextStyle(color: context.textColor, fontSize: 13),
+                            style: TextStyle(
+                              color: context.textColor,
+                              fontSize: 13,
+                            ),
                             decoration: InputDecoration(
                               hintText: 'Please specify material state',
                               filled: true,
                               fillColor: context.surfaceColor,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
                         ),
@@ -1079,30 +1406,44 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
 
                       // Material Source (Bullets)
                       _buildStepLabel('Material Source'),
-                      ...sourceOptions.map((so) => RadioListTile<String>(
-                        title: Text(so, style: TextStyle(color: context.textColor, fontSize: 13)),
-                        value: so,
-                        groupValue: sourceType,
-                        activeColor: kGold,
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setModalState(() {
-                          sourceType = v!;
-                          
-                          // Auto-fill logic
-                          bool canAutoFill = false;
-                          if (sourceType == 'Associated Ball Mill' && 
-                                    (_currentUser?.miningUnitType == 'Ball Mill' || _currentUser?.miningUnitType == 'Processing Plant')) {
-                            canAutoFill = true;
-                          }
+                      ...sourceOptions
+                          .map(
+                            (so) => RadioListTile<String>(
+                              title: Text(
+                                so,
+                                style: TextStyle(
+                                  color: context.textColor,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              value: so,
+                              groupValue: sourceType,
+                              activeColor: kGold,
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (v) => setModalState(() {
+                                sourceType = v!;
 
-                          if (canAutoFill && _currentUser?.miningUnitName != null) {
-                            sourceDetails = _currentUser!.miningUnitName!;
-                          } else {
-                            sourceDetails = '';
-                          }
-                        }),
-                      )).toList(),
+                                // Auto-fill logic
+                                bool canAutoFill = false;
+                                if (sourceType == 'Associated Ball Mill' &&
+                                    (_currentUser?.miningUnitType ==
+                                            'Ball Mill' ||
+                                        _currentUser?.miningUnitType ==
+                                            'Processing Plant')) {
+                                  canAutoFill = true;
+                                }
+
+                                if (canAutoFill &&
+                                    _currentUser?.miningUnitName != null) {
+                                  sourceDetails = _currentUser!.miningUnitName!;
+                                } else {
+                                  sourceDetails = '';
+                                }
+                              }),
+                            ),
+                          )
+                          .toList(),
                       const SizedBox(height: 16),
 
                       // Source Details
@@ -1122,10 +1463,22 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Unit Type: ${_currentUser?.miningUnitType}', 
-                                style: TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold)),
+                              Text(
+                                'Unit Type: ${_currentUser?.miningUnitType}',
+                                style: TextStyle(
+                                  color: kGold,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               const SizedBox(height: 4),
-                              Text(sourceDetails, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+                              Text(
+                                sourceDetails,
+                                style: TextStyle(
+                                  color: context.textColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ],
                           ),
                         )
@@ -1135,7 +1488,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                           hint: 'Enter source details manually',
                           initialValue: sourceDetails,
                           onChanged: (v) => sourceDetails = v,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Source details required' : null,
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Source details required'
+                              : null,
                         ),
                       const SizedBox(height: 16),
 
@@ -1149,7 +1504,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                               initialValue: mSacks?.toString(),
                               keyboardType: TextInputType.number,
                               onChanged: (v) => mSacks = int.tryParse(v),
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                             ),
                           ),
                         ],
@@ -1162,97 +1519,141 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                         onChanged: (v) => notes = v,
                       ),
                       const SizedBox(height: 8),
-                      Text('Sack Photos (Up to 5)',
-                          style: TextStyle(
-                              color: context.mutedTextColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold)),
+                      Text(
+                        'Sack Photos (Up to 5)',
+                        style: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
                             // Existing Photos
-                            ...existingPhotoUrls.map((url) => Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    width: 80,
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      color: context.surfaceColor,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: kGold.withOpacity(0.2)),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.network(url, fit: BoxFit.cover, 
-                                        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.red)),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: -2,
-                                    top: -2,
-                                    child: GestureDetector(
-                                      onTap: () => setModalState(() => existingPhotoUrls.remove(url)),
-                                      child: const CircleAvatar(
-                                        radius: 10,
-                                        backgroundColor: Colors.red,
-                                        child: Icon(Icons.close, size: 12, color: Colors.white),
+                            ...existingPhotoUrls.map(
+                              (url) => Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                        color: context.surfaceColor,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: kGold.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Image.network(
+                                          url,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              const Icon(
+                                                Icons.broken_image,
+                                                color: Colors.red,
+                                              ),
+                                        ),
                                       ),
                                     ),
-                                  )
-                                ],
+                                    Positioned(
+                                      right: -2,
+                                      top: -2,
+                                      child: GestureDetector(
+                                        onTap: () => setModalState(
+                                          () => existingPhotoUrls.remove(url),
+                                        ),
+                                        child: const CircleAvatar(
+                                          radius: 10,
+                                          backgroundColor: Colors.red,
+                                          child: Icon(
+                                            Icons.close,
+                                            size: 12,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            )),
+                            ),
                             // New selected photos
-                            ...selectedPhotos.map((p) => Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    width: 80,
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      color: context.surfaceColor,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: kGold.withOpacity(0.2)),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: p.bytes != null 
-                                        ? Image.memory(p.bytes!, fit: BoxFit.cover)
-                                        : const Icon(Icons.image, color: kGold),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: -2,
-                                    top: -2,
-                                    child: GestureDetector(
-                                      onTap: () => setModalState(() => selectedPhotos.remove(p)),
-                                      child: const CircleAvatar(
-                                        radius: 10,
-                                        backgroundColor: Colors.red,
-                                        child: Icon(Icons.close, size: 12, color: Colors.white),
+                            ...selectedPhotos.map(
+                              (p) => Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                        color: context.surfaceColor,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: kGold.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: p.bytes != null
+                                            ? Image.memory(
+                                                p.bytes!,
+                                                fit: BoxFit.cover,
+                                              )
+                                            : const Icon(
+                                                Icons.image,
+                                                color: kGold,
+                                              ),
                                       ),
                                     ),
-                                  )
-                                ],
+                                    Positioned(
+                                      right: -2,
+                                      top: -2,
+                                      child: GestureDetector(
+                                        onTap: () => setModalState(
+                                          () => selectedPhotos.remove(p),
+                                        ),
+                                        child: const CircleAvatar(
+                                          radius: 10,
+                                          backgroundColor: Colors.red,
+                                          child: Icon(
+                                            Icons.close,
+                                            size: 12,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            )),
-                            if ((selectedPhotos.length + existingPhotoUrls.length) < 5)
+                            ),
+                            if ((selectedPhotos.length +
+                                    existingPhotoUrls.length) <
+                                5)
                               InkWell(
                                 onTap: () async {
-                                  final result = await FilePicker.platform.pickFiles(
-                                    type: FileType.image,
-                                    allowMultiple: true,
-                                    withData: true,
-                                  );
+                                  final result = await FilePicker.platform
+                                      .pickFiles(
+                                        type: FileType.image,
+                                        allowMultiple: true,
+                                        withData: true,
+                                      );
                                   if (result != null) {
                                     setModalState(() {
-                                      final remaining = 5 - (selectedPhotos.length + existingPhotoUrls.length);
-                                      selectedPhotos.addAll(result.files.take(remaining));
+                                      final remaining =
+                                          5 -
+                                          (selectedPhotos.length +
+                                              existingPhotoUrls.length);
+                                      selectedPhotos.addAll(
+                                        result.files.take(remaining),
+                                      );
                                     });
                                   }
                                 },
@@ -1262,9 +1663,17 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                   decoration: BoxDecoration(
                                     color: context.surfaceColor,
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: kGold.withOpacity(0.3), style: BorderStyle.solid),
+                                    border: Border.all(
+                                      color: kGold.withOpacity(0.3),
+                                      style: BorderStyle.solid,
+                                    ),
                                   ),
-                                  child: const Center(child: Icon(Icons.add_a_photo_outlined, color: kGold)),
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.add_a_photo_outlined,
+                                      color: kGold,
+                                    ),
+                                  ),
                                 ),
                               ),
                           ],
@@ -1283,11 +1692,16 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                 side: const BorderSide(color: kGold),
                                 minimumSize: const Size(double.infinity, 54),
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
-                              child: const Text('Back',
-                                  style: TextStyle(
-                                      color: kGold, fontWeight: FontWeight.bold)),
+                              child: const Text(
+                                'Back',
+                                style: TextStyle(
+                                  color: kGold,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -1297,10 +1711,14 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                             onPressed: () {
                               if (currentStep == 1) {
                                 if (!forMyselfOnly && participating.isEmpty) {
-                                   ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text('Please select at least one other miner for a group request.')));
-                                   return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Please select at least one other miner for a group request.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
                                 }
                                 setModalState(() => currentStep = 2);
                               } else {
@@ -1309,7 +1727,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                   _showReviewDialog(
                                     existingRequestId: existingRequest?.id,
                                     condition: condition,
-                                    state: state == 'Others' ? otherState : state,
+                                    state: state == 'Others'
+                                        ? otherState
+                                        : state,
                                     sourceType: sourceType,
                                     sacks: mSacks,
                                     source: sourceDetails,
@@ -1327,12 +1747,16 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                               minimumSize: const Size(double.infinity, 54),
                               elevation: 2,
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text(
-                                currentStep == 1 ? 'Next Step' : 'Review Request',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 16)),
+                              currentStep == 1 ? 'Next Step' : 'Review Request',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -1367,35 +1791,65 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         builder: (context, setModalState) {
           return AlertDialog(
             backgroundColor: context.surfaceColor,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text(existingRequestId == null ? 'Review Request Details' : 'Review Updates',
-                style: const TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text(
+              existingRequestId == null
+                  ? 'Review Request Details'
+                  : 'Review Updates',
+              style: const TextStyle(color: kGold, fontWeight: FontWeight.bold),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Please check the entered information for accuracy.',
-                      style: TextStyle(
-                          color: context.mutedTextColor, fontSize: 13)),
+                  Text(
+                    'Please check the entered information for accuracy.',
+                    style: TextStyle(
+                      color: context.mutedTextColor,
+                      fontSize: 13,
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   _buildDetailRow(Icons.info_outline, 'Condition', condition),
                   _buildDetailRow(Icons.water_drop_outlined, 'State', state),
-                  _buildDetailRow(Icons.source_outlined, 'Source Type', sourceType),
-                  _buildDetailRow(Icons.location_on_outlined, 'Source Details', source),
+                  _buildDetailRow(
+                    Icons.source_outlined,
+                    'Source Type',
+                    sourceType,
+                  ),
+                  _buildDetailRow(
+                    Icons.location_on_outlined,
+                    'Source Details',
+                    source,
+                  ),
                   if (sacks != null)
                     _buildDetailRow(
-                        Icons.shopping_bag_outlined, 'Sacks', sacks.toString()),
-                  _buildDetailRow(Icons.people_rounded, 'Participants',
-                      '${miners.length} Miner(s)'),
-                  _buildDetailRow(Icons.photo_library_outlined, 'Photos', '${newPhotos.length + existingPhotoUrls.length} Total'),
+                      Icons.shopping_bag_outlined,
+                      'Sacks',
+                      sacks.toString(),
+                    ),
+                  _buildDetailRow(
+                    Icons.people_rounded,
+                    'Participants',
+                    '${miners.length} Miner(s)',
+                  ),
+                  _buildDetailRow(
+                    Icons.photo_library_outlined,
+                    'Photos',
+                    '${newPhotos.length + existingPhotoUrls.length} Total',
+                  ),
                   const SizedBox(height: 16),
-                  Text('Additional Notes:',
-                      style: TextStyle(
-                          color: context.mutedTextColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
+                  Text(
+                    'Additional Notes:',
+                    style: TextStyle(
+                      color: context.mutedTextColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Container(
                     width: double.infinity,
@@ -1407,9 +1861,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     child: Text(
                       notes.isEmpty ? 'None' : notes,
                       style: TextStyle(
-                          color: context.textColor,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 13),
+                        color: context.textColor,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -1417,8 +1872,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text(
-                        'I certify that the information above is accurate and ready for verification.',
-                        style: TextStyle(fontSize: 12)),
+                      'I certify that the information above is accurate and ready for verification.',
+                      style: TextStyle(fontSize: 12),
+                    ),
                     value: isCertified,
                     activeColor: kGold,
                     onChanged: (v) => setModalState(() => isCertified = v!),
@@ -1430,8 +1886,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text('Go Back',
-                    style: TextStyle(color: context.mutedTextColor)),
+                child: Text(
+                  'Go Back',
+                  style: TextStyle(color: context.mutedTextColor),
+                ),
               ),
               ElevatedButton(
                 onPressed: isCertified
@@ -1455,10 +1913,15 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   backgroundColor: kGold,
                   foregroundColor: kBlack,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: Text(existingRequestId == null ? 'Authorize & Submit' : 'Authorize & Update',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                child: Text(
+                  existingRequestId == null
+                      ? 'Authorize & Submit'
+                      : 'Authorize & Update',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           );
@@ -1491,13 +1954,16 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           // 1. Upload new photos if any
           List<String> photoUrls = List.from(existingPhotoUrls);
           if (newPhotos.isNotEmpty) {
-             final uploadResult = await _repository.uploadRequestPhotos(newPhotos);
-             bool uploadFailed = false;
-             uploadResult.fold(
-               (l) => uploadFailed = true,
-               (urls) => photoUrls.addAll(urls),
-             );
-             if (uploadFailed) return 'Failed to upload photos. Check connection.';
+            final uploadResult = await _repository.uploadRequestPhotos(
+              newPhotos,
+            );
+            bool uploadFailed = false;
+            uploadResult.fold(
+              (l) => uploadFailed = true,
+              (urls) => photoUrls.addAll(urls),
+            );
+            if (uploadFailed)
+              return 'Failed to upload photos. Check connection.';
           }
 
           if (existingRequestId != null) {
@@ -1527,7 +1993,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               numberOfSacks: sacks,
               source: source,
               notes: notes,
-              processingRequirements: notes, 
+              processingRequirements: notes,
               pin: pin,
               photoUrls: photoUrls,
             );
@@ -1542,12 +2008,16 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         if (Navigator.canPop(context)) {
           Navigator.pop(context);
         }
-        
+
         _loadData();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(existingRequestId == null ? 'Request submitted successfully!' : 'Request updated successfully!'),
+            content: Text(
+              existingRequestId == null
+                  ? 'Request submitted successfully!'
+                  : 'Request updated successfully!',
+            ),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1561,9 +2031,20 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        leading: Icon(Icons.group_outlined, size: 18, color: kGold.withOpacity(0.6)),
-        title: Text('Participants (${ids.length})', style: TextStyle(color: context.mutedTextColor, fontSize: 14)),
-        trailing: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: kGold),
+        leading: Icon(
+          Icons.group_outlined,
+          size: 18,
+          color: kGold.withOpacity(0.6),
+        ),
+        title: Text(
+          'Participants (${ids.length})',
+          style: TextStyle(color: context.mutedTextColor, fontSize: 14),
+        ),
+        trailing: const Icon(
+          Icons.keyboard_arrow_down_rounded,
+          size: 18,
+          color: kGold,
+        ),
         childrenPadding: const EdgeInsets.only(left: 32, bottom: 12),
         expandedAlignment: Alignment.centerLeft,
         children: [
@@ -1574,21 +2055,23 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 spacing: 6,
                 runSpacing: 6,
                 children: ids.map((id) {
-                   UserEntity? miner;
-                    for (var m in _availableMiners) {
-                      if (m.userId == id) {
-                        miner = m;
-                        break;
-                      }
+                  UserEntity? miner;
+                  for (var m in _availableMiners) {
+                    if (m.userId == id) {
+                      miner = m;
+                      break;
                     }
-                    final name = miner != null ? '${miner.fname} ${miner.lname}' : 'Miner';
-                    return Chip(
-                      label: Text(name, style: const TextStyle(fontSize: 10)),
-                      backgroundColor: kGold.withOpacity(0.05),
-                      side: BorderSide(color: kGold.withOpacity(0.2)),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                    );
+                  }
+                  final name = miner != null
+                      ? '${miner.fname} ${miner.lname}'
+                      : 'Miner';
+                  return Chip(
+                    label: Text(name, style: const TextStyle(fontSize: 10)),
+                    backgroundColor: kGold.withOpacity(0.05),
+                    side: BorderSide(color: kGold.withOpacity(0.2)),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  );
                 }).toList(),
               ),
             ),
@@ -1613,39 +2096,56 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: TextStyle(
-                  color: context.mutedTextColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5)),
+          Text(
+            label,
+            style: TextStyle(
+              color: context.mutedTextColor,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
           const SizedBox(height: 8),
           TextFormField(
             initialValue: initialValue,
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle:
-                  TextStyle(color: context.mutedTextColor.withOpacity(0.3)),
+              hintStyle: TextStyle(
+                color: context.mutedTextColor.withOpacity(0.3),
+              ),
               filled: true,
               fillColor: context.surfaceColor,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: kGold.withOpacity(0.2))),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: kGold.withOpacity(0.2)),
+              ),
               enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: kGold.withOpacity(0.2))),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: kGold.withOpacity(0.2)),
+              ),
               focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: kGold, width: 1.5)),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: kGold, width: 1.5),
+              ),
               errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.redAccent, width: 1)),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.redAccent, width: 1),
+              ),
               focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.redAccent, width: 1.5)),
-              errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Colors.redAccent,
+                  width: 1.5,
+                ),
+              ),
+              errorStyle: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 11,
+              ),
             ),
             style: TextStyle(color: context.textColor),
             keyboardType: keyboardType,
@@ -1662,28 +2162,30 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
 
   String _getMinerNames(List<String> ids) {
     if (ids.isEmpty) return 'None';
-    return ids.map((id) {
-      // Manual loop to avoid runtime type issues with firstWhere and inheritance
-      UserEntity? miner;
-      for (final m in _availableMiners) {
-        if (m.userId == id) {
-          miner = m;
-          break;
-        }
-      }
+    return ids
+        .map((id) {
+          // Manual loop to avoid runtime type issues with firstWhere and inheritance
+          UserEntity? miner;
+          for (final m in _availableMiners) {
+            if (m.userId == id) {
+              miner = m;
+              break;
+            }
+          }
 
-      miner ??= UserModel(
-        userId: id,
-        fname: 'Miner',
-        lname: '',
-        email: '',
-        address: '',
-        contactNum: '',
-        roleId: '',
-        status: '',
-      );
+          miner ??= UserModel(
+            userId: id,
+            fname: 'Miner',
+            lname: '',
+            email: '',
+            address: '',
+            contactNum: '',
+            roleId: '',
+            status: '',
+          );
 
-      return '${miner!.fname} ${miner.lname}'.trim();
-    }).join(', ');
+          return '${miner!.fname} ${miner.lname}'.trim();
+        })
+        .join(', ');
   }
 }

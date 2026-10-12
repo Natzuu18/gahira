@@ -108,7 +108,7 @@ class _LoginPageState extends State<LoginPage>
       _setLoading(false);
 
       result.fold(
-            (failure) {
+        (failure) {
           String message = failure.message;
           IconData icon = Icons.error_outline;
           Color color = Colors.redAccent;
@@ -121,7 +121,9 @@ class _LoginPageState extends State<LoginPage>
             color = Colors.orangeAccent;
           } else if (failure is AuthFailure) {
             // Only use the hardcoded message if it's a generic "Invalid login credentials" from Supabase
-            if (failure.message.toLowerCase().contains('invalid login credentials')) {
+            if (failure.message.toLowerCase().contains(
+              'invalid login credentials',
+            )) {
               message = "Invalid Credentials: Please try again.";
             } else {
               message = failure.message;
@@ -141,26 +143,24 @@ class _LoginPageState extends State<LoginPage>
               ),
               backgroundColor: color,
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           );
         },
         (userDto) {
-          debugPrint('Login successful: ${userDto.fname} ${userDto.lname} - Role: ${userDto.roleId}');
-          _goToDashboard(userDto.roleId, '${userDto.fname} ${userDto.lname}', pinSet: userDto.pinHash != null);
+          debugPrint(
+            'Login successful: ${userDto.fname} ${userDto.lname} - Role: ${userDto.roleId}',
+          );
+          _goToDashboard(
+            userDto.roleId,
+            '${userDto.fname} ${userDto.lname}',
+            pinSet: userDto.pinHash != null,
+          );
         },
       );
     }
-  }
-
-  void _handleOAuth(String provider) {
-    _setLoading(true);
-    // TODO: hook up real OAuth flow (e.g. google_sign_in, msal_flutter).
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      _setLoading(false);
-      _goToDashboard('admin', 'OAuth User', pinSet: true);
-    });
   }
 
   void _goToDashboard(String role, String name, {bool pinSet = true}) {
@@ -174,9 +174,9 @@ class _LoginPageState extends State<LoginPage>
     }
 
     if (!pinSet) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const SetPinPage()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const SetPinPage()));
       return;
     }
 
@@ -187,9 +187,16 @@ class _LoginPageState extends State<LoginPage>
     } else if (normalizedRole == 'operator') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-            builder: (_) => OperatorDashboardPage(operatorName: name)),
+          builder: (_) => OperatorDashboardPage(operatorName: name),
+        ),
       );
-    } else if (normalizedRole == 'client' || normalizedRole == 'miner') {
+    } else if (normalizedRole == 'client') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ClientDashboardPage(clientName: name),
+        ),
+      );
+    } else if (normalizedRole == 'miner') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => MinerDashboardPage(minerName: name)),
       );
@@ -203,7 +210,11 @@ class _LoginPageState extends State<LoginPage>
               backgroundColor: context.surfaceColor,
               title: Text(
                 '${role.toUpperCase()} DASHBOARD',
-                style: const TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2),
+                style: const TextStyle(
+                  color: kGold,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                ),
               ),
               centerTitle: true,
               iconTheme: const IconThemeData(color: kGold),
@@ -212,23 +223,37 @@ class _LoginPageState extends State<LoginPage>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.construction_rounded, color: kGold, size: 64),
+                  const Icon(
+                    Icons.construction_rounded,
+                    color: kGold,
+                    size: 64,
+                  ),
                   const SizedBox(height: 24),
                   Text(
                     'Welcome, $name!',
-                    style: TextStyle(color: context.textColor, fontSize: 22, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'The $role dashboard is currently under development.',
-                    style: TextStyle(color: context.mutedTextColor, fontSize: 16),
+                    style: TextStyle(
+                      color: context.mutedTextColor,
+                      fontSize: 16,
+                    ),
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton(
                     onPressed: () => Navigator.of(context).pushReplacement(
                       MaterialPageRoute(builder: (_) => const LoginPage()),
                     ),
-                    style: ElevatedButton.styleFrom(backgroundColor: kGold, foregroundColor: kBlack),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kGold,
+                      foregroundColor: Colors.white,
+                    ),
                     child: const Text('LOG OUT'),
                   ),
                 ],
@@ -249,8 +274,10 @@ class _LoginPageState extends State<LoginPage>
           children: [
             Center(
               child: SingleChildScrollView(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 40,
+                ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 400),
                   child: Form(
@@ -260,7 +287,13 @@ class _LoginPageState extends State<LoginPage>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // Logo / mark
-                        Center(child: _buildLogoMark(context, size: 88, iconSize: 40)),
+                        Center(
+                          child: _buildLogoMark(
+                            context,
+                            size: 88,
+                            iconSize: 40,
+                          ),
+                        ),
                         const SizedBox(height: 20),
                         const Text(
                           'GAHIRA',
@@ -294,7 +327,8 @@ class _LoginPageState extends State<LoginPage>
                           hint: 'Enter your email',
                           icon: Icons.email_outlined,
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Email is required';
+                            if (v == null || v.isEmpty)
+                              return 'Email is required';
                             if (!v.contains('@')) return 'Enter a valid email';
                             return null;
                           },
@@ -321,7 +355,8 @@ class _LoginPageState extends State<LoginPage>
                               color: kGold.withOpacity(0.7),
                             ),
                             onPressed: () => setState(
-                                    () => _obscurePassword = !_obscurePassword),
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
                           ),
                         ),
 
@@ -329,7 +364,15 @@ class _LoginPageState extends State<LoginPage>
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Contact your administrator to reset your password.',
+                                  ),
+                                ),
+                              );
+                            },
                             style: TextButton.styleFrom(
                               foregroundColor: kGold,
                               padding: EdgeInsets.zero,
@@ -346,9 +389,8 @@ class _LoginPageState extends State<LoginPage>
                             onPressed: _isLoading ? null : _handleLogin,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: kGold,
-                              disabledBackgroundColor:
-                              kGold.withOpacity(0.6),
-                              foregroundColor: kBlack,
+                              disabledBackgroundColor: kGold.withOpacity(0.6),
+                              foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -366,57 +408,25 @@ class _LoginPageState extends State<LoginPage>
                         ),
                         const SizedBox(height: 24),
 
-                        // OR divider
-                        Row(
-                          children: [
-                            Expanded(
-                                child: Divider(color: kGold.withOpacity(0.2))),
-                            Padding(
-                              padding:
-                              const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text(
-                                'OR CONTINUE WITH',
-                                style: TextStyle(
-                                  color: kGold.withOpacity(0.5),
-                                  fontSize: 11,
-                                  letterSpacing: 1,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                                child: Divider(color: kGold.withOpacity(0.2))),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // OAuth buttons
-                        _buildOAuthButton(
-                          context,
-                          label: 'Continue with Google',
-                          asset: _GAsset(),
-                          onPressed:
-                          _isLoading ? null : () => _handleOAuth('Google'),
-                        ),
                         const SizedBox(height: 12),
-                        _buildOAuthButton(
-                          context,
-                          label: 'Continue with Microsoft',
-                          asset: Icon(Icons.window_rounded,
-                              color: kGold.withOpacity(0.9), size: 18),
-                          onPressed: _isLoading
-                              ? null
-                              : () => _handleOAuth('Microsoft'),
+                        Text(
+                          'Sign in with the account provided by your administrator.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: context.mutedTextColor,
+                            fontSize: 13,
+                          ),
                         ),
-
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 24),
                         Row(
                           children: [
                             Expanded(
-                                child: Divider(color: kGold.withOpacity(0.15))),
+                              child: Divider(color: kGold.withOpacity(0.15)),
+                            ),
                             Padding(
-                              padding:
-                              const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                               child: Text(
                                 'v1.0',
                                 style: TextStyle(
@@ -426,7 +436,8 @@ class _LoginPageState extends State<LoginPage>
                               ),
                             ),
                             Expanded(
-                                child: Divider(color: kGold.withOpacity(0.15))),
+                              child: Divider(color: kGold.withOpacity(0.15)),
+                            ),
                           ],
                         ),
                       ],
@@ -436,12 +447,21 @@ class _LoginPageState extends State<LoginPage>
               ),
             ),
 
-            // Light/dark mode toggle, top-right
-            const Positioned(
+            Positioned(
               top: 4,
-              right: 4,
-              child: ThemeToggleButton(),
+              left: 4,
+              child: IconButton(
+                tooltip: 'Back to landing page',
+                onPressed: () => Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LandingPage()),
+                ),
+                icon: const Icon(Icons.arrow_back_rounded),
+                color: context.textColor,
+              ),
             ),
+
+            // Light/dark mode toggle, top-right
+            const Positioned(top: 4, right: 4, child: ThemeToggleButton()),
 
             // Full-screen loading overlay with spinning logo
             IgnorePointer(
@@ -459,7 +479,11 @@ class _LoginPageState extends State<LoginPage>
                       children: [
                         RotationTransition(
                           turns: _spinController,
-                          child: _buildLogoMark(context, size: 72, iconSize: 32),
+                          child: _buildLogoMark(
+                            context,
+                            size: 72,
+                            iconSize: 32,
+                          ),
                         ),
                         const SizedBox(height: 20),
                         Text(
@@ -483,8 +507,11 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 
-  Widget _buildLogoMark(BuildContext context,
-      {required double size, required double iconSize}) {
+  Widget _buildLogoMark(
+    BuildContext context, {
+    required double size,
+    required double iconSize,
+  }) {
     return Container(
       width: size,
       height: size,
@@ -514,14 +541,14 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Widget _buildTextField(
-      BuildContext context, {
-        required TextEditingController controller,
-        required String hint,
-        required IconData icon,
-        bool obscureText = false,
-        Widget? suffixIcon,
-        String? Function(String?)? validator,
-      }) {
+    BuildContext context, {
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    bool obscureText = false,
+    Widget? suffixIcon,
+    String? Function(String?)? validator,
+  }) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -535,8 +562,10 @@ class _LoginPageState extends State<LoginPage>
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: context.surfaceColor,
-        contentPadding:
-        const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 16,
+          horizontal: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: kGold.withOpacity(0.25)),
@@ -552,67 +581,6 @@ class _LoginPageState extends State<LoginPage>
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Colors.redAccent),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOAuthButton(
-      BuildContext context, {
-        required String label,
-        required Widget asset,
-        required VoidCallback? onPressed,
-      }) {
-    return SizedBox(
-      height: 48,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: context.surfaceColor,
-          side: BorderSide(color: kGold.withOpacity(0.3)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            asset,
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: TextStyle(
-                color: context.textColor,
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Small "G" mark placeholder so no external asset/package is required.
-// Swap this for the real Google "G" logo asset if you have one.
-class _GAsset extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 18,
-      height: 18,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: kGold.withOpacity(0.8), width: 1.2),
-      ),
-      child: Text(
-        'G',
-        style: TextStyle(
-          color: kGold.withOpacity(0.9),
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
         ),
       ),
     );

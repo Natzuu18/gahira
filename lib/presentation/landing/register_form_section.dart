@@ -8,8 +8,6 @@ import '../../application/services/registration_service.dart';
 import '../../domain/entities/registration_enums.dart';
 import '../../infrastructure/repositories/supabase_registration_repository.dart';
 import '../shared_widgets/appColor.dart';
-import '../operator/operator_dashboard.dart';
-import '../admin/admin_dashboard.dart';
 
 /// A self-contained "Submit your application" form section, meant to be
 /// embedded directly inside another page's scrollable Column, e.g.:

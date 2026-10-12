@@ -61,9 +61,9 @@ class _SetPinPageState extends State<SetPinPage> {
             backgroundColor: Colors.green,
           ),
         );
-        _goToLogin(); // Force re-login or go to dashboard? 
+        _goToLogin(); // Force re-login or go to dashboard?
         // Usually, after setting mandatory security, we can proceed.
-        // But login logic in main.dart handles redirection, so let's just go back to login 
+        // But login logic in main.dart handles redirection, so let's just go back to login
         // to re-trigger the flow or handle it specifically.
         // Actually, better to just push them to the login page to be sure.
       },

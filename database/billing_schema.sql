@@ -98,33 +98,3 @@ CREATE INDEX IF NOT EXISTS service_billing_items_request_idx
 
 CREATE INDEX IF NOT EXISTS refinery_overhead_expenses_date_idx
   ON public.refinery_overhead_expenses(expense_date);
-
-CREATE TABLE IF NOT EXISTS public.sms_templates (
-  template_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL UNIQUE,
-  category text NOT NULL DEFAULT 'General',
-  message text NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS public.sms_notifications (
-  notification_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  recipient text NOT NULL,
-  recipient_name text,
-  message text NOT NULL,
-  type text NOT NULL DEFAULT 'Manual Message',
-  status text NOT NULL CHECK (status IN ('Delivered', 'Failed')),
-  provider_message text,
-  sent_at timestamp with time zone NOT NULL DEFAULT now(),
-  sent_by uuid REFERENCES public.users("userId")
-);
-
-CREATE INDEX IF NOT EXISTS sms_notifications_sent_at_idx
-  ON public.sms_notifications(sent_at DESC);
-
-INSERT INTO public.sms_templates (name, category, message) VALUES
-  ('Processing Update', 'Processing', 'Your gold processing job {JOB_ID} has moved to {STAGE} stage.'),
-  ('Payment Confirmation', 'Billing', 'Payment of {AMOUNT} for invoice {INVOICE_ID} has been received.'),
-  ('Maintenance Reminder', 'Maintenance', 'Scheduled maintenance for {EQUIPMENT} on {DATE} at {TIME}.')
-ON CONFLICT (name) DO NOTHING;

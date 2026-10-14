@@ -8,7 +8,8 @@ class EquipmentMaintenancePage extends StatefulWidget {
   const EquipmentMaintenancePage({super.key});
 
   @override
-  State<EquipmentMaintenancePage> createState() => _EquipmentMaintenancePageState();
+  State<EquipmentMaintenancePage> createState() =>
+      _EquipmentMaintenancePageState();
 }
 
 class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
@@ -104,20 +105,25 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
   Widget _buildMachinesTab() {
     return RefreshIndicator(
       onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _machines.length,
-        itemBuilder: (context, index) {
-          final machine = _machines[index];
-          return _buildEquipmentCard(
-            id: machine['machine_id'],
-            name: machine['machine_name'],
-            code: machine['machine_code'],
-            type: machine['machine_type'] ?? 'N/A',
-            status: machine['status'],
-            isMachine: true,
-          );
-        },
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _machines.length,
+            itemBuilder: (context, index) {
+              final machine = _machines[index];
+              return _buildEquipmentCard(
+                id: machine['machine_id'],
+                name: machine['machine_name'],
+                code: machine['machine_code'],
+                type: machine['machine_type'] ?? 'N/A',
+                status: machine['status'],
+                isMachine: true,
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -125,20 +131,25 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
   Widget _buildDrumsTab() {
     return RefreshIndicator(
       onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _drums.length,
-        itemBuilder: (context, index) {
-          final drum = _drums[index];
-          return _buildEquipmentCard(
-            id: drum['drum_id'],
-            name: drum['drum_name'],
-            code: drum['drum_code'],
-            type: 'Drum (Cap: ${drum['capacity'] ?? 'N/A'})',
-            status: drum['status'],
-            isMachine: false,
-          );
-        },
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _drums.length,
+            itemBuilder: (context, index) {
+              final drum = _drums[index];
+              return _buildEquipmentCard(
+                id: drum['drum_id'],
+                name: drum['drum_name'],
+                code: drum['drum_code'],
+                type: 'Drum (Cap: ${drum['capacity'] ?? 'N/A'})',
+                status: drum['status'],
+                isMachine: false,
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -146,13 +157,18 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
   Widget _buildMaintenanceTab() {
     return RefreshIndicator(
       onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _maintenance.length,
-        itemBuilder: (context, index) {
-          final maint = _maintenance[index];
-          return _buildMaintenanceCard(maint);
-        },
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _maintenance.length,
+            itemBuilder: (context, index) {
+              final maint = _maintenance[index];
+              return _buildMaintenanceCard(maint);
+            },
+          ),
+        ),
       ),
     );
   }
@@ -170,8 +186,8 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
         : (status.toLowerCase() == 'maintenance' ? Colors.orange : Colors.red);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(16),
@@ -190,7 +206,9 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isMachine ? Icons.settings_input_component_rounded : Icons.inventory_2_rounded,
+                  isMachine
+                      ? Icons.settings_input_component_rounded
+                      : Icons.inventory_2_rounded,
                   color: statusColor,
                   size: 24,
                 ),
@@ -219,7 +237,10 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -242,14 +263,17 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
               _buildInfoChip('CODE', code),
               const Spacer(),
               ElevatedButton.icon(
-                onPressed: () => _showUpdateStatusDialog(id, name, status, isMachine),
+                onPressed: () =>
+                    _showUpdateStatusDialog(id, name, status, isMachine),
                 icon: const Icon(Icons.edit_note_rounded, size: 16),
                 label: const Text('Update Status'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kGold,
                   foregroundColor: kBlack,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ],
@@ -265,7 +289,10 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
         ? kGold
         : (status.toLowerCase() == 'ongoing' ? Colors.blue : Colors.green);
 
-    final equipmentName = maint['machines']?['machine_name'] ?? maint['drums']?['drum_name'] ?? 'Unknown';
+    final equipmentName =
+        maint['machines']?['machine_name'] ??
+        maint['drums']?['drum_name'] ??
+        'Unknown';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -287,11 +314,7 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
                   color: statusColor.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.build_rounded,
-                  color: statusColor,
-                  size: 24,
-                ),
+                child: Icon(Icons.build_rounded, color: statusColor, size: 24),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -317,7 +340,10 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -339,10 +365,14 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
             children: [
               _buildInfoChip('DATE', maint['maintenance_date']),
               const SizedBox(width: 8),
-              _buildInfoChip('TIME', '${maint['start_time']} - ${maint['end_time']}'),
+              _buildInfoChip(
+                'TIME',
+                '${maint['start_time']} - ${maint['end_time']}',
+              ),
             ],
           ),
-          if (maint['remarks'] != null && maint['remarks'].toString().isNotEmpty) ...[
+          if (maint['remarks'] != null &&
+              maint['remarks'].toString().isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -375,7 +405,10 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
               if (status.toLowerCase() != 'completed')
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => _updateMaintenanceStatus(maint['maintenance_id'], 'completed'),
+                    onPressed: () => _updateMaintenanceStatus(
+                      maint['maintenance_id'],
+                      'completed',
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green.withOpacity(0.8),
                       foregroundColor: Colors.white,
@@ -422,7 +455,12 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
     );
   }
 
-  void _showUpdateStatusDialog(String id, String name, String currentStatus, bool isMachine) {
+  void _showUpdateStatusDialog(
+    String id,
+    String name,
+    String currentStatus,
+    bool isMachine,
+  ) {
     String selectedStatus = currentStatus.toLowerCase();
     final statuses = ['available', 'in_use', 'maintenance', 'inactive'];
 
@@ -434,26 +472,43 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
           title: Text('Update Condition: $name'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            children: statuses.map((status) => RadioListTile<String>(
-              title: Text(status.toUpperCase(), style: TextStyle(color: context.textColor)),
-              value: status,
-              groupValue: selectedStatus,
-              activeColor: kGold,
-              onChanged: (val) => setDialogState(() => selectedStatus = val!),
-            )).toList(),
+            children: statuses
+                .map(
+                  (status) => RadioListTile<String>(
+                    title: Text(
+                      status.toUpperCase(),
+                      style: TextStyle(color: context.textColor),
+                    ),
+                    value: status,
+                    groupValue: selectedStatus,
+                    activeColor: kGold,
+                    onChanged: (val) =>
+                        setDialogState(() => selectedStatus = val!),
+                  ),
+                )
+                .toList(),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: kGold),
               onPressed: () async {
-                final res = isMachine 
-                  ? await _repository.updateMachine(id, {'status': selectedStatus})
-                  : await _repository.updateDrum(id, {'status': selectedStatus});
-                
+                final res = isMachine
+                    ? await _repository.updateMachine(id, {
+                        'status': selectedStatus,
+                      })
+                    : await _repository.updateDrum(id, {
+                        'status': selectedStatus,
+                      });
+
                 Navigator.pop(context);
                 res.fold(
-                  (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+                  (l) => ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(l.message))),
                   (_) => _loadData(),
                 );
               },
@@ -466,7 +521,9 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
   }
 
   void _showMaintenanceNotesDialog(Map<String, dynamic> maint) {
-    final TextEditingController controller = TextEditingController(text: maint['remarks'] ?? '');
+    final TextEditingController controller = TextEditingController(
+      text: maint['remarks'] ?? '',
+    );
 
     showDialog(
       context: context,
@@ -483,14 +540,22 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
           style: TextStyle(color: context.textColor),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: kGold),
             onPressed: () async {
-              final res = await _repository.updateMaintenance(maint['maintenance_id'], {'remarks': controller.text});
+              final res = await _repository.updateMaintenance(
+                maint['maintenance_id'],
+                {'remarks': controller.text},
+              );
               Navigator.pop(context);
               res.fold(
-                (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+                (l) => ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(l.message))),
                 (_) => _loadData(),
               );
             },
@@ -504,7 +569,9 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
   Future<void> _updateMaintenanceStatus(String id, String status) async {
     final res = await _repository.updateMaintenanceStatus(id, status);
     res.fold(
-      (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+      (l) => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.message))),
       (_) => _loadData(),
     );
   }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import './presentation/shared_widgets/appColor.dart';
-import './presentation/admin/admin_dashboard.dart';
+import './presentation/admin/admin_main_layout.dart';
 import './presentation/operator/operator_dashboard.dart';
 import './presentation/client/client_dashboard.dart';
 import './presentation/miner/miner_dashboard.dart';
@@ -182,7 +182,7 @@ class _LoginPageState extends State<LoginPage>
 
     if (normalizedRole == 'admin') {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => AdminDashboardPage(adminName: name)),
+        MaterialPageRoute(builder: (_) => AdminMainLayout(adminName: name)),
       );
     } else if (normalizedRole == 'operator') {
       Navigator.of(context).pushReplacement(

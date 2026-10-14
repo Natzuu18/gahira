@@ -16,9 +16,24 @@ class UserModel extends UserEntity {
     super.miningUnitName,
     super.miningUnitType,
     super.pinHash,
+    super.createdAt,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    DateTime? parsedCreatedAt;
+    if (json['created_at'] != null) {
+      parsedCreatedAt = DateTime.tryParse(json['created_at'].toString());
+    } else if (json['applications'] != null) {
+      final apps = json['applications'];
+      if (apps is List && apps.isNotEmpty) {
+        final respAt = apps[0]['response_at'] ?? apps[0]['created_at'];
+        if (respAt != null) parsedCreatedAt = DateTime.tryParse(respAt.toString());
+      } else if (apps is Map && (apps['response_at'] != null || apps['created_at'] != null)) {
+        final respAt = apps['response_at'] ?? apps['created_at'];
+        if (respAt != null) parsedCreatedAt = DateTime.tryParse(respAt.toString());
+      }
+    }
+
     return UserModel(
       userId: (json['userId'] ?? json['userid'] ?? json['user_id'] ?? '').toString(),
       fname: json['fname'] ?? '',
@@ -34,6 +49,7 @@ class UserModel extends UserEntity {
       miningUnitName: json['mining_unit_name'] ?? (json['mining_units'] != null ? json['mining_units']['name'] : null),
       miningUnitType: json['mining_unit_type'] ?? (json['mining_units'] != null ? json['mining_units']['type'] : null),
       pinHash: json['pin_hash'],
+      createdAt: parsedCreatedAt,
     );
   }
 
@@ -45,15 +61,13 @@ class UserModel extends UserEntity {
       'lname': lname,
       'address': address,
       'email': email,
-      // 'password' deliberately omitted — Supabase Auth owns credential
-      // storage; writing it here would put a plaintext password in your
-      // 'users' table, readable by anyone with select access.
+      // 'password' deliberately omitted
       'contact_num': contactNum,
       'role_id': roleId,
       'status': status,
       'mining_unit_id': miningUnitId,
       'pin_hash': pinHash,
-      // miningUnitName and miningUnitType are not persisted in this table
+      'created_at': createdAt?.toIso8601String(),
     };
   }
 
@@ -73,6 +87,7 @@ class UserModel extends UserEntity {
       miningUnitName: entity.miningUnitName,
       miningUnitType: entity.miningUnitType,
       pinHash: entity.pinHash,
+      createdAt: entity.createdAt,
     );
   }
 }

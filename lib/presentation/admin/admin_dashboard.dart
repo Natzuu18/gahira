@@ -45,18 +45,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           ),
         ),
         iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            tooltip: 'Menu',
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
-      ),
-      endDrawer: AdminDrawer(
-        currentMenu: AdminMenu.dashboard,
-        adminName: widget.adminName,
       ),
       body: Column(
         children: [

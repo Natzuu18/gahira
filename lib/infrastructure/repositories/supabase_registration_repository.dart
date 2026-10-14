@@ -19,6 +19,9 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
 
   @override
   Future<Either<Failure, UserEntity>> register(RegistrationData data) async {
+    User? authUser;
+    String? documentPath;
+
     try {
       // 0. Confirm phone verification actually happened for this exact phone
       // and token, server-side.
@@ -53,25 +56,30 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       final tempPassword = _generateRandomPassword();
 
       // 3. Sign up in Supabase Auth
-      // Email is the auth identifier here. Phone is NOT passed to signUp() —
-      // it's stored separately as a plain column in public.users below
-      // (via newUser.toJson() -> contactNum), since GoTrue's signUp() rejects
-      // requests that include both email and phone.
       final authResponse = await _client.auth.signUp(
         email: data.email,
         password: tempPassword,
+        data: {
+          'fname': data.firstName,
+          'mname': data.middleName ?? '',
+          'lname': data.lastName,
+          'address': data.address,
+          'contact_num': data.phone,
+          'role_id': roleId.toString(),
+          'mining_unit_id': data.miningUnitId,
+        },
       );
 
-      final authUser = authResponse.user;
+      authUser = authResponse.user;
       if (authUser == null) {
         return const Left(AuthFailure('Auth registration failed'));
       }
 
+      final String userId = authUser.id;
+
       // 4. Create User Profile in 'users' table
-      // NOTE: confirm UserModel.toJson() emits the PK key exactly as "userId"
-      // (schema shows camelCase here, unlike every other table which is snake_case)
       final newUser = UserModel(
-        userId: authUser.id,
+        userId: userId,
         fname: data.firstName,
         mname: data.middleName,
         lname: data.lastName,
@@ -86,10 +94,9 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       await _client.from('users').insert(newUser.toJson());
 
       // 5. Handle File Uploads & Personal Details
-      String? documentPath;
       if (data.role == UserRole.miner && data.clientDocument != null) {
         final extension = data.clientDocumentName?.split('.').last ?? 'bin';
-        documentPath = 'doc_${authUser.id}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+        documentPath = 'doc_${userId}_${DateTime.now().millisecondsSinceEpoch}.$extension';
         
         await _client.storage.from('userFiles').uploadBinary(
           documentPath,
@@ -98,13 +105,13 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
         );
 
         await _client.from('personal_details').insert({
-          'user_id': authUser.id,
+          'user_id': userId,
           'document': _bytesToBytea(data.clientDocument!),
           'uploaded_at': DateTime.now().toIso8601String(),
         });
       } else if (data.role == UserRole.operator && data.resume != null) {
         final extension = data.resumeName?.split('.').last ?? 'bin';
-        documentPath = 'resume_${authUser.id}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+        documentPath = 'resume_${userId}_${DateTime.now().millisecondsSinceEpoch}.$extension';
 
         await _client.storage.from('userFiles').uploadBinary(
           documentPath,
@@ -113,48 +120,68 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
         );
 
         await _client.from('personal_details').insert({
-          'user_id': authUser.id,
+          'user_id': userId,
           'document': _bytesToBytea(data.resume!),
           'uploaded_at': DateTime.now().toIso8601String(),
         });
       }
 
       // 6. Create initial application entry
-      try {
-        await _client.from('applications').insert({
-          'user_id': authUser.id,
-          'status': 'pending',
-          'temp_pass': tempPassword,
-          'document_id': documentPath, // Path to file in userFiles bucket
-          'created_at': DateTime.now().toIso8601String(),
-        });
-      } catch (e) {
-        // Rollback: delete the user if the application record fails
-        await _client.from('users').delete().eq('userId', authUser.id);
-        // Note: we can't easily delete from Supabase Auth without service role
-        rethrow;
-      }
+      await _client.from('applications').insert({
+        'user_id': userId,
+        'status': 'pending',
+        'temp_pass': tempPassword,
+        'document_id': documentPath,
+        'created_at': DateTime.now().toIso8601String(),
+      });
 
-      // Mark the verification token consumed so it can't be replayed.
+      // 7. Mark the verification token consumed so it can't be replayed.
       await _client
           .from('phone_otp_verifications')
           .update({'consumed': true})
           .eq('id', verification['id']);
 
       return Right(newUser);
-    } on AuthException catch (e) {
-      String message = e.message;
-      if (message.toLowerCase().contains('account created')) {
-        message = 'Registered successfully. Wait for the admin response';
-      }
-      return Left(AuthFailure(message));
-    } on PostgrestException catch (e) {
-      return Left(ServerFailure('Database error: ${e.message}'));
     } catch (e) {
-      if (e.toString().contains('SocketException')) {
-        return const Left(NetworkFailure('Network unreachable'));
+      // --- ATOMIC ROLLBACK ON ANY REGISTRATION FAILURE ---
+      if (authUser != null) {
+        final String failedUserId = authUser.id;
+
+        // 1. Remove uploaded storage file if present
+        if (documentPath != null) {
+          try {
+            await _client.storage.from('userFiles').remove([documentPath]);
+          } catch (_) {}
+        }
+
+        // 2. Perform database & Auth cleanup via atomic RPC or fallbacks
+        try {
+          await _client.rpc('rollback_failed_registration', params: {
+            'target_user_id': failedUserId,
+          });
+        } catch (_) {
+          try {
+            await _client.from('applications').delete().eq('user_id', failedUserId);
+            await _client.from('personal_details').delete().eq('user_id', failedUserId);
+            await _client.from('users').delete().eq('userId', failedUserId);
+          } catch (_) {}
+        }
       }
-      return Left(ServerFailure(e.toString()));
+
+      if (e is AuthException) {
+        String message = e.message;
+        if (message.toLowerCase().contains('account created')) {
+          message = 'Registered successfully. Wait for the admin response';
+        }
+        return Left(AuthFailure(message));
+      } else if (e is PostgrestException) {
+        return Left(ServerFailure('Database error: ${e.message}'));
+      } else {
+        if (e.toString().contains('SocketException')) {
+          return const Left(NetworkFailure('Network unreachable'));
+        }
+        return Left(ServerFailure(e.toString()));
+      }
     }
   }
 

@@ -15,6 +15,7 @@ class UserEntity extends Equatable {
   final String? miningUnitName; // Joined from mining_units table
   final String? miningUnitType; // Joined from mining_units table
   final String? pinHash; // Hashed PIN for secure actions
+  final DateTime? createdAt; // Registration / Approval timestamp
 
   const UserEntity({
     required this.userId,
@@ -31,6 +32,7 @@ class UserEntity extends Equatable {
     this.miningUnitName,
     this.miningUnitType,
     this.pinHash,
+    this.createdAt,
   });
 
   @override
@@ -49,5 +51,6 @@ class UserEntity extends Equatable {
     miningUnitName,
     miningUnitType,
     pinHash,
+    createdAt,
   ];
 }

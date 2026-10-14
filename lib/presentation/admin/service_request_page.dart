@@ -73,6 +73,23 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
     return user != null ? '${user.fname} ${user.lname}' : 'Unknown';
   }
 
+  Widget _buildLogoMark() {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: kGold, width: 1.6),
+        color: context.bgColor,
+      ),
+      child: const Icon(
+        Icons.settings_input_component_rounded,
+        color: kGold,
+        size: 16,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -81,13 +98,17 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
         elevation: 0,
+        leadingWidth: 64,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: _buildLogoMark(),
+        ),
         title: const Text('SERVICES', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2)),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(icon: const Icon(Icons.menu_rounded, color: kGold), onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.serviceRequest),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kGold))
           : Column(

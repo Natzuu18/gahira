@@ -97,18 +97,24 @@ class SupabaseApprovalRepository {
     }
   }
 
-  /// Consolidates approval logic via backend to ensure SMS and DB consistency
+  /// Consolidates approval logic via backend and sends approval SMS via PhilSMS directly
   Future<Either<Failure, void>> approveApplication({
     required String applicationId,
     required String userId,
   }) async {
     try {
-      // 1. Fetch user to get phone number and verify format
+      // 1. Fetch user details and application temp password
       final userResponse = await _client
           .from('users')
-          .select('contact_num')
+          .select('contact_num, email, fname, role:role_id(role)')
           .eq('userId', userId)
           .single();
+
+      final appResponse = await _client
+          .from('applications')
+          .select('temp_pass')
+          .eq('application_id', applicationId)
+          .maybeSingle();
       
       String phone = userResponse['contact_num'] ?? '';
       String normalizedPhone = _normalizePhone(phone);
@@ -126,18 +132,79 @@ class SupabaseApprovalRepository {
             .eq('userId', userId);
       }
 
-      // 3. Generate the temporary password NOW (during approval)
-      final tempPassword = _generateRandomPassword();
+      // 3. Get or generate the temporary password
+      String? existingPass = appResponse?['temp_pass']?.toString();
+      final tempPassword = (existingPass != null && existingPass.trim().isNotEmpty)
+          ? existingPass.trim()
+          : _generateRandomPassword();
 
-      // 4. Call the RPC to update Auth, DB, and send SMS in one transaction.
-      await _client.rpc(
-        'approve_application_with_pass',
-        params: {
-          'app_id': applicationId,
-          'u_id': userId,
-          'new_pass': tempPassword,
+      // 4. Update Auth and DB status
+      try {
+        await _client.rpc(
+          'approve_application_with_pass',
+          params: {
+            'app_id': applicationId,
+            'u_id': userId,
+            'new_pass': tempPassword,
+          },
+        );
+      } catch (_) {
+        // Fallback to direct table updates if RPC function is missing or fails
+        await _client
+            .from('applications')
+            .update({
+              'status': 'approved',
+              'temp_pass': tempPassword,
+              'response_at': DateTime.now().toIso8601String(),
+            })
+            .eq('application_id', applicationId);
+
+        await _client
+            .from('users')
+            .update({'status': 'approved'})
+            .eq('userId', userId);
+      }
+
+      // 5. Send SMS notification to the user via PhilSMS
+      final fname = userResponse['fname'] ?? 'User';
+      final email = userResponse['email'] ?? '';
+      final roleMap = userResponse['role'] as Map<String, dynamic>?;
+      final roleName = roleMap?['role']?.toString().toUpperCase() ?? 'ACCOUNT';
+
+      final smsMessage = 'Gahira System: Hello $fname! Your $roleName application has been APPROVED. You can now log in using Email: $email | Password: $tempPassword. Thank you!';
+
+      final smsResponse = await http.post(
+        Uri.parse(EnvConfig.philsmsEndpoint),
+        headers: {
+          'Authorization': 'Bearer ${EnvConfig.philsmsApiKey.trim()}',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        body: jsonEncode({
+          'recipient': normalizedPhone,
+          'sender_id': EnvConfig.philsmsSenderId,
+          'message': smsMessage,
+        }),
       );
+
+      if (smsResponse.statusCode >= 300) {
+        String errMsg = 'Failed to send SMS via PhilSMS.';
+        try {
+          final body = jsonDecode(smsResponse.body);
+          if (body['message'] != null) {
+            errMsg = 'PhilSMS Error: ${body['message']}';
+          }
+        } catch (_) {}
+        return Left(ServerFailure('Application approved in system, but SMS failed: $errMsg'));
+      }
+
+      try {
+        final body = jsonDecode(smsResponse.body);
+        if (body['status'] == 'error' || body['status'] == 'failed') {
+          final msg = body['message'] ?? 'PhilSMS delivery error';
+          return Left(ServerFailure('Application approved in system, but PhilSMS returned: $msg'));
+        }
+      } catch (_) {}
 
       return const Right(null);
     } catch (e) {
@@ -186,7 +253,7 @@ class SupabaseApprovalRepository {
       final response = await _client
           .from('users')
           .select('''
-            user_id,
+            userId,
             fname,
             mname,
             lname,
@@ -222,7 +289,7 @@ class SupabaseApprovalRepository {
       final response = await _client
           .from('users')
           .select('''
-            user_id,
+            userId,
             fname,
             mname,
             lname,
@@ -261,7 +328,7 @@ class SupabaseApprovalRepository {
       await _client
           .from('users')
           .update({'status': 'approved'})
-          .eq('user_id', userId);
+          .eq('userId', userId);
 
       // Update application status to 'approved'
       await _client
@@ -291,7 +358,7 @@ class SupabaseApprovalRepository {
       await _client
           .from('users')
           .update({'status': 'rejected'})
-          .eq('user_id', userId);
+          .eq('userId', userId);
 
       // Update application status to 'rejected'
       await _client

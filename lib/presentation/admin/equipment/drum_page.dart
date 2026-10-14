@@ -117,6 +117,23 @@ class _DrumPageState extends State<DrumPage> {
     );
   }
 
+  Widget _buildLogoMark() {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: kGold, width: 1.6),
+        color: context.bgColor,
+      ),
+      child: const Icon(
+        Icons.settings_input_component_rounded,
+        color: kGold,
+        size: 16,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,6 +141,11 @@ class _DrumPageState extends State<DrumPage> {
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
+        leadingWidth: 64,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: _buildLogoMark(),
+        ),
         title: const Text('DRUMS', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2)),
         actions: [
           const ThemeToggleButton(),
@@ -138,14 +160,64 @@ class _DrumPageState extends State<DrumPage> {
               itemCount: _drums.length,
               itemBuilder: (context, index) {
                 final d = _drums[index];
+                final statusLower = d['status']?.toString().toLowerCase() ?? 'available';
+                final isMaintenance = statusLower == 'maintenance';
+                final desc = d['description']?.toString();
+
                 return Card(
                   color: context.surfaceColor,
-                  child: ListTile(
-                    leading: const Icon(Icons.reorder, color: kGold),
-                    title: Text(d['drum_name'], style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
-                    subtitle: Text('${d['drum_code']} | ${d['machines']?['machine_name'] ?? 'No Machine'}', style: TextStyle(color: context.mutedTextColor)),
-                    trailing: _buildStatusChip(d['status']),
-                    onTap: () => _showAddEditDialog(d),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Icon(Icons.reorder, color: isMaintenance ? Colors.orange : kGold),
+                        title: Text(d['drum_name'], style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+                        subtitle: Text('${d['drum_code']} | ${d['machines']?['machine_name'] ?? 'No Machine'}', style: TextStyle(color: context.mutedTextColor)),
+                        trailing: _buildStatusChip(d['status'] ?? 'Available'),
+                        onTap: () => _showAddEditDialog(d),
+                      ),
+                      if (isMaintenance && desc != null && desc.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.build_circle_outlined, color: Colors.orange, size: 14),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Maintenance Reason',
+                                      style: TextStyle(
+                                        color: Colors.orange,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  desc,
+                                  style: TextStyle(
+                                    color: context.textColor,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 );
               },

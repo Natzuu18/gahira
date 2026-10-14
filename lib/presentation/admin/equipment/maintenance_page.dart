@@ -46,85 +46,182 @@ class _MaintenancePageState extends State<MaintenancePage> {
   void _showAddDialog() {
     String? selectedMachineId;
     String? selectedDrumId;
-    String maintenanceType = 'Routine Check';
+    String maintenanceReason = 'Routine Check & Cleaning';
+    String spanTime = '1 Day';
     DateTime selectedDate = DateTime.now();
-    final descController = TextEditingController();
+    final customReasonController = TextEditingController();
+    final customSpanController = TextEditingController();
+
+    final predefinedReasons = [
+      'Routine Check & Cleaning',
+      'Drum Belt Repair',
+      'Bearing Lubrication',
+      'Motor Overhaul',
+      'Emergency Breakdown Repair',
+      'Component Replacement',
+      'Custom Reason / Other',
+    ];
+
+    final predefinedSpanTimes = [
+      '1 Hour',
+      '2 Hours',
+      '4 Hours',
+      '8 Hours',
+      '1 Day',
+      '2 Days',
+      '3 Days',
+      '1 Week',
+      'Custom Duration',
+    ];
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: context.surfaceColor,
-          title: const Text('Schedule Maintenance', style: TextStyle(color: kGold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: selectedMachineId,
-                  dropdownColor: context.surfaceColor,
-                  decoration: const InputDecoration(labelText: 'Machine'),
-                  items: _machines
-                      .map((m) => DropdownMenuItem(value: m['machine_id'].toString(), child: Text(m['machine_name'], style: TextStyle(color: context.textColor))))
-                      .toList(),
-                  onChanged: (v) => setDialogState(() {
-                    selectedMachineId = v;
-                    selectedDrumId = null;
-                  }),
-                ),
-                DropdownButtonFormField<String>(
-                  value: selectedDrumId,
-                  dropdownColor: context.surfaceColor,
-                  decoration: const InputDecoration(labelText: 'Drum (Optional)'),
-                  items: _drums
-                      .where((d) => d['machine_id'].toString() == selectedMachineId)
-                      .map((d) => DropdownMenuItem(value: d['drum_id'].toString(), child: Text(d['drum_name'], style: TextStyle(color: context.textColor))))
-                      .toList(),
-                  onChanged: (v) => setDialogState(() => selectedDrumId = v),
-                ),
-                DropdownButtonFormField<String>(
-                  value: maintenanceType,
-                  dropdownColor: context.surfaceColor,
-                  decoration: const InputDecoration(labelText: 'Maintenance Type'),
-                  items: ['Routine Check', 'Repair', 'Replacement', 'Emergency']
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s, style: TextStyle(color: context.textColor))))
-                      .toList(),
-                  onChanged: (v) => setDialogState(() => maintenanceType = v!),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  title: Text('Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}', style: TextStyle(color: context.textColor)),
-                  trailing: const Icon(Icons.calendar_today, color: kGold),
-                  onTap: () async {
-                    final d = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
-                    if (d != null) setDialogState(() => selectedDate = d);
-                  },
-                ),
-                _buildField(descController, 'Description'),
-              ],
+        builder: (context, setDialogState) {
+          final isCustomReason = maintenanceReason == 'Custom Reason / Other';
+          final isCustomSpan = spanTime == 'Custom Duration';
+
+          return AlertDialog(
+            backgroundColor: context.surfaceColor,
+            title: const Text('Schedule Maintenance', style: TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: selectedMachineId,
+                    dropdownColor: context.surfaceColor,
+                    style: TextStyle(color: context.textColor),
+                    decoration: const InputDecoration(labelText: 'Machine'),
+                    items: _machines
+                        .map((m) => DropdownMenuItem(value: m['machine_id'].toString(), child: Text(m['machine_name'], style: TextStyle(color: context.textColor))))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() {
+                      selectedMachineId = v;
+                      selectedDrumId = null;
+                    }),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: selectedDrumId,
+                    dropdownColor: context.surfaceColor,
+                    style: TextStyle(color: context.textColor),
+                    decoration: const InputDecoration(labelText: 'Drum (Optional)'),
+                    items: _drums
+                        .where((d) => d['machine_id'].toString() == selectedMachineId)
+                        .map((d) => DropdownMenuItem(value: d['drum_id'].toString(), child: Text(d['drum_name'], style: TextStyle(color: context.textColor))))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => selectedDrumId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Maintenance Reason Selection
+                  Text('Reason for Maintenance', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<String>(
+                    value: maintenanceReason,
+                    dropdownColor: context.surfaceColor,
+                    style: TextStyle(color: context.textColor),
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: predefinedReasons
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s, style: TextStyle(color: context.textColor))))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => maintenanceReason = v!),
+                  ),
+                  if (isCustomReason) ...[
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: customReasonController,
+                      style: TextStyle(color: context.textColor),
+                      decoration: const InputDecoration(hintText: 'Enter custom reason...', border: OutlineInputBorder()),
+                    ),
+                  ],
+
+                  const SizedBox(height: 12),
+
+                  // Span Time Selection
+                  Text('Span Time / Duration', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<String>(
+                    value: spanTime,
+                    dropdownColor: context.surfaceColor,
+                    style: TextStyle(color: context.textColor),
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: predefinedSpanTimes
+                        .map((st) => DropdownMenuItem(value: st, child: Text(st, style: TextStyle(color: context.textColor))))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => spanTime = v!),
+                  ),
+                  if (isCustomSpan) ...[
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: customSpanController,
+                      style: TextStyle(color: context.textColor),
+                      decoration: const InputDecoration(hintText: 'Enter span time (e.g. 3 Days)...', border: OutlineInputBorder()),
+                    ),
+                  ],
+
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('Start Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}', style: TextStyle(color: context.textColor, fontSize: 13)),
+                    trailing: const Icon(Icons.calendar_today, color: kGold),
+                    onTap: () async {
+                      final d = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                      if (d != null) setDialogState(() => selectedDate = d);
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kGold),
-              onPressed: () async {
-                final data = {
-                  'machine_id': selectedMachineId,
-                  'drum_id': selectedDrumId,
-                  'maintenance_type': maintenanceType,
-                  'maintenance_date': DateFormat('yyyy-MM-dd').format(selectedDate),
-                  'description': descController.text,
-                  'status': 'Scheduled',
-                };
-                await _repository.addMaintenance(data);
-                Navigator.pop(context);
-                _fetchData();
-              },
-              child: const Text('Schedule', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: kGold),
+                onPressed: () async {
+                  final finalReason = isCustomReason && customReasonController.text.trim().isNotEmpty
+                      ? customReasonController.text.trim()
+                      : maintenanceReason;
+                  final finalSpan = isCustomSpan && customSpanController.text.trim().isNotEmpty
+                      ? customSpanController.text.trim()
+                      : spanTime;
+
+                  final descText = 'Reason: $finalReason | Span Time: $finalSpan';
+
+                  final data = {
+                    'machine_id': selectedMachineId,
+                    'drum_id': selectedDrumId,
+                    'maintenance_type': finalReason,
+                    'maintenance_date': DateFormat('yyyy-MM-dd').format(selectedDate),
+                    'description': descText,
+                    'remarks': 'Span time: $finalSpan',
+                    'status': 'Scheduled',
+                  };
+                  await _repository.addMaintenance(data);
+
+                  // Update machine/drum status to maintenance if scheduled for today
+                  if (selectedMachineId != null) {
+                    await _repository.updateMachine(selectedMachineId!, {
+                      'status': 'maintenance',
+                      'description': descText,
+                    });
+                  }
+                  if (selectedDrumId != null) {
+                    await _repository.updateDrum(selectedDrumId!, {
+                      'status': 'maintenance',
+                      'description': descText,
+                    });
+                  }
+
+                  if (mounted) Navigator.pop(context);
+                  _fetchData();
+                },
+                child: const Text('Schedule', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -137,6 +234,23 @@ class _MaintenancePageState extends State<MaintenancePage> {
     );
   }
 
+  Widget _buildLogoMark() {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: kGold, width: 1.6),
+        color: context.bgColor,
+      ),
+      child: const Icon(
+        Icons.settings_input_component_rounded,
+        color: kGold,
+        size: 16,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -144,6 +258,11 @@ class _MaintenancePageState extends State<MaintenancePage> {
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
+        leadingWidth: 64,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: _buildLogoMark(),
+        ),
         title: const Text('MAINTENANCE', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2)),
         actions: [
           const ThemeToggleButton(),

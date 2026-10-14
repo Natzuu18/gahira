@@ -62,7 +62,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   String? _resumeError;
   DateTime? _appointmentDate;
   String? _appointmentError;
-  String? _viewingMonth;
+  DateTime _viewingDate = DateTime(DateTime.now().year, DateTime.now().month);
   String? _selectedTime;
 
   List<Map<String, String>> _availableSlots = [];
@@ -587,6 +587,18 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                     onTap: _pickClientDocument,
                     onRemove: _removeClientDocument,
                   ),
+
+                  const SizedBox(height: 18),
+                  _buildLabel('Appointment / Schedule Date'),
+                  const SizedBox(height: 8),
+                  _isLoadingSlots
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: CircularProgressIndicator(color: kGold),
+                          ),
+                        )
+                      : _buildAppointmentDatePicker(context),
                 ],
 
                 // --- Operator-only fields: resume + appointment date ---
@@ -1134,43 +1146,123 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   }
 
   Widget _buildAppointmentDatePicker(BuildContext context) {
-    final now = DateTime.now();
-    final currentMonthKey = DateFormat('MMMM yyyy').format(now);
-    
-    // Filter available slots to ONLY show the current month
-    final List<Map<String, String>> currentMonthSlots = _availableSlots.where((slot) {
-      final date = DateFormat('yyyy-MM-dd').parse(slot['date']!);
-      return DateFormat('MMMM yyyy').format(date) == currentMonthKey;
+    // Filter available slots for the chosen month and year
+    final List<Map<String, String>> chosenMonthSlots = _availableSlots.where((slot) {
+      try {
+        final date = DateFormat('yyyy-MM-dd').parse(slot['date']!);
+        return date.year == _viewingDate.year && date.month == _viewingDate.month;
+      } catch (e) {
+        return false;
+      }
     }).toList();
 
-    if (currentMonthSlots.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text(
-          'No interview dates scheduled for ${DateFormat('MMMM').format(now)}.',
-          style: TextStyle(color: context.mutedTextColor, fontStyle: FontStyle.italic),
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
-
-    // Calendar logic for the current month
-    final firstDay = DateTime(now.year, now.month, 1);
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    // Calendar logic for the chosen month
+    final firstDay = DateTime(_viewingDate.year, _viewingDate.month, 1);
+    final daysInMonth = DateTime(_viewingDate.year, _viewingDate.month + 1, 0).day;
     final offset = firstDay.weekday % 7; // 0 = Sunday, 1 = Monday...
+
+    final currentYear = DateTime.now().year;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Center(
-          child: Text(
-            currentMonthKey.toUpperCase(),
-            style: const TextStyle(
-              color: kGold,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              letterSpacing: 1.2,
-            ),
+        // Month and Year Selector Controls
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: context.surfaceColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: kGold.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left, color: kGold),
+                onPressed: () {
+                  setState(() {
+                    _viewingDate = DateTime(_viewingDate.year, _viewingDate.month - 1);
+                  });
+                },
+                tooltip: 'Previous Month',
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Month Dropdown
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<int>(
+                      value: _viewingDate.month,
+                      dropdownColor: context.surfaceColor,
+                      icon: const Icon(Icons.arrow_drop_down, color: kGold, size: 20),
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      items: List.generate(12, (index) {
+                        final monthNum = index + 1;
+                        final monthName = DateFormat('MMMM').format(DateTime(2025, monthNum));
+                        return DropdownMenuItem<int>(
+                          value: monthNum,
+                          child: Text(
+                            monthName,
+                            style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      }),
+                      onChanged: (newMonth) {
+                        if (newMonth != null) {
+                          setState(() {
+                            _viewingDate = DateTime(_viewingDate.year, newMonth);
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Year Dropdown
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<int>(
+                      value: _viewingDate.year,
+                      dropdownColor: context.surfaceColor,
+                      icon: const Icon(Icons.arrow_drop_down, color: kGold, size: 20),
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      items: List.generate(10, (index) {
+                        final yearVal = currentYear - 2 + index;
+                        return DropdownMenuItem<int>(
+                          value: yearVal,
+                          child: Text(
+                            yearVal.toString(),
+                            style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      }),
+                      onChanged: (newYear) {
+                        if (newYear != null) {
+                          setState(() {
+                            _viewingDate = DateTime(newYear, _viewingDate.month);
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right, color: kGold),
+                onPressed: () {
+                  setState(() {
+                    _viewingDate = DateTime(_viewingDate.year, _viewingDate.month + 1);
+                  });
+                },
+                tooltip: 'Next Month',
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
@@ -1193,7 +1285,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
               .toList(),
         ),
         const SizedBox(height: 8),
-        // Full Calendar Grid
+        // Full Calendar Grid for all days of the chosen month
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -1207,17 +1299,21 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
             if (index < offset) return const SizedBox.shrink();
 
             final day = index - offset + 1;
-            final currentDate = DateTime(now.year, now.month, day);
+            final currentDate = DateTime(_viewingDate.year, _viewingDate.month, day);
             final dateStr = DateFormat('yyyy-MM-dd').format(currentDate);
 
-            final slot = currentMonthSlots.firstWhere(
+            final now = DateTime.now();
+            final todayStart = DateTime(now.year, now.month, now.day);
+            final isPast = currentDate.isBefore(todayStart);
+
+            final slot = chosenMonthSlots.firstWhere(
               (s) => s['date'] == dateStr,
               orElse: () => {},
             );
-            final bool isAvailable = slot.isNotEmpty;
+            final bool isAvailable = slot.isNotEmpty && !isPast;
             final bool isSelected = _appointmentDate != null &&
-                DateFormat('yyyy-MM-dd').format(_appointmentDate!) ==
-                    dateStr;
+                DateFormat('yyyy-MM-dd').format(_appointmentDate!) == dateStr;
+            final bool isToday = DateFormat('yyyy-MM-dd').format(now) == dateStr;
 
             return InkWell(
               onTap: isAvailable
@@ -1233,16 +1329,18 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   color: isSelected
                       ? kGold
                       : (isAvailable
-                          ? kGold.withValues(alpha: 0.1)
+                          ? kGold.withValues(alpha: 0.15)
                           : Colors.transparent),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: isSelected
                         ? kGold
-                        : (isAvailable
-                            ? kGold.withValues(alpha: 0.4)
-                            : Colors.transparent),
-                    width: 1,
+                        : (isToday
+                            ? kGold.withValues(alpha: 0.8)
+                            : (isAvailable
+                                ? kGold.withValues(alpha: 0.4)
+                                : context.textColor.withValues(alpha: 0.08))),
+                    width: isToday || isSelected ? 1.5 : 1,
                   ),
                 ),
                 child: Center(
@@ -1253,8 +1351,8 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                           ? kBlack
                           : (isAvailable
                               ? context.textColor
-                              : context.mutedTextColor.withValues(alpha: 0.2)),
-                      fontWeight: isAvailable ? FontWeight.bold : FontWeight.normal,
+                              : context.mutedTextColor.withValues(alpha: 0.25)),
+                      fontWeight: (isAvailable || isToday) ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                 ),
@@ -1262,15 +1360,29 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
             );
           },
         ),
+        if (chosenMonthSlots.isEmpty) ...[
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              'No interview dates scheduled for ${DateFormat('MMMM yyyy').format(_viewingDate)}.',
+              style: TextStyle(color: context.mutedTextColor, fontStyle: FontStyle.italic, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         // Time Slots
-        if (_appointmentDate != null) ...[
+        if (_appointmentDate != null &&
+            _appointmentDate!.year == _viewingDate.year &&
+            _appointmentDate!.month == _viewingDate.month) ...[
           Builder(builder: (context) {
             final dateStr = DateFormat('yyyy-MM-dd').format(_appointmentDate!);
-            final daySlots = currentMonthSlots
+            final daySlots = chosenMonthSlots
                 .where((s) => s['date'] == dateStr)
                 .map((s) => s['time']!)
                 .toList();
+
+            if (daySlots.isEmpty) return const SizedBox.shrink();
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1317,64 +1429,73 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         ],
         // Selected Date Address Detail Card
         if (_appointmentDate != null && _selectedTime != null) ...[
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: kGold.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: kGold.withValues(alpha: 0.3), width: 1.5),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: kGold.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
+          Builder(builder: (context) {
+            final dateStr = DateFormat('yyyy-MM-dd').format(_appointmentDate!);
+            final selectedSlot = chosenMonthSlots.firstWhere(
+              (s) => s['date'] == dateStr && s['time'] == _selectedTime,
+              orElse: () => {},
+            );
+            final addressText = selectedSlot['address'] ?? '';
+
+            if (addressText.isEmpty) return const SizedBox.shrink();
+
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kGold.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: kGold.withValues(alpha: 0.3), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: kGold.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.location_on, color: kGold, size: 24),
                   ),
-                  child: const Icon(Icons.location_on, color: kGold, size: 24),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'INTERVIEW LOCATION & TIME',
-                        style: TextStyle(
-                          color: kGold.withValues(alpha: 0.8),
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'LOCATION & TIME',
+                          style: TextStyle(
+                            color: kGold.withValues(alpha: 0.8),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        currentMonthSlots.firstWhere((s) =>
-                            s['date'] == DateFormat('yyyy-MM-dd').format(_appointmentDate!) &&
-                            s['time'] == _selectedTime)['address']!,
-                        style: TextStyle(
-                          color: context.textColor,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(height: 6),
+                        Text(
+                          addressText,
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${DateFormat('EEEE, MMMM d, yyyy').format(_appointmentDate!)} at $_selectedTime',
-                        style: TextStyle(
-                          color: context.mutedTextColor,
-                          fontSize: 12,
+                        const SizedBox(height: 2),
+                        Text(
+                          '${DateFormat('EEEE, MMMM d, yyyy').format(_appointmentDate!)} at $_selectedTime',
+                          style: TextStyle(
+                            color: context.mutedTextColor,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          }),
         ],
         if (_appointmentError != null) ...[
           const SizedBox(height: 8),

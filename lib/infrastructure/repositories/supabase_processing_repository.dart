@@ -8,25 +8,74 @@ class SupabaseProcessingRepository {
 
   Future<Either<Failure, List<Map<String, dynamic>>>> getProcessingTasks({String? status}) async {
     try {
-      var query = _client.from('processing_tasks').select('''
-        *,
-        service_requests:service_request_id (
-          service_request_id,
-          service_type,
-          quantity,
-          user:user_id (fname, lname)
-        ),
-        machines:machine_id (machine_name),
-        drums:drum_id (drum_name),
-        operator:operator_id (fname, lname)
-      ''');
+      final response = await _client
+          .from('service_requests')
+          .select('''
+            *,
+            users:user_id(fname, lname),
+            ongoing_services(
+              id,
+              current_stage,
+              operator:operator_id(fname, lname),
+              machines:machine_id(machine_name),
+              drums:drum_id(drum_name)
+            ),
+            mill_queue(scheduled_at, queue_type)
+          ''')
+          .order('created_at', ascending: false);
 
-      if (status != null) {
-        query = query.eq('status', status);
+      final List<Map<String, dynamic>> tasks = [];
+
+      for (var row in (response as List)) {
+        final srStatus = row['status']?.toString();
+        
+        // Map status for admin task view
+        String taskStatus = 'Pending';
+        if (srStatus == 'processing' || srStatus == 'assigned' || srStatus == 'queued' || srStatus == 'scheduled') {
+          taskStatus = 'Active';
+        } else if (srStatus == 'completed' || srStatus == 'processingCompleted' || srStatus == 'goldHandoff') {
+          taskStatus = 'Completed';
+        }
+
+        if (status != null && taskStatus.toLowerCase() != status.toLowerCase()) {
+          continue;
+        }
+
+        final userObj = row['users'] as Map<String, dynamic>?;
+        final ongoingList = row['ongoing_services'] as List<dynamic>?;
+        Map<String, dynamic>? ongoing;
+        if (ongoingList != null && ongoingList.isNotEmpty) {
+          ongoing = ongoingList.first as Map<String, dynamic>?;
+        }
+
+        final queueList = row['mill_queue'] as List<dynamic>?;
+        String? scheduledDate = row['request_date']?.toString();
+        if (queueList != null && queueList.isNotEmpty) {
+          final q = queueList.first;
+          if (q['scheduled_at'] != null) {
+            scheduledDate = q['scheduled_at'].toString().split('T')[0];
+          }
+        }
+
+        tasks.add({
+          'processing_id': row['service_request_id'],
+          'service_request_id': row['service_request_id'],
+          'status': taskStatus,
+          'scheduled_date': scheduledDate ?? DateTime.now().toIso8601String().split('T')[0],
+          'service_requests': {
+            'service_request_id': row['service_request_id'],
+            'service_type': row['service_type'] ?? 'Milling',
+            'quantity': row['quantity'] ?? 0,
+            'user': userObj,
+          },
+          'machines': ongoing?['machines'] ?? {'machine_name': 'N/A'},
+          'drums': ongoing?['drums'] ?? {'drum_name': 'N/A'},
+          'operator': ongoing?['operator'] ?? {'fname': 'Operator', 'lname': ''},
+          'remarks': row['processing_notes'] ?? '',
+        });
       }
 
-      final response = await query.order('scheduled_date', ascending: true);
-      return Right(List<Map<String, dynamic>>.from(response));
+      return Right(tasks);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }
@@ -34,7 +83,12 @@ class SupabaseProcessingRepository {
 
   Future<Either<Failure, void>> createProcessingTask(Map<String, dynamic> task) async {
     try {
-      await _client.from('processing_tasks').insert(task);
+      if (task['service_request_id'] != null) {
+        await _client.from('service_requests').update({
+          'status': 'processing',
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('service_request_id', task['service_request_id']);
+      }
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
@@ -43,13 +97,14 @@ class SupabaseProcessingRepository {
 
   Future<Either<Failure, void>> updateTaskStatus(String processingId, String status, {String? remarks}) async {
     try {
-      final updates = <String, dynamic>{};
-      updates['status'] = status;
-      updates['updated_at'] = DateTime.now().toIso8601String();
+      final updates = <String, dynamic>{
+        'status': status.toLowerCase() == 'completed' ? 'processingCompleted' : status,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
 
-      if (remarks != null) updates['remarks'] = remarks;
+      if (remarks != null) updates['processing_notes'] = remarks;
 
-      await _client.from('processing_tasks').update(updates).eq('processing_id', processingId);
+      await _client.from('service_requests').update(updates).eq('service_request_id', processingId);
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));

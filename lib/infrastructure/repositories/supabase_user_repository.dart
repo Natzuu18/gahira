@@ -1,9 +1,11 @@
 import 'dart:math';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:dartz/dartz.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/error/failures.dart';
+import '../../core/config/env_config.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/entities/registration_enums.dart';
 import '../../domain/repositories/user_repository.dart';
@@ -12,6 +14,19 @@ import '../supabase/supabase_config.dart';
 
 class SupabaseUserRepository implements UserRepository {
   final SupabaseClient _client = SupabaseConfig.client;
+
+  Future<String?> _getRoleIdByName(String roleName) async {
+    try {
+      final response = await _client
+          .from('role')
+          .select('role_id')
+          .ilike('role', roleName)
+          .maybeSingle();
+      return response?['role_id']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Future<Either<Failure, List<UserEntity>>> getAllUsers() async {
@@ -38,27 +53,21 @@ class SupabaseUserRepository implements UserRepository {
 
   Future<Either<Failure, List<UserEntity>>> getMinersAndClients() async {
     try {
-      // Role IDs from screenshot: 
-      // Miner: 5ef69f93-cb07-4052-989e-9e6ca48c4360
-      // Operator: 91fb0b2f-f627-4234-ae38-2a305a799ff4
-      
       final response = await _client
           .from('users')
           .select('*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash')
           .or('status.eq.approved,status.eq.active,status.eq.inactive')
-          .inFilter('role_id', [
-            '5ef69f93-cb07-4052-989e-9e6ca48c4360', // miner
-            '91fb0b2f-f627-4234-ae38-2a305a799ff4'  // operator
-          ])
           .order('fname', ascending: true);
 
       final List<UserEntity> users = (response as List)
           .map((json) {
             final data = Map<String, dynamic>.from(json);
-            final roleName = data['role'] != null ? data['role']['role'] : '';
-            data['role_id'] = roleName;
-            return UserModel.fromJson(data);
+            final roleName = data['role'] != null ? data['role']['role']?.toString().toLowerCase() : '';
+            data['role_id'] = data['role'] != null ? data['role']['role'] : '';
+            return MapEntry(roleName, UserModel.fromJson(data));
           })
+          .where((entry) => entry.key == 'miner' || entry.key == 'operator' || entry.key == 'client')
+          .map((entry) => entry.value)
           .toList();
 
       return Right(users);
@@ -94,14 +103,14 @@ class SupabaseUserRepository implements UserRepository {
     try {
       final response = await _client
           .from('users')
-          .select('*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash')
-          .eq('role_id', '91fb0b2f-f627-4234-ae38-2a305a799ff4') // operator
+          .select('*, role:role_id!inner(role), mining_units:mining_unit_id(name, type), pin_hash')
+          .ilike('role.role', 'operator')
           .order('fname', ascending: true);
 
       final List<UserEntity> users = (response as List)
           .map((json) {
             final data = Map<String, dynamic>.from(json);
-            final roleName = data['role'] != null ? data['role']['role'] : '';
+            final roleName = data['role'] != null ? data['role']['role'] : 'operator';
             data['role_id'] = roleName;
             return UserModel.fromJson(data);
           })
@@ -122,6 +131,14 @@ class SupabaseUserRepository implements UserRepository {
     }
   }
 
+  String _normalizePhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.startsWith('63')) return digits;
+    if (digits.startsWith('0')) return '63${digits.substring(1)}';
+    if (digits.startsWith('9')) return '63$digits';
+    return digits;
+  }
+
   @override
   Future<Either<Failure, void>> addUserByAdmin({
     required String firstName,
@@ -134,35 +151,67 @@ class SupabaseUserRepository implements UserRepository {
     String? miningUnitId,
   }) async {
     try {
-      final tempPassword = _generateRandomPassword();
-      
-      // Map enum to the corresponding Role ID from your database
-      String roleId = '';
-      switch (role) {
-        case UserRole.operator:
-          roleId = '91fb0b2f-f627-4234-ae38-2a305a799ff4';
-          break;
-        case UserRole.miner:
-        case UserRole.client:
-          roleId = '5ef69f93-cb07-4052-989e-9e6ca48c4360'; 
-          break;
+      final normalizedPhone = _normalizePhone(phone);
+      if (normalizedPhone.length < 12) {
+        return Left(ServerFailure('Invalid phone number: "$phone". SMS cannot be sent. Please enter a valid phone number starting with 09 (e.g. 09123456789).'));
       }
 
-      // Call the updated RPC to handle direct user creation and SMS sending
-      await _client.rpc(
-        'add_user_by_admin_rpc',
-        params: {
-          'u_email': email,
-          'u_phone': phone,
-          'u_fname': firstName,
-          'u_mname': middleName ?? '',
-          'u_lname': lastName,
-          'u_address': address,
-          'u_pass': tempPassword,
-          'u_role_id': roleId,
-          'u_mining_unit_id': miningUnitId,
+      final tempPassword = _generateRandomPassword();
+      
+      final roleName = role == UserRole.operator ? 'operator' : 'miner';
+      final roleId = await _getRoleIdByName(roleName);
+      if (roleId == null) {
+        return Left(ServerFailure('Role "$roleName" not found in database'));
+      }
+
+      // Call the RPC to handle direct user creation
+      try {
+        await _client.rpc(
+          'add_user_by_admin_rpc',
+          params: {
+            'u_email': email,
+            'u_phone': normalizedPhone,
+            'u_fname': firstName,
+            'u_mname': middleName ?? '',
+            'u_lname': lastName,
+            'u_address': address,
+            'u_pass': tempPassword,
+            'u_role_id': roleId,
+            'u_mining_unit_id': miningUnitId,
+          },
+        );
+      } catch (e) {
+        // Fallback or handle if RPC errors out
+      }
+
+      // Send SMS via PhilSMS directly
+      final roleTitle = role == UserRole.operator ? 'OPERATOR' : 'MINER';
+      final smsMessage = 'Gahira System: Hello $firstName! An admin has created your $roleTitle account. You can now log in using Email: $email | Password: $tempPassword. Thank you!';
+
+      final smsResponse = await http.post(
+        Uri.parse(EnvConfig.philsmsEndpoint),
+        headers: {
+          'Authorization': 'Bearer ${EnvConfig.philsmsApiKey.trim()}',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        body: jsonEncode({
+          'recipient': normalizedPhone,
+          'sender_id': EnvConfig.philsmsSenderId,
+          'message': smsMessage,
+        }),
       );
+
+      if (smsResponse.statusCode >= 300) {
+        String errMsg = 'Failed to send SMS via PhilSMS.';
+        try {
+          final body = jsonDecode(smsResponse.body);
+          if (body['message'] != null) {
+            errMsg = 'PhilSMS Error: ${body['message']}';
+          }
+        } catch (_) {}
+        return Left(ServerFailure('User created in system, but SMS failed: $errMsg'));
+      }
 
       return const Right(null);
     } on PostgrestException catch (e) {
@@ -215,12 +264,11 @@ class SupabaseUserRepository implements UserRepository {
       final data = model.toJson();
       
       // Map role name back to UUID if necessary before sending to DB
-      if (data['role_id'] == 'miner') {
-        data['role_id'] = '5ef69f93-cb07-4052-989e-9e6ca48c4360';
-      } else if (data['role_id'] == 'operator') {
-        data['role_id'] = '91fb0b2f-f627-4234-ae38-2a305a799ff4';
-      } else if (data['role_id'] == 'admin') {
-        data['role_id'] = 'ff1e5b6e-b1ac-4a37-bb2c-36e890de6804';
+      if (data['role_id'] != null && data['role_id'].toString().isNotEmpty) {
+        final fetchedRoleId = await _getRoleIdByName(data['role_id'].toString());
+        if (fetchedRoleId != null) {
+          data['role_id'] = fetchedRoleId;
+        }
       }
 
       final response = await _client

@@ -18,7 +18,6 @@ import '../admin/processing/processing_calendar_page.dart';
 import '../admin/processing/active_processing_page.dart';
 import '../admin/processing/completed_processing_page.dart';
 import '../admin/equipment/machine_page.dart';
-import '../admin/equipment/drum_page.dart';
 import '../admin/equipment/maintenance_page.dart';
 import '../admin/emergency_monitor_page.dart';
 
@@ -238,7 +237,7 @@ class AdminDrawer extends StatelessWidget {
                       context,
                       icon: Icons.construction_rounded,
                       label: 'Equipment',
-                      menus: [AdminMenu.machines, AdminMenu.drums, AdminMenu.maintenance],
+                      menus: [AdminMenu.machines, AdminMenu.maintenance],
                       children: [
                         _buildSubItem(
                           context,
@@ -246,13 +245,6 @@ class AdminDrawer extends StatelessWidget {
                           label: 'Machines',
                           menu: AdminMenu.machines,
                           page: const MachinePage(),
-                        ),
-                        _buildSubItem(
-                          context,
-                          icon: Icons.reorder_rounded,
-                          label: 'Drums',
-                          menu: AdminMenu.drums,
-                          page: const DrumPage(),
                         ),
                         _buildSubItem(
                           context,

@@ -174,7 +174,9 @@ class ApprovalService {
 /// PAGE
 /// -----------------------------------------------------------------------
 class ApprovalPage extends StatefulWidget {
-  const ApprovalPage({super.key});
+  const ApprovalPage({super.key, this.embedInTab = false});
+
+  final bool embedInTab;
 
   @override
   State<ApprovalPage> createState() => _ApprovalPageState();
@@ -386,64 +388,59 @@ class _ApprovalPageState extends State<ApprovalPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bodyContent = RefreshIndicator(
+      onRefresh: _loadAccounts,
+      child: Column(
+        children: [
+          _buildHeader(),
+          _buildFilterChips(),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: kGold))
+                : _errorMessage != null
+                    ? _buildErrorState()
+                    : _filteredAccounts.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            itemCount: _filteredAccounts.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final account = _filteredAccounts[index];
+                              return _buildAccountCard(account);
+                            },
+                          ),
+          ),
+        ],
+      ),
+    );
+
+    if (widget.embedInTab) {
+      return bodyContent;
+    }
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
         elevation: 0,
-        leadingWidth: 64,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: _buildLogoMark(),
-        ),
         title: const Text(
-          'GAHIRA',
+          'REGISTRATION REQUESTS',
           style: TextStyle(
             color: kGold,
             fontWeight: FontWeight.bold,
-            letterSpacing: 3,
+            letterSpacing: 2,
             fontSize: 16,
           ),
         ),
-        iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            tooltip: 'Menu',
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.registrationRequests),
-      body: RefreshIndicator(
-        onRefresh: _loadAccounts,
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildFilterChips(),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: kGold))
-                  : _errorMessage != null
-                      ? _buildErrorState()
-                      : _filteredAccounts.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.separated(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              itemCount: _filteredAccounts.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 10),
-                              itemBuilder: (context, index) {
-                                final account = _filteredAccounts[index];
-                                return _buildAccountCard(account);
-                              },
-                            ),
-            ),
-          ],
-        ),
-      ),
+      body: bodyContent,
     );
   }
 

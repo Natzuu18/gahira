@@ -96,7 +96,10 @@ class _CompletedProcessingPageState extends State<CompletedProcessingPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
           ElevatedButton(
-            onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage()));
+            },
             style: ElevatedButton.styleFrom(backgroundColor: kGold, foregroundColor: kBlack),
             child: const Text('Proceed to Billing'),
           ),

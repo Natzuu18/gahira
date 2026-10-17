@@ -4,7 +4,7 @@ import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import '../shared_widgets/adminDrawer.dart';
+import '../shared_widgets/admin_bottom_nav_bar.dart';
 
 class GoldTransactionsPage extends StatefulWidget {
   const GoldTransactionsPage({super.key});
@@ -76,15 +76,12 @@ class _GoldTransactionsPageState extends State<GoldTransactionsPage> {
             fontSize: 16,
           ),
         ),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.goldTransactions),
+      bottomNavigationBar: buildAdminBottomNavBar(context, selectedIndex: 3),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kGold))
           : RefreshIndicator(

@@ -4,7 +4,7 @@ import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import '../shared_widgets/adminDrawer.dart';
+import '../shared_widgets/admin_bottom_nav_bar.dart';
 
 class ExpensesPage extends StatefulWidget {
   const ExpensesPage({super.key});
@@ -75,12 +75,9 @@ class _ExpensesPageState extends State<ExpensesPage> {
               fontSize: 16,
             ),
           ),
-          actions: [
-            const ThemeToggleButton(),
-            IconButton(
-              icon: const Icon(Icons.menu_rounded, color: kGold),
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-            ),
+          actions: const [
+            ThemeToggleButton(),
+            SizedBox(width: 8),
           ],
           bottom: const TabBar(
             labelColor: kGold,
@@ -92,7 +89,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
             ],
           ),
         ),
-        endDrawer: const AdminDrawer(currentMenu: AdminMenu.expenses),
+        bottomNavigationBar: buildAdminBottomNavBar(context, selectedIndex: 3),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator(color: kGold))
             : TabBarView(

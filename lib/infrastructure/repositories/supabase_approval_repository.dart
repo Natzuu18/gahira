@@ -217,6 +217,7 @@ class SupabaseApprovalRepository {
     required String applicationId,  
     required String userId,
     required String status,
+    String? reason,
   }) async {
     try {
       // If approving, we route through the backend to handle SMS and Auth update securely
@@ -224,9 +225,15 @@ class SupabaseApprovalRepository {
         return approveApplication(applicationId: applicationId, userId: userId);
       }
 
-      // For other statuses (like 'rejected'), we can still update DB directly or 
-      // create a backend route if complex logic is needed.
-      // Update application status
+      if (status == 'rejected') {
+        return rejectApplication(
+          applicationId: applicationId,
+          userId: userId,
+          reason: reason ?? 'Application requirements not met',
+        );
+      }
+
+      // For other statuses, update DB directly
       await _client
           .from('applications')
           .update({
@@ -240,6 +247,78 @@ class SupabaseApprovalRepository {
           .from('users')
           .update({'status': status})
           .eq('userId', userId);
+
+      return const Right(null);
+    } catch (e) {
+      return Left(_mapError(e));
+    }
+  }
+
+  /// Declines / rejects an application, updates database status, and sends SMS with reason
+  Future<Either<Failure, void>> rejectApplication({
+    required String applicationId,
+    required String userId,
+    required String reason,
+  }) async {
+    try {
+      // 1. Fetch user details
+      final userResponse = await _client
+          .from('users')
+          .select('contact_num, fname, role:role_id(role)')
+          .eq('userId', userId)
+          .single();
+
+      String phone = userResponse['contact_num'] ?? '';
+      String normalizedPhone = _normalizePhone(phone);
+
+      // 2. Update DB status to 'rejected'
+      await _client
+          .from('applications')
+          .update({
+            'status': 'rejected',
+            'appointment_remarks': 'Declined reason: $reason',
+            'response_at': DateTime.now().toIso8601String(),
+          })
+          .eq('application_id', applicationId);
+
+      await _client
+          .from('users')
+          .update({'status': 'rejected'})
+          .eq('userId', userId);
+
+      // 3. Send SMS if valid phone number is available
+      if (normalizedPhone.length >= 12) {
+        final fname = userResponse['fname'] ?? 'User';
+        final roleMap = userResponse['role'] as Map<String, dynamic>?;
+        final roleName = roleMap?['role']?.toString().toUpperCase() ?? 'ACCOUNT';
+
+        final smsMessage = 'Gahira System: Hello $fname! Your $roleName application was DECLINED. Reason: $reason. For inquiries, please contact support.';
+
+        final smsResponse = await http.post(
+          Uri.parse(EnvConfig.philsmsEndpoint),
+          headers: {
+            'Authorization': 'Bearer ${EnvConfig.philsmsApiKey.trim()}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'recipient': normalizedPhone,
+            'sender_id': EnvConfig.philsmsSenderId,
+            'message': smsMessage,
+          }),
+        );
+
+        if (smsResponse.statusCode >= 300) {
+          String errMsg = 'Failed to send SMS via PhilSMS.';
+          try {
+            final body = jsonDecode(smsResponse.body);
+            if (body['message'] != null) {
+              errMsg = 'PhilSMS Error: ${body['message']}';
+            }
+          } catch (_) {}
+          return Left(ServerFailure('Application declined in DB, but SMS failed: $errMsg'));
+        }
+      }
 
       return const Right(null);
     } catch (e) {

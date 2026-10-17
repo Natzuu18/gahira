@@ -377,7 +377,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
                         icon: const Icon(Icons.receipt_long_outlined, size: 18),
                         label: const Text('PROCEED TO FINANCIAL HANDLING', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                         style: ElevatedButton.styleFrom(
@@ -458,7 +458,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
                         icon: const Icon(Icons.receipt_long_outlined, size: 18),
                         label: const Text('PROCEED TO FINANCIAL HANDLING', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                         style: ElevatedButton.styleFrom(

@@ -5,7 +5,6 @@ import '../shared_widgets/themeToggleButton.dart';
 import 'gold_transactions_page.dart';
 import 'billing_page.dart';
 import 'expenses_page.dart';
-import 'payments_history_page.dart';
 import 'report_page.dart';
 import '../../main.dart';
 
@@ -20,14 +19,190 @@ class AdminSettingsPage extends StatefulWidget {
 
 class _AdminSettingsPageState extends State<AdminSettingsPage> {
   String _email = '';
+  String _adminName = '';
+  String _fname = '';
+  String _mname = '';
+  String _lname = '';
+  String _phone = '';
+  String _address = '';
 
   @override
   void initState() {
     super.initState();
+    _adminName = widget.adminName;
+    _fetchAdminProfile();
+  }
+
+  Future<void> _fetchAdminProfile() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
-      _email = user.email ?? '';
+      setState(() => _email = user.email ?? '');
+      try {
+        final res = await Supabase.instance.client
+            .from('users')
+            .select()
+            .eq('userId', user.id)
+            .maybeSingle();
+
+        if (res != null) {
+          setState(() {
+            _fname = res['fname'] ?? '';
+            _mname = res['mname'] ?? '';
+            _lname = res['lname'] ?? '';
+            _phone = res['contact_num'] ?? '';
+            _address = res['address'] ?? '';
+            final fullName = '$_fname ${_mname.isNotEmpty ? '$_mname ' : ''}$_lname'.trim();
+            if (fullName.isNotEmpty) {
+              _adminName = fullName;
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint('Error fetching admin profile: $e');
+      }
     }
+  }
+
+  void _showAccountSettingsDialog() {
+    final fnameController = TextEditingController(text: _fname);
+    final mnameController = TextEditingController(text: _mname);
+    final lnameController = TextEditingController(text: _lname);
+    final phoneController = TextEditingController(text: _phone);
+    final addressController = TextEditingController(text: _address);
+    final passwordController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return AlertDialog(
+            backgroundColor: ctx.surfaceColor,
+            title: const Row(
+              children: [
+                Icon(Icons.manage_accounts_rounded, color: kGold),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Admin Account Settings',
+                    style: TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Update your admin account details.', style: TextStyle(color: ctx.mutedTextColor, fontSize: 12)),
+                  const SizedBox(height: 16),
+                  _buildDialogField(ctx, fnameController, 'First Name'),
+                  const SizedBox(height: 12),
+                  _buildDialogField(ctx, mnameController, 'Middle Name (Optional)'),
+                  const SizedBox(height: 12),
+                  _buildDialogField(ctx, lnameController, 'Last Name'),
+                  const SizedBox(height: 12),
+                  _buildDialogField(ctx, phoneController, 'Contact Number', keyboardType: TextInputType.phone),
+                  const SizedBox(height: 12),
+                  _buildDialogField(ctx, addressController, 'Address'),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text('Change Password (Optional)', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: passwordController,
+                    obscureText: true,
+                    style: TextStyle(color: ctx.textColor),
+                    decoration: InputDecoration(
+                      labelText: 'New Password',
+                      hintText: 'Leave blank to keep current password',
+                      hintStyle: TextStyle(color: ctx.mutedTextColor, fontSize: 11),
+                      filled: true,
+                      fillColor: ctx.bgColor,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: kGold, foregroundColor: kBlack),
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        setModalState(() => isSubmitting = true);
+                        try {
+                          final user = Supabase.instance.client.auth.currentUser;
+                          if (user != null) {
+                            await Supabase.instance.client.from('users').update({
+                              'fname': fnameController.text.trim(),
+                              'mname': mnameController.text.trim(),
+                              'lname': lnameController.text.trim(),
+                              'contact_num': phoneController.text.trim(),
+                              'address': addressController.text.trim(),
+                            }).eq('userId', user.id);
+
+                            if (passwordController.text.trim().length >= 6) {
+                              await Supabase.instance.client.auth.updateUser(
+                                UserAttributes(password: passwordController.text.trim()),
+                              );
+                            }
+
+                            if (mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Account information updated successfully!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              _fetchAdminProfile();
+                            }
+                          }
+                        } catch (e) {
+                          setModalState(() => isSubmitting = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to update: $e'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isSubmitting
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: kBlack, strokeWidth: 2))
+                    : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDialogField(BuildContext ctx, TextEditingController controller, String label, {TextInputType? keyboardType}) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: TextStyle(color: ctx.textColor),
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: ctx.bgColor,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
   void _logout() async {
@@ -94,7 +269,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
               decoration: BoxDecoration(
                 color: context.surfaceColor,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kGold.withOpacity(0.2)),
+                border: Border.all(color: kGold.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
@@ -114,7 +289,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.adminName,
+                          _adminName.isNotEmpty ? _adminName : widget.adminName,
                           style: TextStyle(
                             color: context.textColor,
                             fontSize: 18,
@@ -133,7 +308,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: kGold.withOpacity(0.15),
+                            color: kGold.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Text(
@@ -148,11 +323,26 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                       ],
                     ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: kGold),
+                    tooltip: 'Edit Profile',
+                    onPressed: _showAccountSettingsDialog,
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
 
+            _buildSectionHeader('ACCOUNT & SECURITY'),
+            const SizedBox(height: 8),
+            _buildSettingTile(
+              icon: Icons.manage_accounts_outlined,
+              title: 'Account Settings',
+              subtitle: 'Update admin profile, contact, and password',
+              onTap: _showAccountSettingsDialog,
+            ),
+
+            const SizedBox(height: 24),
             _buildSectionHeader('FINANCIAL MANAGEMENT'),
             const SizedBox(height: 8),
             _buildSettingTile(
@@ -182,15 +372,6 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                 MaterialPageRoute(builder: (_) => const ExpensesPage()),
               ),
             ),
-            _buildSettingTile(
-              icon: Icons.payments_outlined,
-              title: 'Payment History',
-              subtitle: 'View recorded payment transactions',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PaymentsHistoryPage()),
-              ),
-            ),
 
             const SizedBox(height: 24),
             _buildSectionHeader('REPORTS & LOGS'),
@@ -206,14 +387,12 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
             ),
 
             const SizedBox(height: 24),
-            _buildSectionHeader('ACCOUNT SECURITY'),
-            const SizedBox(height: 8),
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: context.surfaceColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
               child: ListTile(
                 leading: const Icon(Icons.logout_rounded, color: Colors.red),
@@ -258,7 +437,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kGold.withOpacity(0.1)),
+        border: Border.all(color: kGold.withValues(alpha: 0.1)),
       ),
       child: ListTile(
         leading: Icon(icon, color: kGold),

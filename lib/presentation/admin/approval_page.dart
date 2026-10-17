@@ -161,11 +161,11 @@ class ApprovalService {
     );
   }
 
-  Future<Either<Failure, void>> rejectAccount(PendingAccount account) async {
-    return _repository.updateApplicationStatus(
+  Future<Either<Failure, void>> rejectAccount(PendingAccount account, {required String reason}) async {
+    return _repository.rejectApplication(
       applicationId: account.applicationId,
       userId: account.userId,
-      status: 'rejected',
+      reason: reason,
     );
   }
 }
@@ -333,30 +333,98 @@ class _ApprovalPageState extends State<ApprovalPage> {
   }
 
   Future<void> _confirmAndReject(PendingAccount account) async {
+    String selectedReason = 'Incomplete / Unclear Documents';
+    final customReasonController = TextEditingController();
+
+    final predefinedReasons = [
+      'Incomplete / Unclear Documents',
+      'Invalid / Expired Government ID',
+      'Unverified Personal Details',
+      'Failed Qualification / Requirements',
+      'Custom Reason / Other',
+    ];
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Account'),
-        content: Text('Reject "${account.fullName}"\'s account request?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Reject'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final isCustom = selectedReason == 'Custom Reason / Other';
+
+          return AlertDialog(
+            backgroundColor: ctx.surfaceColor,
+            title: const Text('Decline Application', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Decline "${account.fullName}"\'s (${account.role == AccountRole.client ? 'Client/Miner' : 'Operator'}) application?\nAn SMS notification with the decline reason will be sent to ${account.phoneNumber}.',
+                    style: TextStyle(color: ctx.textColor, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Reason for Decline', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: selectedReason,
+                    dropdownColor: ctx.surfaceColor,
+                    style: TextStyle(color: ctx.textColor),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: ctx.bgColor,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    items: predefinedReasons.map((r) {
+                      return DropdownMenuItem(value: r, child: Text(r, style: TextStyle(color: ctx.textColor, fontSize: 13)));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedReason = val);
+                    },
+                  ),
+                  if (isCustom) ...[
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: customReasonController,
+                      style: TextStyle(color: ctx.textColor),
+                      decoration: InputDecoration(
+                        hintText: 'Enter specific reason for decline...',
+                        hintStyle: TextStyle(color: ctx.mutedTextColor, fontSize: 12),
+                        filled: true,
+                        fillColor: ctx.bgColor,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Decline & Send SMS'),
+              ),
+            ],
+          );
+        },
       ),
     );
 
     if (confirmed != true) return;
 
+    final finalReason = (selectedReason == 'Custom Reason / Other' && customReasonController.text.trim().isNotEmpty)
+        ? customReasonController.text.trim()
+        : selectedReason;
+
     setState(() => _processingIds.add(account.applicationId));
     
-    final result = await _service.rejectAccount(account);
+    final result = await _service.rejectAccount(account, reason: finalReason);
     
     if (!mounted) return;
     setState(() => _processingIds.remove(account.applicationId));
@@ -365,7 +433,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
       (failure) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to reject: ${failure.message}'),
+            content: Text('Failed to decline: ${failure.message}'),
             backgroundColor: Colors.red.shade600,
           ),
         );
@@ -375,7 +443,10 @@ class _ApprovalPageState extends State<ApprovalPage> {
           _accounts.removeWhere((a) => a.applicationId == account.applicationId);
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${account.fullName} rejected.')),
+          SnackBar(
+            content: Text('${account.fullName}\'s application declined. SMS notification sent.'),
+            backgroundColor: Colors.orange,
+          ),
         );
       },
     );

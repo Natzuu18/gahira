@@ -9,7 +9,7 @@ import '../../infrastructure/repositories/supabase_service_request_repository.da
 import '../../infrastructure/repositories/supabase_user_repository.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import '../shared_widgets/adminDrawer.dart';
+import '../shared_widgets/admin_bottom_nav_bar.dart';
 
 class BillingPage extends StatefulWidget {
   const BillingPage({super.key});
@@ -100,12 +100,9 @@ class _BillingPageState extends State<BillingPage> {
               fontSize: 16,
             ),
           ),
-          actions: [
-            const ThemeToggleButton(),
-            IconButton(
-              icon: const Icon(Icons.menu_rounded, color: kGold),
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-            ),
+          actions: const [
+            ThemeToggleButton(),
+            SizedBox(width: 8),
           ],
           bottom: TabBar(
             labelColor: kGold,
@@ -118,7 +115,7 @@ class _BillingPageState extends State<BillingPage> {
             ],
           ),
         ),
-        endDrawer: const AdminDrawer(currentMenu: AdminMenu.bills),
+        bottomNavigationBar: buildAdminBottomNavBar(context, selectedIndex: 3),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator(color: kGold))
             : TabBarView(

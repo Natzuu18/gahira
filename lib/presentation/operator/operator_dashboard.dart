@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:dartz/dartz.dart' hide State;
 
 import '../../core/error/failures.dart';
+import '../../domain/entities/service_request_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import 'operator_drawer.dart';
 import 'processing_workflow_page.dart';
+import 'workforce_shift_page.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../infrastructure/models/service_request_model.dart';
 
@@ -24,10 +26,22 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final SupabaseServiceRequestRepository _requestRepository =
       SupabaseServiceRequestRepository();
+  late Future<Either<Failure, List<ServiceRequestModel>>> _requestsFuture;
 
   @override
   void initState() {
     super.initState();
+    _requestsFuture = _requestRepository.getServiceRequests();
+  }
+
+  void _refreshRequests() {
+    setState(() {
+      _requestsFuture = _requestRepository.getServiceRequests();
+    });
+  }
+
+  void _openPage(Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
   @override
@@ -56,6 +70,11 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
         actions: [
           const ThemeToggleButton(),
           IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: kGold),
+            tooltip: 'Refresh dashboard',
+            onPressed: _refreshRequests,
+          ),
+          IconButton(
             icon: const Icon(Icons.menu_rounded, color: kGold),
             onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
@@ -65,210 +84,455 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
         currentMenu: OperatorMenu.dashboard,
         operatorName: widget.operatorName,
       ),
-      body: SingleChildScrollView(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1120),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: FutureBuilder<Either<Failure, List<ServiceRequestModel>>>(
+        future: _requestsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: kGold));
+          }
+          if (snapshot.hasError) {
+            return _buildErrorState(snapshot.error.toString());
+          }
+          final result = snapshot.data;
+          if (result == null) {
+            return _buildErrorState('The dashboard could not load requests.');
+          }
+          return result.fold(
+            (failure) => _buildErrorState(failure.message),
+            _buildDashboardContent,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDashboardContent(List<ServiceRequestModel> requests) {
+    final pendingCount = requests
+        .where(
+          (request) =>
+              request.status ==
+              ServiceRequestStatus.pendingOperatorVerification,
+        )
+        .length;
+    final queueCount = requests
+        .where(
+          (request) =>
+              request.status == ServiceRequestStatus.queued ||
+              request.status == ServiceRequestStatus.scheduled,
+        )
+        .length;
+    final processingCount = requests
+        .where((request) => request.status == ServiceRequestStatus.processing)
+        .length;
+    final emergencyCount = requests
+        .where(
+          (request) => request.status == ServiceRequestStatus.emergencyStop,
+        )
+        .length;
+    final recentRequests = [...requests]
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+    return RefreshIndicator(
+      color: kGold,
+      onRefresh: () async {
+        final future = _requestRepository.getServiceRequests();
+        setState(() => _requestsFuture = future);
+        await future;
+      },
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1120),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+            children: [
+              _buildWelcomeCard(),
+              const SizedBox(height: 20),
+              _buildSectionHeading(
+                'Today at a glance',
+                'Live request overview',
+              ),
+              const SizedBox(height: 10),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 760 ? 4 : 2;
+                  return GridView.count(
+                    crossAxisCount: columns,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: columns == 4 ? 1.65 : 1.7,
                     children: [
-                      Text(
-                        'Welcome back,',
-                        style: TextStyle(
-                          color: context.mutedTextColor,
-                          fontSize: 14,
-                        ),
+                      _buildMetricCard(
+                        'Needs verification',
+                        pendingCount,
+                        Icons.fact_check_outlined,
+                        kGold,
                       ),
-                      Text(
-                        widget.operatorName,
-                        style: TextStyle(
-                          color: context.textColor,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      _buildMetricCard(
+                        'In queue',
+                        queueCount,
+                        Icons.pending_actions_rounded,
+                        Colors.blue,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Review requests or continue processing work.',
-                        style: TextStyle(
-                          color: context.mutedTextColor,
-                          fontSize: 14,
-                        ),
+                      _buildMetricCard(
+                        'Processing',
+                        processingCount,
+                        Icons.settings_input_component_rounded,
+                        Colors.green,
+                      ),
+                      _buildMetricCard(
+                        'Needs attention',
+                        emergencyCount,
+                        Icons.warning_amber_rounded,
+                        Colors.red,
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Quick Actions
-                  Text(
-                    'Quick Actions',
-                    style: TextStyle(
-                      color: context.textColor,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  );
+                },
+              ),
+              const SizedBox(height: 22),
+              _buildSectionHeading(
+                'Operator tools',
+                'Get to the next task quickly',
+              ),
+              const SizedBox(height: 10),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 760 ? 3 : 1;
+                  return GridView.count(
+                    crossAxisCount: columns,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: columns == 1 ? 4.4 : 2.8,
+                    children: [
+                      _buildQuickActionButton(
+                        context,
+                        'Verify miner material',
+                        'Review incoming requests',
+                        Icons.fact_check_outlined,
+                        () => _openPage(const ServiceVerificationPage()),
+                      ),
+                      _buildQuickActionButton(
+                        context,
+                        'Manage processing',
+                        'Claim jobs and update stages',
+                        Icons.settings_input_component_rounded,
+                        () => _openPage(const ProcessingWorkflowPage()),
+                      ),
+                      _buildQuickActionButton(
+                        context,
+                        'Workforce & shifts',
+                        'Check team availability',
+                        Icons.groups_2_outlined,
+                        () => _openPage(const WorkforceShiftPage()),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSectionHeading(
+                      'Recent service requests',
+                      'Sorted by most recently updated',
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final verificationAction = _buildQuickActionButton(
-                        context,
-                        'Service Verification',
-                        Icons.fact_check_outlined,
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const ServiceVerificationPage(),
-                          ),
-                        ),
-                      );
-                      final workflowAction = _buildQuickActionButton(
-                        context,
-                        'Workflow',
-                        Icons.settings_input_component_rounded,
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const ProcessingWorkflowPage(),
-                          ),
-                        ),
-                      );
-                      if (constraints.maxWidth >= 600) {
-                        return Row(
-                          children: [
-                            Expanded(child: verificationAction),
-                            const SizedBox(width: 12),
-                            Expanded(child: workflowAction),
-                          ],
-                        );
-                      }
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          verificationAction,
-                          const SizedBox(height: 12),
-                          workflowAction,
-                        ],
-                      );
-                    },
+                  TextButton(
+                    onPressed: () => _openPage(const ServiceVerificationPage()),
+                    child: const Text('View all'),
                   ),
-                  const SizedBox(height: 32),
-
-                  // Pending Verification Preview
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        'Recent Requests',
-                        style: TextStyle(
-                          color: context.textColor,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const ServiceVerificationPage(),
-                          ),
-                        ),
-                        child: const Text(
-                          'View All',
-                          style: TextStyle(color: kGold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  FutureBuilder<Either<Failure, List<ServiceRequestModel>>>(
-                    future: _requestRepository.getServiceRequests(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: CircularProgressIndicator(color: kGold),
-                        );
-                      }
-                      final list =
-                          snapshot.data?.fold((l) => [], (r) => r) ?? [];
-                      if (list.isEmpty) {
-                        return Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: context.surfaceColor,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Center(
-                            child: Text(
-                              'No service requests are waiting for review.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: context.mutedTextColor),
-                            ),
-                          ),
-                        );
-                      }
-
-                      return Column(
-                        children: list
-                            .take(3)
-                            .map(
-                              (r) => Container(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: context.surfaceColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: ListTile(
-                                  title: Text(
-                                    'Ref: ${r.id.substring(0, 8).toUpperCase()}',
-                                    style: TextStyle(
-                                      color: context.textColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    '${r.materialDetails.numberOfSacks} Sacks • ${r.status.toString().split('.').last}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  trailing: const Icon(
-                                    Icons.chevron_right,
-                                    color: kGold,
-                                  ),
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const ServiceVerificationPage(),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 32),
-
-                  const SizedBox(height: 80),
                 ],
               ),
-            ),
+              const SizedBox(height: 8),
+              if (recentRequests.isEmpty)
+                _buildEmptyState('No service requests have been submitted yet.')
+              else
+                ...recentRequests.take(5).map(_buildRecentRequestCard),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWelcomeCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [kGold.withValues(alpha: 0.2), context.surfaceColor],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kGold.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'OPERATOR WORKSPACE',
+                  style: TextStyle(
+                    color: kGold.withValues(alpha: 0.9),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Welcome back, ${widget.operatorName}',
+                  style: TextStyle(
+                    color: context.textColor,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Verify incoming material, keep jobs moving, and support the team.',
+                  style: TextStyle(
+                    color: context.mutedTextColor,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: kGold.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.engineering_rounded,
+              color: kGold,
+              size: 30,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeading(String title, String subtitle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            color: context.textColor,
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetricCard(String label, int value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 19),
+              const Spacer(),
+              Text(
+                value.toString(),
+                style: TextStyle(
+                  color: context.textColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: context.mutedTextColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentRequestCard(ServiceRequestModel request) {
+    final status = _statusLabel(request.status);
+    final isPending =
+        request.status == ServiceRequestStatus.pendingOperatorVerification;
+    final isEmergency = request.status == ServiceRequestStatus.emergencyStop;
+    final statusColor = isEmergency
+        ? Colors.red
+        : isPending
+        ? kGold
+        : request.status == ServiceRequestStatus.processing
+        ? Colors.green
+        : Colors.blue;
+    final sacks = request.materialDetails.numberOfSacks ?? 0;
+    final reference = request.id.length > 8
+        ? request.id.substring(0, 8).toUpperCase()
+        : request.id.toUpperCase();
+
+    return Card(
+      color: context.surfaceColor,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: context.textColor.withValues(alpha: 0.05)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withValues(alpha: 0.12),
+          child: Icon(
+            isEmergency
+                ? Icons.warning_amber_rounded
+                : isPending
+                ? Icons.fact_check_outlined
+                : Icons.inventory_2_outlined,
+            color: statusColor,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          request.creatorName?.isNotEmpty == true
+              ? request.creatorName!
+              : 'Miner request',
+          style: TextStyle(
+            color: context.textColor,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(
+            'Ref $reference  •  $sacks ${sacks == 1 ? 'sack' : 'sacks'}  •  ${request.materialDetails.sourceType ?? 'Material service'}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                status,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, color: context.mutedTextColor, size: 20),
+          ],
+        ),
+        onTap: () => _openPage(
+          isPending
+              ? const ServiceVerificationPage()
+              : const ProcessingWorkflowPage(),
+        ),
+      ),
+    );
+  }
+
+  String _statusLabel(ServiceRequestStatus status) {
+    final words = status.name.replaceAllMapped(
+      RegExp(r'([a-z])([A-Z])'),
+      (match) => '${match[1]} ${match[2]}',
+    );
+    return words[0].toUpperCase() + words.substring(1);
+  }
+
+  Widget _buildErrorState(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_rounded, color: Colors.orange, size: 40),
+            const SizedBox(height: 10),
+            Text(
+              'Dashboard data is unavailable',
+              style: TextStyle(
+                color: context.textColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _refreshRequests,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: kGold.withValues(alpha: 0.12)),
+      ),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: context.mutedTextColor, fontSize: 13),
       ),
     );
   }
@@ -276,31 +540,64 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
   Widget _buildQuickActionButton(
     BuildContext context,
     String label,
+    String subtitle,
     IconData icon,
     VoidCallback onTap,
   ) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
         decoration: BoxDecoration(
           color: context.surfaceColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: kGold.withOpacity(0.1)),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: kGold.withValues(alpha: 0.16)),
         ),
-        child: Column(
+        child: Row(
           children: [
-            Icon(icon, color: kGold, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: context.textColor,
-                fontWeight: FontWeight.w500,
-                fontSize: 13,
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: kGold.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: Icon(icon, color: kGold, size: 21),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.mutedTextColor,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: context.mutedTextColor,
+              size: 14,
             ),
           ],
         ),

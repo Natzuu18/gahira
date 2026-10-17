@@ -42,7 +42,7 @@ class OperatorDrawer extends StatelessWidget {
             // Header with name at the top
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 18),
               decoration: BoxDecoration(
                 color: context.bgColor,
                 border: Border(
@@ -56,8 +56,8 @@ class OperatorDrawer extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
-                        width: 56,
-                        height: 56,
+                        width: 48,
+                        height: 48,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(color: kGold, width: 1.6),
@@ -71,7 +71,7 @@ class OperatorDrawer extends StatelessWidget {
                       const ThemeToggleButton(),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Text(
                     operatorName,
                     style: TextStyle(
@@ -95,7 +95,7 @@ class OperatorDrawer extends StatelessWidget {
 
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 children: [
                   _buildItem(
                     context,
@@ -166,7 +166,7 @@ class OperatorDrawer extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 48),
+                  minimumSize: const Size(double.infinity, 44),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -194,7 +194,7 @@ class OperatorDrawer extends StatelessWidget {
                 );
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -210,6 +210,8 @@ class OperatorDrawer extends StatelessWidget {
   }) {
     final bool selected = currentMenu == menu;
     return ListTile(
+      dense: true,
+      visualDensity: const VisualDensity(vertical: -1),
       leading: Icon(icon, color: selected ? kGold : kGold.withOpacity(0.7)),
       title: Text(
         label,

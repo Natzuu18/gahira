@@ -23,7 +23,8 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
       'type': 'Processing Update',
       'recipient': '+63 912 345 6789',
       'recipientName': 'John Smith',
-      'message': 'Your gold processing job JOB-001 has moved to Grinding stage.',
+      'message':
+          'Your gold processing job JOB-001 has moved to Grinding stage.',
       'status': 'Delivered',
       'sentDate': '2024-01-17 10:30 AM',
     },
@@ -41,7 +42,8 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
       'type': 'Maintenance Reminder',
       'recipient': '+63 934 567 8901',
       'recipientName': 'Mike Johnson',
-      'message': 'Scheduled maintenance for Mill #04 on 2024-01-22 at 08:00 AM.',
+      'message':
+          'Scheduled maintenance for Mill #04 on 2024-01-22 at 08:00 AM.',
       'status': 'Pending',
       'sentDate': '2024-01-17 08:00 AM',
     },
@@ -61,13 +63,15 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
       'id': 'TPL-001',
       'name': 'Processing Update',
       'category': 'Processing',
-      'message': 'Your gold processing job {JOB_ID} has moved to {STAGE} stage.',
+      'message':
+          'Your gold processing job {JOB_ID} has moved to {STAGE} stage.',
     },
     {
       'id': 'TPL-002',
       'name': 'Payment Confirmation',
       'category': 'Billing',
-      'message': 'Payment of {AMOUNT} for invoice {INVOICE_ID} has been received.',
+      'message':
+          'Payment of {AMOUNT} for invoice {INVOICE_ID} has been received.',
     },
     {
       'id': 'TPL-003',
@@ -148,128 +152,195 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
           currentMenu: OperatorMenu.sms,
           operatorName: 'Operator',
         ),
-        body: TabBarView(
-          children: [
-            _buildHistoryTab(),
-            _buildTemplatesTab(),
-          ],
-        ),
+        body: TabBarView(children: [_buildHistoryTab(), _buildTemplatesTab()]),
       ),
     );
   }
 
   Widget _buildHistoryTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GridView.count(
-            crossAxisCount: 3,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 1.6,
-            children: [
-              _buildSummaryCard('Total Sent', '4', Icons.sms_rounded, kGold),
-              _buildSummaryCard('Delivered', '3', Icons.check_circle_outline_rounded, Colors.green),
-              _buildSummaryCard('Pending', '1', Icons.pending_rounded, Colors.orange),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Notification History',
-                style: TextStyle(
-                  color: context.textColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: kGold.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: kGold.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.filter_list_rounded, color: kGold, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Filter',
-                      style: TextStyle(
-                        color: kGold,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900
+            ? 3
+            : constraints.maxWidth >= 560
+            ? 2
+            : 1;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1080),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GridView.count(
+                    crossAxisCount: columns,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: columns == 1 ? 3.2 : 1.8,
+                    children: [
+                      _buildSummaryCard(
+                        'Total Sent',
+                        '4',
+                        Icons.sms_rounded,
+                        kGold,
                       ),
-                    ),
-                  ],
-                ),
+                      _buildSummaryCard(
+                        'Delivered',
+                        '3',
+                        Icons.check_circle_outline_rounded,
+                        Colors.green,
+                      ),
+                      _buildSummaryCard(
+                        'Pending',
+                        '1',
+                        Icons.pending_rounded,
+                        Colors.orange,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Notification History',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kGold.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: kGold.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.filter_list_rounded,
+                              color: kGold,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Filter',
+                              style: TextStyle(
+                                color: kGold,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._notifications.map(
+                    (notification) => _buildNotificationCard(notification),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
-          ..._notifications.map((notification) => _buildNotificationCard(notification)),
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildTemplatesTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GridView.count(
-            crossAxisCount: 3,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 1.6,
-            children: [
-              _buildSummaryCard('Total Templates', '5', Icons.description_rounded, kGold),
-              _buildSummaryCard('Processing', '2', Icons.settings_rounded, Colors.blue),
-              _buildSummaryCard('Other', '3', Icons.category_rounded, Colors.orange),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Message Templates',
-                style: TextStyle(
-                  color: context.textColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900
+            ? 3
+            : constraints.maxWidth >= 560
+            ? 2
+            : 1;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1080),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GridView.count(
+                    crossAxisCount: columns,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: columns == 1 ? 3.2 : 1.8,
+                    children: [
+                      _buildSummaryCard(
+                        'Total Templates',
+                        '5',
+                        Icons.description_rounded,
+                        kGold,
+                      ),
+                      _buildSummaryCard(
+                        'Processing',
+                        '2',
+                        Icons.settings_rounded,
+                        Colors.blue,
+                      ),
+                      _buildSummaryCard(
+                        'Other',
+                        '3',
+                        Icons.category_rounded,
+                        Colors.orange,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Message Templates',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _showCreateTemplateDialog,
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: const Text('Create Template'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kGold,
+                          foregroundColor: kBlack,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._templates.map((template) => _buildTemplateCard(template)),
+                ],
               ),
-              ElevatedButton.icon(
-                onPressed: _showCreateTemplateDialog,
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: const Text('Create Template'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kGold,
-                  foregroundColor: kBlack,
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
-          ..._templates.map((template) => _buildTemplateCard(template)),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, IconData icon, Color color) {
+  Widget _buildSummaryCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -295,10 +366,7 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
               ),
               Text(
                 title,
-                style: TextStyle(
-                  color: context.mutedTextColor,
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: context.mutedTextColor, fontSize: 12),
               ),
             ],
           ),
@@ -310,7 +378,7 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
   Widget _buildNotificationCard(Map<String, dynamic> notification) {
     final status = notification['status'];
     final statusColor = status == 'Delivered' ? Colors.green : Colors.orange;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -357,7 +425,10 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -389,10 +460,7 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
                 Expanded(
                   child: Text(
                     notification['message'],
-                    style: TextStyle(
-                      color: context.textColor,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: context.textColor, fontSize: 13),
                   ),
                 ),
               ],
@@ -460,7 +528,11 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
                   color: kGold.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.description_rounded, color: kGold, size: 24),
+                child: const Icon(
+                  Icons.description_rounded,
+                  color: kGold,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -502,10 +574,7 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
                 Expanded(
                   child: Text(
                     template['message'],
-                    style: TextStyle(
-                      color: context.textColor,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: context.textColor, fontSize: 13),
                   ),
                 ),
               ],
@@ -598,10 +667,7 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.surfaceColor,
-        title: Text(
-          'Compose SMS',
-          style: TextStyle(color: context.textColor),
-        ),
+        title: Text('Compose SMS', style: TextStyle(color: context.textColor)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -743,10 +809,7 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
                 ),
                 child: Text(
                   notification['message'],
-                  style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: context.textColor, fontSize: 13),
                 ),
               ),
             ],
@@ -796,10 +859,7 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                color: context.textColor,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: context.textColor, fontSize: 13),
             ),
           ),
         ],

@@ -18,12 +18,14 @@ class ServiceVerificationPage extends StatefulWidget {
   const ServiceVerificationPage({super.key});
 
   @override
-  State<ServiceVerificationPage> createState() => _ServiceVerificationPageState();
+  State<ServiceVerificationPage> createState() =>
+      _ServiceVerificationPageState();
 }
 
 class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final SupabaseServiceRequestRepository _repository = SupabaseServiceRequestRepository();
+  final SupabaseServiceRequestRepository _repository =
+      SupabaseServiceRequestRepository();
   late final ServiceRequestService _service;
   final SupabaseUserRepository _userRepository = SupabaseUserRepository();
 
@@ -41,19 +43,19 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   Future<void> _loadRequests() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-    
+
     try {
       final requestsResult = await _repository.getServiceRequests();
       final usersResult = await _userRepository.getAllUsers();
-      
+
       if (!mounted) return;
-      
+
       String? errorMessage;
       requestsResult.fold(
         (l) => errorMessage = 'Requests: ${l.message}',
         (list) => _requests = list,
       );
-      
+
       usersResult.fold(
         (l) => errorMessage = (errorMessage ?? '') + ' Users: ${l.message}',
         (list) => _allUsers = list,
@@ -65,7 +67,11 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             content: Text('Error loading data: $errorMessage'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 10),
-            action: SnackBarAction(label: 'RETRY', textColor: Colors.white, onPressed: _loadRequests),
+            action: SnackBarAction(
+              label: 'RETRY',
+              textColor: Colors.white,
+              onPressed: _loadRequests,
+            ),
           ),
         );
       }
@@ -75,7 +81,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       print('Critical Error in _loadRequests: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Critical Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Critical Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
         setState(() => _isLoading = false);
       }
@@ -95,82 +104,138 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingRequests = _requests.where((r) => r.status == ServiceRequestStatus.pendingOperatorVerification).toList();
-    final verifiedRequests = _requests.where((r) => r.status != ServiceRequestStatus.pendingOperatorVerification).toList();
+    final pendingRequests = _requests
+        .where(
+          (r) => r.status == ServiceRequestStatus.pendingOperatorVerification,
+        )
+        .toList();
+    final verifiedRequests = _requests
+        .where(
+          (r) => r.status != ServiceRequestStatus.pendingOperatorVerification,
+        )
+        .toList();
 
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
-        title: const Text('SERVICE VERIFICATION', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 16)),
+        title: const Text(
+          'SERVICE VERIFICATION',
+          style: TextStyle(
+            color: kGold,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+            fontSize: 16,
+          ),
+        ),
         actions: [
           const ThemeToggleButton(),
-          IconButton(icon: const Icon(Icons.menu_rounded, color: kGold), onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
+          IconButton(
+            icon: const Icon(Icons.menu_rounded, color: kGold),
+            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+          ),
         ],
       ),
-      endDrawer: const OperatorDrawer(currentMenu: OperatorMenu.dashboard), // Assuming dashboard for now
+      endDrawer: const OperatorDrawer(
+        currentMenu: OperatorMenu.serviceVerification,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showMinerDirectory,
         backgroundColor: kGold,
         foregroundColor: kBlack,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('CREATE REQUEST', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+        label: const Text(
+          'CREATE REQUEST',
+          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+        ),
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: kGold))
-        : RefreshIndicator(
-            onRefresh: _loadRequests,
-            color: kGold,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildSectionTitle('PENDING VERIFICATION'),
-                if (pendingRequests.isEmpty)
-                  _buildEmptyState('No pending verification tasks.')
-                else
-                  ...pendingRequests.map((r) => _buildRequestCard(r, isPending: true)),
-                
-                const SizedBox(height: 32),
-                _buildSectionTitle('VERIFICATION HISTORY'),
-                ...verifiedRequests.map((r) => _buildRequestCard(r, isPending: false)),
-              ],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: kGold))
+          : RefreshIndicator(
+              onRefresh: _loadRequests,
+              color: kGold,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1000),
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _buildSectionTitle('PENDING VERIFICATION'),
+                      if (pendingRequests.isEmpty)
+                        _buildEmptyState('No pending verification tasks.')
+                      else
+                        ...pendingRequests.map(
+                          (r) => _buildRequestCard(r, isPending: true),
+                        ),
+
+                      const SizedBox(height: 24),
+                      _buildSectionTitle('VERIFICATION HISTORY'),
+                      ...verifiedRequests.map(
+                        (r) => _buildRequestCard(r, isPending: false),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
     );
   }
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16, left: 4),
-      child: Text(title, style: TextStyle(color: context.mutedTextColor, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: context.mutedTextColor,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+        ),
+      ),
     );
   }
 
   Widget _buildEmptyState(String msg) {
     return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(color: context.surfaceColor, borderRadius: BorderRadius.circular(16)),
-      child: Center(child: Text(msg, style: TextStyle(color: context.mutedTextColor, fontSize: 13))),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: Text(
+          msg,
+          style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+        ),
+      ),
     );
   }
 
-  Widget _buildRequestCard(ServiceRequestEntity request, {required bool isPending}) {
+  Widget _buildRequestCard(
+    ServiceRequestEntity request, {
+    required bool isPending,
+  }) {
     final bool isGroup = request.participatingMinerIds.length > 1;
     final String timeStr = DateFormat('hh:mm a').format(request.createdAt);
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isPending ? kGold.withOpacity(0.2) : context.textColor.withOpacity(0.05)),
+        border: Border.all(
+          color: isPending
+              ? kGold.withOpacity(0.2)
+              : context.textColor.withOpacity(0.05),
+        ),
       ),
       child: InkWell(
         onTap: () => _showRequestDetails(request),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -178,9 +243,14 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: isGroup ? Colors.blue.withOpacity(0.1) : kGold.withOpacity(0.1),
+                      color: isGroup
+                          ? Colors.blue.withOpacity(0.1)
+                          : kGold.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -193,22 +263,39 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       ),
                     ),
                   ),
-                  Text(timeStr, style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                      color: context.mutedTextColor,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 request.creatorName ?? 'Unknown Miner',
-                style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 15),
+                style: TextStyle(
+                  color: context.textColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
               ),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.inventory_2_outlined, size: 14, color: kGold.withOpacity(0.7)),
+                  Icon(
+                    Icons.inventory_2_outlined,
+                    size: 14,
+                    color: kGold.withOpacity(0.7),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '${request.materialDetails.numberOfSacks ?? 0} Sacks • ${request.materialDetails.condition} • ${request.materialDetails.state}',
-                    style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                    style: TextStyle(
+                      color: context.mutedTextColor,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -226,8 +313,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   Widget _buildStatusBadge(ServiceRequestStatus status) {
     Color color = kGold;
     String label = status.toString().split('.').last.toUpperCase();
-    
-    if (status == ServiceRequestStatus.verified || status == ServiceRequestStatus.accepted) {
+
+    if (status == ServiceRequestStatus.verified ||
+        status == ServiceRequestStatus.accepted) {
       color = Colors.green;
       label = 'IN QUEUE';
     }
@@ -235,11 +323,22 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       color = Colors.redAccent;
       label = 'INACCURATE';
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withOpacity(0.5))),
-      child: Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
@@ -248,7 +347,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: context.bgColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.8,
         maxChildSize: 0.95,
@@ -264,33 +365,78 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   width: 40,
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(color: context.mutedTextColor.withOpacity(0.3), borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(
+                    color: context.mutedTextColor.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Full Information', style: TextStyle(color: kGold, fontSize: 22, fontWeight: FontWeight.bold)),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  const Text(
+                    'Full Information',
+                    style: TextStyle(
+                      color: kGold,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
               _buildDetailSection('MINER DETAILS', [
-                _buildDetailRow('Primary Miner', request.creatorName ?? 'Unknown Miner'),
+                _buildDetailRow(
+                  'Primary Miner',
+                  request.creatorName ?? 'Unknown Miner',
+                ),
                 if (request.participatingMinerIds.length > 1)
-                  _buildDetailRow('Group Members', request.participatingMinerIds.where((id) => id != request.creatorId).map((id) => _getMinerName(id)).join(', ')),
+                  _buildDetailRow(
+                    'Group Members',
+                    request.participatingMinerIds
+                        .where((id) => id != request.creatorId)
+                        .map((id) => _getMinerName(id))
+                        .join(', '),
+                  ),
               ]),
               const SizedBox(height: 24),
               _buildDetailSection('MATERIAL SUMMARY', [
-                _buildDetailRow('Condition', request.materialDetails.condition ?? 'N/A'),
-                _buildDetailRow('State', request.materialDetails.state ?? 'N/A'),
-                _buildDetailRow('Sacks', '${request.materialDetails.numberOfSacks ?? 0}'),
-                _buildDetailRow('Source Type', request.materialDetails.sourceType ?? 'N/A'),
-                _buildDetailRow('Source Name', request.materialDetails.source ?? 'N/A'),
+                _buildDetailRow(
+                  'Condition',
+                  request.materialDetails.condition ?? 'N/A',
+                ),
+                _buildDetailRow(
+                  'State',
+                  request.materialDetails.state ?? 'N/A',
+                ),
+                _buildDetailRow(
+                  'Sacks',
+                  '${request.materialDetails.numberOfSacks ?? 0}',
+                ),
+                _buildDetailRow(
+                  'Source Type',
+                  request.materialDetails.sourceType ?? 'N/A',
+                ),
+                _buildDetailRow(
+                  'Source Name',
+                  request.materialDetails.source ?? 'N/A',
+                ),
               ]),
               if (request.materialDetails.photoUrls.isNotEmpty) ...[
                 const SizedBox(height: 24),
-                const Text('MATERIAL PHOTOS', style: TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                const Text(
+                  'MATERIAL PHOTOS',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 100,
@@ -303,20 +449,33 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: kGold.withOpacity(0.2)),
-                        image: DecorationImage(image: NetworkImage(request.materialDetails.photoUrls[index]), fit: BoxFit.cover),
+                        image: DecorationImage(
+                          image: NetworkImage(
+                            request.materialDetails.photoUrls[index],
+                          ),
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ],
-              if (request.materialDetails.notes != null && request.materialDetails.notes!.isNotEmpty) ...[
+              if (request.materialDetails.notes != null &&
+                  request.materialDetails.notes!.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 _buildDetailSection('MINER NOTES', [
-                  Text(request.materialDetails.notes!, style: TextStyle(color: context.textColor, fontSize: 13, height: 1.5)),
+                  Text(
+                    request.materialDetails.notes!,
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
                 ]),
               ],
-              if (request.status == ServiceRequestStatus.verified || 
-                  request.status == ServiceRequestStatus.accepted || 
+              if (request.status == ServiceRequestStatus.verified ||
+                  request.status == ServiceRequestStatus.accepted ||
                   request.status == ServiceRequestStatus.scheduled ||
                   request.status == ServiceRequestStatus.assigned ||
                   request.status == ServiceRequestStatus.processing) ...[
@@ -331,9 +490,21 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle_rounded, color: Colors.green, size: 24),
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: Colors.green,
+                        size: 24,
+                      ),
                       SizedBox(width: 12),
-                      Text('VERIFIED', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.5)),
+                      Text(
+                        'VERIFIED',
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -346,7 +517,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       backgroundColor: context.surfaceColor,
                       foregroundColor: kGold,
                       side: const BorderSide(color: kGold),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     onPressed: () {
                       Navigator.pop(context);
@@ -355,7 +528,13 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('SEE PROGRESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text(
+                          'SEE PROGRESS',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
                         SizedBox(width: 8),
                         Icon(Icons.insights_rounded, size: 20),
                       ],
@@ -363,7 +542,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   ),
                 ),
               ],
-              if (request.status == ServiceRequestStatus.pendingOperatorVerification) ...[
+              if (request.status ==
+                  ServiceRequestStatus.pendingOperatorVerification) ...[
                 const SizedBox(height: 40),
                 SizedBox(
                   width: double.infinity,
@@ -372,7 +552,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kGold,
                       foregroundColor: kBlack,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     onPressed: () {
                       Navigator.pop(context);
@@ -381,7 +563,13 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('NEXT: VERIFY MATERIAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text(
+                          'NEXT: VERIFY MATERIAL',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
                         SizedBox(width: 8),
                         Icon(Icons.arrow_forward_rounded, size: 20),
                       ],
@@ -397,10 +585,12 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   }
 
   void _showVerificationForm(ServiceRequestEntity request) {
-    final sackController = TextEditingController(text: (request.materialDetails.numberOfSacks ?? 0).toString());
+    final sackController = TextEditingController(
+      text: (request.materialDetails.numberOfSacks ?? 0).toString(),
+    );
     final estNumController = TextEditingController(text: '3');
     final remarksController = TextEditingController();
-    
+
     // Pre-fill editable fields
     String currentCondition = request.materialDetails.condition ?? 'Rocky';
     String currentState = request.materialDetails.state ?? 'Dry';
@@ -412,29 +602,49 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     }
 
     String currentSource = request.materialDetails.source ?? '';
-    
+
     bool isAccurate = true;
     String timeUnit = 'Hours';
 
-    final List<String> conditionOptions = ['Rocky', 'Muddy', 'Sandy', 'Mixed', 'Clay'];
+    final List<String> conditionOptions = [
+      'Rocky',
+      'Muddy',
+      'Sandy',
+      'Mixed',
+      'Clay',
+    ];
     final List<String> stateOptions = ['Dry', 'Wet', 'Others'];
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.bgColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            left: 24,
+            right: 24,
+            top: 24,
+          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Material Verification', style: TextStyle(color: kGold, fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Material Verification',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 24),
-                
+
                 Row(
                   children: [
                     Expanded(
@@ -443,10 +653,12 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         keyboardType: TextInputType.number,
                         style: TextStyle(color: context.textColor),
                         decoration: InputDecoration(
-                          labelText: 'Actual Sacks', 
+                          labelText: 'Actual Sacks',
                           filled: true,
                           fillColor: context.surfaceColor,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
@@ -454,40 +666,76 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 ),
                 const SizedBox(height: 20),
 
-                const Text('Correct Material Condition', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Correct Material Condition',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: conditionOptions.map((c) => Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Radio<String>(
-                          value: c,
-                          groupValue: currentCondition,
-                          activeColor: kGold,
-                          onChanged: (v) => setModalState(() => currentCondition = v!),
-                        ),
-                        Text(c, style: TextStyle(color: context.textColor, fontSize: 12)),
-                      ],
-                    )).toList(),
+                    children: conditionOptions
+                        .map(
+                          (c) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Radio<String>(
+                                value: c,
+                                groupValue: currentCondition,
+                                activeColor: kGold,
+                                onChanged: (v) =>
+                                    setModalState(() => currentCondition = v!),
+                              ),
+                              Text(
+                                c,
+                                style: TextStyle(
+                                  color: context.textColor,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
 
                 const SizedBox(height: 12),
-                const Text('Correct Material State', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Correct Material State',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Row(
-                  children: stateOptions.map((s) => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Radio<String>(
-                        value: s,
-                        groupValue: currentState,
-                        activeColor: kGold,
-                        onChanged: (v) => setModalState(() => currentState = v!),
-                      ),
-                      Text(s, style: TextStyle(color: context.textColor, fontSize: 12)),
-                    ],
-                  )).toList(),
+                  children: stateOptions
+                      .map(
+                        (s) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Radio<String>(
+                              value: s,
+                              groupValue: currentState,
+                              activeColor: kGold,
+                              onChanged: (v) =>
+                                  setModalState(() => currentState = v!),
+                            ),
+                            Text(
+                              s,
+                              style: TextStyle(
+                                color: context.textColor,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                      .toList(),
                 ),
                 if (currentState == 'Others')
                   Padding(
@@ -500,7 +748,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         hintText: 'Specify material state',
                         filled: true,
                         fillColor: context.surfaceColor,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -512,15 +762,24 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   enabled: false,
                   style: TextStyle(color: context.textColor.withOpacity(0.6)),
                   decoration: InputDecoration(
-                    labelText: 'Source Name (Verified)', 
+                    labelText: 'Source Name (Verified)',
                     filled: true,
                     fillColor: context.surfaceColor.withOpacity(0.5),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 24),
-                const Text('Processing Estimate', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Processing Estimate',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -530,11 +789,16 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         controller: estNumController,
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontWeight: FontWeight.bold,
+                        ),
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: context.surfaceColor,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
@@ -545,17 +809,29 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         decoration: BoxDecoration(
                           color: context.surfaceColor,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: context.mutedTextColor.withOpacity(0.3)),
+                          border: Border.all(
+                            color: context.mutedTextColor.withOpacity(0.3),
+                          ),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: timeUnit,
                             dropdownColor: context.surfaceColor,
                             isExpanded: true,
-                            style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: context.textColor,
+                              fontWeight: FontWeight.bold,
+                            ),
                             items: ['Minutes', 'Hours', 'Days']
-                              .map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                            onChanged: (v) => setModalState(() => timeUnit = v!),
+                                .map(
+                                  (t) => DropdownMenuItem(
+                                    value: t,
+                                    child: Text(t),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setModalState(() => timeUnit = v!),
                           ),
                         ),
                       ),
@@ -564,12 +840,25 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 ),
                 const SizedBox(height: 24),
 
-                const Text('Final Verdict', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Final Verdict',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Row(
                   children: [
                     Expanded(
                       child: RadioListTile<bool>(
-                        title: const Text('Information Accurate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        title: const Text(
+                          'Information Accurate',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         value: true,
                         groupValue: isAccurate,
                         activeColor: Colors.green,
@@ -579,7 +868,13 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     ),
                     Expanded(
                       child: RadioListTile<bool>(
-                        title: const Text('Information Inaccurate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        title: const Text(
+                          'Information Inaccurate',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         value: false,
                         groupValue: isAccurate,
                         activeColor: Colors.redAccent,
@@ -589,17 +884,21 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     ),
                   ],
                 ),
-                
+
                 TextFormField(
                   controller: remarksController,
                   style: TextStyle(color: context.textColor),
                   maxLines: 2,
                   decoration: InputDecoration(
-                    labelText: isAccurate ? 'General Remarks' : 'Notes for Miner', 
+                    labelText: isAccurate
+                        ? 'General Remarks'
+                        : 'Notes for Miner',
                     hintText: isAccurate ? 'Optional' : 'Explain discrepancies',
                     filled: true,
                     fillColor: context.surfaceColor,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
 
@@ -609,20 +908,30 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   height: 56,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: kGold, 
+                      backgroundColor: kGold,
                       foregroundColor: kBlack,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     onPressed: () => _confirmWithPin(request, {
                       'sacks': int.tryParse(sackController.text) ?? 0,
                       'condition': currentCondition,
-                      'state': currentState == 'Others' ? otherState : currentState,
+                      'state': currentState == 'Others'
+                          ? otherState
+                          : currentState,
                       'source': currentSource,
                       'isAccurate': isAccurate,
                       'time': '${estNumController.text} $timeUnit',
                       'remarks': remarksController.text,
                     }),
-                    child: const Text('SUBMIT VERIFICATION', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    child: const Text(
+                      'SUBMIT VERIFICATION',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -633,7 +942,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     );
   }
 
-  void _confirmWithPin(ServiceRequestEntity request, Map<String, dynamic> data) {
+  void _confirmWithPin(
+    ServiceRequestEntity request,
+    Map<String, dynamic> data,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -667,17 +979,17 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       if (success == true) {
         // If the PIN dialog finished successfully, close the Verification form sheet
         if (Navigator.canPop(context)) {
-          Navigator.pop(context); 
+          Navigator.pop(context);
         }
-        
+
         _loadRequests();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Verification submitted!'), 
+            content: Text('Verification submitted!'),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-          )
+          ),
         );
       }
     });
@@ -689,15 +1001,26 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: context.bgColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
           padding: const EdgeInsets.all(24),
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Miner Directory', style: TextStyle(color: kGold, fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                'Miner Directory',
+                style: TextStyle(
+                  color: kGold,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 16),
               TextField(
                 decoration: InputDecoration(
@@ -705,7 +1028,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   prefixIcon: const Icon(Icons.search, color: kGold),
                   filled: true,
                   fillColor: context.surfaceColor,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onChanged: (v) => setModalState(() => searchQuery = v),
               ),
@@ -713,38 +1038,75 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
               Expanded(
                 child: ListView(
                   children: _allUsers
-                    .where((u) => u.roleId.toLowerCase().contains('miner') && 
-                                 ('${u.fname} ${u.lname}'.toLowerCase().contains(searchQuery.toLowerCase())))
-                    .map((miner) => Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: context.surfaceColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: kGold.withOpacity(0.1)),
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: kGold.withOpacity(0.1),
-                          child: Text(miner.fname[0].toUpperCase(), style: const TextStyle(color: kGold, fontWeight: FontWeight.bold)),
-                        ),
-                        title: Text('${miner.fname} ${miner.lname}', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: Text(miner.miningUnitName ?? 'Independent Miner', style: const TextStyle(fontSize: 11)),
-                        trailing: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _showCreateAssistedRequest(initialMinerId: miner.userId);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: kGold.withOpacity(0.1),
-                            foregroundColor: kGold,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: kGold)),
+                      .where(
+                        (u) =>
+                            u.roleId.toLowerCase().contains('miner') &&
+                            ('${u.fname} ${u.lname}'.toLowerCase().contains(
+                              searchQuery.toLowerCase(),
+                            )),
+                      )
+                      .map(
+                        (miner) => Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: context.surfaceColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: kGold.withOpacity(0.1)),
                           ),
-                          child: const Text('CREATE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: kGold.withOpacity(0.1),
+                              child: Text(
+                                miner.fname[0].toUpperCase(),
+                                style: const TextStyle(
+                                  color: kGold,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              '${miner.fname} ${miner.lname}',
+                              style: TextStyle(
+                                color: context.textColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            subtitle: Text(
+                              miner.miningUnitName ?? 'Independent Miner',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            trailing: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _showCreateAssistedRequest(
+                                  initialMinerId: miner.userId,
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: kGold.withOpacity(0.1),
+                                foregroundColor: kGold,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: const BorderSide(color: kGold),
+                                ),
+                              ),
+                              child: const Text(
+                                'CREATE',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    )).toList(),
+                      )
+                      .toList(),
                 ),
               ),
             ],
@@ -758,7 +1120,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     int currentStep = 1;
     final formKey = GlobalKey<FormState>();
 
-    List<String> selectedMinerIds = initialMinerId != null ? [initialMinerId] : [];
+    List<String> selectedMinerIds = initialMinerId != null
+        ? [initialMinerId]
+        : [];
     String minerSearchQuery = '';
 
     String condition = 'Rocky';
@@ -774,10 +1138,17 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: context.bgColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, left: 20, right: 20, top: 12),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+            left: 20,
+            right: 20,
+            top: 12,
+          ),
           child: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -785,19 +1156,47 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: kGold.withOpacity(0.3), borderRadius: BorderRadius.circular(2)))),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: kGold.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(currentStep == 1 ? 'Step 1: Miner Selection' : 'Step 2: Material Info', style: const TextStyle(color: kGold, fontSize: 20, fontWeight: FontWeight.bold)),
-                      Text('$currentStep / 2', style: TextStyle(color: context.mutedTextColor, fontSize: 14, fontWeight: FontWeight.bold)),
+                      Text(
+                        currentStep == 1
+                            ? 'Step 1: Miner Selection'
+                            : 'Step 2: Material Info',
+                        style: const TextStyle(
+                          color: kGold,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '$currentStep / 2',
+                        style: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
 
                   if (currentStep == 1) ...[
-                    const Text('Select additional miners for group requests.', style: TextStyle(fontSize: 13)),
+                    const Text(
+                      'Select additional miners for group requests.',
+                      style: TextStyle(fontSize: 13),
+                    ),
                     const SizedBox(height: 16),
                     TextField(
                       decoration: InputDecoration(
@@ -805,10 +1204,14 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         prefixIcon: const Icon(Icons.search, color: kGold),
                         filled: true,
                         fillColor: context.surfaceColor,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: kGold.withOpacity(0.2))),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: kGold.withOpacity(0.2)),
+                        ),
                       ),
                       style: TextStyle(color: context.textColor),
-                      onChanged: (v) => setModalState(() => minerSearchQuery = v),
+                      onChanged: (v) =>
+                          setModalState(() => minerSearchQuery = v),
                     ),
                     const SizedBox(height: 12),
                     ConstrainedBox(
@@ -816,50 +1219,119 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       child: ListView(
                         shrinkWrap: true,
                         children: _allUsers
-                          .where((m) => m.roleId.toLowerCase().contains('miner') && 
-                                       ('${m.fname} ${m.lname}'.toLowerCase().contains(minerSearchQuery.toLowerCase())))
-                          .map((m) => CheckboxListTile(
-                            title: Text('${m.fname} ${m.lname}', style: TextStyle(color: context.textColor, fontSize: 14)),
-                            subtitle: Text(m.email, style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
-                            value: selectedMinerIds.contains(m.userId),
-                            onChanged: (v) => setModalState(() => v! ? selectedMinerIds.add(m.userId) : selectedMinerIds.remove(m.userId)),
-                            activeColor: kGold,
-                            contentPadding: EdgeInsets.zero,
-                            controlAffinity: ListTileControlAffinity.leading,
-                          )).toList(),
+                            .where(
+                              (m) =>
+                                  m.roleId.toLowerCase().contains('miner') &&
+                                  ('${m.fname} ${m.lname}'
+                                      .toLowerCase()
+                                      .contains(
+                                        minerSearchQuery.toLowerCase(),
+                                      )),
+                            )
+                            .map(
+                              (m) => CheckboxListTile(
+                                title: Text(
+                                  '${m.fname} ${m.lname}',
+                                  style: TextStyle(
+                                    color: context.textColor,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  m.email,
+                                  style: TextStyle(
+                                    color: context.mutedTextColor,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                value: selectedMinerIds.contains(m.userId),
+                                onChanged: (v) => setModalState(
+                                  () => v!
+                                      ? selectedMinerIds.add(m.userId)
+                                      : selectedMinerIds.remove(m.userId),
+                                ),
+                                activeColor: kGold,
+                                contentPadding: EdgeInsets.zero,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                              ),
+                            )
+                            .toList(),
                       ),
                     ),
                   ] else ...[
                     _buildFormLabel('Material Condition'),
                     Wrap(
                       spacing: 8,
-                      children: ['Rocky', 'Muddy', 'Sandy', 'Mixed', 'Clay'].map((c) => Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Radio<String>(value: c, groupValue: condition, activeColor: kGold, onChanged: (v) => setModalState(() => condition = v!)),
-                          Text(c, style: TextStyle(color: context.textColor, fontSize: 12)),
-                        ],
-                      )).toList(),
+                      children: ['Rocky', 'Muddy', 'Sandy', 'Mixed', 'Clay']
+                          .map(
+                            (c) => Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Radio<String>(
+                                  value: c,
+                                  groupValue: condition,
+                                  activeColor: kGold,
+                                  onChanged: (v) =>
+                                      setModalState(() => condition = v!),
+                                ),
+                                Text(
+                                  c,
+                                  style: TextStyle(
+                                    color: context.textColor,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .toList(),
                     ),
 
                     _buildFormLabel('Material State'),
                     Wrap(
                       spacing: 8,
-                      children: ['Dry', 'Wet', 'Others'].map((s) => Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Radio<String>(value: s, groupValue: state, activeColor: kGold, onChanged: (v) => setModalState(() => state = v!)),
-                          Text(s, style: TextStyle(color: context.textColor, fontSize: 12)),
-                        ],
-                      )).toList(),
+                      children: ['Dry', 'Wet', 'Others']
+                          .map(
+                            (s) => Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Radio<String>(
+                                  value: s,
+                                  groupValue: state,
+                                  activeColor: kGold,
+                                  onChanged: (v) =>
+                                      setModalState(() => state = v!),
+                                ),
+                                Text(
+                                  s,
+                                  style: TextStyle(
+                                    color: context.textColor,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .toList(),
                     ),
                     if (state == 'Others')
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: TextFormField(
                           onChanged: (v) => otherState = v,
-                          style: TextStyle(color: context.textColor, fontSize: 13),
-                          decoration: InputDecoration(hintText: 'Specify state', filled: true, fillColor: context.surfaceColor, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 13,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Specify state',
+                            filled: true,
+                            fillColor: context.surfaceColor,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ),
                     const SizedBox(height: 16),
@@ -867,25 +1339,65 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildAssistedInput('Actual Sacks', '0', (v) => sacks = int.tryParse(v), isNumber: true),
+                          child: _buildAssistedInput(
+                            'Actual Sacks',
+                            '0',
+                            (v) => sacks = int.tryParse(v),
+                            isNumber: true,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _buildAssistedInput('Actual Weight (kg)', '0.0', (v) => weight = double.tryParse(v) ?? 0, isNumber: true, isDecimal: true),
+                          child: _buildAssistedInput(
+                            'Actual Weight (kg)',
+                            '0.0',
+                            (v) => weight = double.tryParse(v) ?? 0,
+                            isNumber: true,
+                            isDecimal: true,
+                          ),
                         ),
                       ],
                     ),
-                    
-                    _buildAssistedInput('Est. Total Processing Time', 'e.g. 3 hours', (v) => estProcessingTime = v),
-                    _buildAssistedInput('Source / Tunnel Name', 'Enter origin', (v) => source = v),
-                    _buildAssistedInput('Additional Notes', 'Optional requirements', (v) => notes = v, maxLines: 2),
+
+                    _buildAssistedInput(
+                      'Est. Total Processing Time',
+                      'e.g. 3 hours',
+                      (v) => estProcessingTime = v,
+                    ),
+                    _buildAssistedInput(
+                      'Source / Tunnel Name',
+                      'Enter origin',
+                      (v) => source = v,
+                    ),
+                    _buildAssistedInput(
+                      'Additional Notes',
+                      'Optional requirements',
+                      (v) => notes = v,
+                      maxLines: 2,
+                    ),
                   ],
 
                   const SizedBox(height: 32),
                   Row(
                     children: [
                       if (currentStep == 2) ...[
-                        Expanded(child: OutlinedButton(onPressed: () => setModalState(() => currentStep = 1), style: OutlinedButton.styleFrom(side: const BorderSide(color: kGold), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), minimumSize: const Size(0, 54)), child: const Text('Back', style: TextStyle(color: kGold)))),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () =>
+                                setModalState(() => currentStep = 1),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: kGold),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              minimumSize: const Size(0, 54),
+                            ),
+                            child: const Text(
+                              'Back',
+                              style: TextStyle(color: kGold),
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 12),
                       ],
                       Expanded(
@@ -898,7 +1410,12 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                               if (formKey.currentState!.validate()) {
                                 Navigator.pop(context);
                                 _confirmAssistedRequestSubmission(
-                                  selectedMiners: _allUsers.where((u) => selectedMinerIds.contains(u.userId)).toList(),
+                                  selectedMiners: _allUsers
+                                      .where(
+                                        (u) =>
+                                            selectedMinerIds.contains(u.userId),
+                                      )
+                                      .toList(),
                                   condition: condition,
                                   state: state == 'Others' ? otherState : state,
                                   sacks: sacks ?? 0,
@@ -909,8 +1426,20 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                               }
                             }
                           },
-                          style: ElevatedButton.styleFrom(backgroundColor: kGold, foregroundColor: kBlack, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), minimumSize: const Size(0, 54)),
-                          child: Text(currentStep == 1 ? 'Next Step' : 'Review & Authorize', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kGold,
+                            foregroundColor: kBlack,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            minimumSize: const Size(0, 54),
+                          ),
+                          child: Text(
+                            currentStep == 1
+                                ? 'Next Step'
+                                : 'Review & Authorize',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ],
@@ -941,33 +1470,62 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: context.surfaceColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Confirm Assisted Submission', style: TextStyle(color: kGold, fontWeight: FontWeight.bold)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Confirm Assisted Submission',
+            style: TextStyle(color: kGold, fontWeight: FontWeight.bold),
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('One miner must authorize this record with their PIN.', style: TextStyle(fontSize: 12)),
+                const Text(
+                  'One miner must authorize this record with their PIN.',
+                  style: TextStyle(fontSize: 12),
+                ),
                 const SizedBox(height: 16),
                 _buildReviewRow('Source', source),
                 _buildReviewRow('Sacks', sacks.toString()),
                 _buildReviewRow('Condition', condition),
                 const SizedBox(height: 16),
-                const Text('Who is authorizing?', style: TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold)),
-                ...selectedMiners.map((m) => RadioListTile<String>(
-                  title: Text('${m.fname} ${m.lname}', style: TextStyle(color: context.textColor, fontSize: 13)),
-                  value: m.userId,
-                  groupValue: authorizerId,
-                  activeColor: kGold,
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (v) => setDialogState(() => authorizerId = v!),
-                )).toList(),
+                const Text(
+                  'Who is authorizing?',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                ...selectedMiners
+                    .map(
+                      (m) => RadioListTile<String>(
+                        title: Text(
+                          '${m.fname} ${m.lname}',
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                        value: m.userId,
+                        groupValue: authorizerId,
+                        activeColor: kGold,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (v) =>
+                            setDialogState(() => authorizerId = v!),
+                      ),
+                    )
+                    .toList(),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -982,7 +1540,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   notes: notes,
                 );
               },
-              style: ElevatedButton.styleFrom(backgroundColor: kGold, foregroundColor: kBlack),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kGold,
+                foregroundColor: kBlack,
+              ),
               child: const Text('Verify PIN'),
             ),
           ],
@@ -1009,8 +1570,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
         onConfirm: (pin) async {
           final operatorId = Supabase.instance.client.auth.currentUser?.id;
           if (operatorId == null) return 'Session expired.';
-          
-          final operatorName = _getMinerName(operatorId); 
+
+          final operatorName = _getMinerName(operatorId);
 
           final result = await _service.createRequest(
             creatorId: minerId,
@@ -1036,28 +1597,55 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       ),
     ).then((success) {
       if (success == true) {
-         // Close the Assisted Request Form Sheet
-         if (Navigator.canPop(context)) {
-           Navigator.pop(context);
-         }
-         
-         _loadRequests();
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assisted request submitted successfully!'), backgroundColor: Colors.green));
+        // Close the Assisted Request Form Sheet
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+
+        _loadRequests();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Assisted request submitted successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     });
   }
 
   Widget _buildFormLabel(String text) {
-    return Padding(padding: const EdgeInsets.only(top: 12, bottom: 4), child: Text(text, style: const TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)));
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: kGold,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+        ),
+      ),
+    );
   }
 
-  Widget _buildAssistedInput(String label, String hint, Function(String) onChanged, {bool isNumber = false, bool isDecimal = false, int maxLines = 1}) {
+  Widget _buildAssistedInput(
+    String label,
+    String hint,
+    Function(String) onChanged, {
+    bool isNumber = false,
+    bool isDecimal = false,
+    int maxLines = 1,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         onChanged: onChanged,
         maxLines: maxLines,
-        keyboardType: isNumber ? (isDecimal ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.number) : TextInputType.text,
+        keyboardType: isNumber
+            ? (isDecimal
+                  ? const TextInputType.numberWithOptions(decimal: true)
+                  : TextInputType.number)
+            : TextInputType.text,
         style: TextStyle(color: context.textColor, fontSize: 14),
         decoration: InputDecoration(
           labelText: label,
@@ -1065,7 +1653,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
           filled: true,
           fillColor: context.surfaceColor,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -1074,10 +1665,23 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   Widget _buildReviewRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label, style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
-        Text(value, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 13)),
-      ]),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: context.textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1085,7 +1689,15 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: TextStyle(color: kGold.withOpacity(0.7), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        Text(
+          title,
+          style: TextStyle(
+            color: kGold.withOpacity(0.7),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
         const SizedBox(height: 12),
         ...children,
       ],
@@ -1098,8 +1710,18 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
-          Text(value, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(
+            label,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: context.textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );

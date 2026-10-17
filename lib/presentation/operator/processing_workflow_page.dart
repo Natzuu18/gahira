@@ -41,19 +41,19 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
   Future<void> _loadTasks() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-    
+
     try {
       final result = await _repository.getServiceRequests();
       final usersResult = await _userRepository.getAllUsers();
-      
+
       if (!mounted) return;
-      
+
       String? errorMessage;
       result.fold(
         (l) => errorMessage = 'Workflow: ${l.message}',
         (list) => _requests = list,
       );
-      
+
       usersResult.fold(
         (l) => errorMessage = (errorMessage ?? '') + ' Users: ${l.message}',
         (list) => _allUsers = list,
@@ -73,7 +73,10 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
       print('Critical Workflow Load Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Workflow Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Workflow Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
         setState(() => _isLoading = false);
       }
@@ -84,7 +87,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     if (request.creatorName != null && request.creatorName!.isNotEmpty) {
       return request.creatorName!;
     }
-    
+
     UserEntity? user;
     for (final u in _allUsers) {
       if (u.userId == request.creatorId) {
@@ -97,12 +100,13 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   @override
   Widget build(BuildContext context) {
-    final String? currentOperatorId = Supabase.instance.client.auth.currentUser?.id;
+    final String? currentOperatorId =
+        Supabase.instance.client.auth.currentUser?.id;
 
     // 1. Available Jobs: Requests that are 'queued' or 'scheduled'
     final allAvailable = _requests.where((r) {
-      return r.status == ServiceRequestStatus.queued || 
-             r.status == ServiceRequestStatus.scheduled;
+      return r.status == ServiceRequestStatus.queued ||
+          r.status == ServiceRequestStatus.scheduled;
     }).toList();
 
     final availableJobs = allAvailable.where((r) {
@@ -114,7 +118,9 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
           if (r.processingDetails.scheduledDate == null) return false;
           final now = DateTime.now();
           final sched = r.processingDetails.scheduledDate!;
-          return sched.year == now.year && sched.month == now.month && sched.day == now.day;
+          return sched.year == now.year &&
+              sched.month == now.month &&
+              sched.day == now.day;
         case WorkflowFilter.all:
         default:
           return true;
@@ -122,11 +128,17 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     }).toList();
 
     // 2. My Active Processing: Processing requests CLAIMED by ME
-    final myActiveProcessing = _requests.where((r) => 
-      (r.status == ServiceRequestStatus.processing || r.status == ServiceRequestStatus.emergencyStop) &&
-      currentOperatorId != null &&
-      r.processingDetails.assignedOperatorIds.contains(currentOperatorId)
-    ).toList();
+    final myActiveProcessing = _requests
+        .where(
+          (r) =>
+              (r.status == ServiceRequestStatus.processing ||
+                  r.status == ServiceRequestStatus.emergencyStop) &&
+              currentOperatorId != null &&
+              r.processingDetails.assignedOperatorIds.contains(
+                currentOperatorId,
+              ),
+        )
+        .toList();
 
     return Scaffold(
       key: _scaffoldKey,
@@ -134,60 +146,100 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
         elevation: 0,
-        title: const Text('WORKFLOW',
-            style: TextStyle(
-                color: kGold,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-                fontSize: 18)),
+        title: const Text(
+          'WORKFLOW',
+          style: TextStyle(
+            color: kGold,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+            fontSize: 18,
+          ),
+        ),
         iconTheme: const IconThemeData(color: kGold),
         actions: [
           const ThemeToggleButton(),
           IconButton(
-              icon: const Icon(Icons.menu_rounded, color: kGold),
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
+            icon: const Icon(Icons.menu_rounded, color: kGold),
+            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+          ),
         ],
       ),
       endDrawer: const OperatorDrawer(
-          currentMenu: OperatorMenu.processing, operatorName: 'Operator'),
+        currentMenu: OperatorMenu.processing,
+        operatorName: 'Operator',
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kGold))
           : RefreshIndicator(
               onRefresh: _loadTasks,
               color: kGold,
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1080),
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
                     children: [
-                      _buildSectionHeader('My Active Processing', Icons.play_circle_fill_rounded, Colors.green),
-                      TextButton.icon(
-                        onPressed: () => _showHistory(currentOperatorId),
-                        icon: const Icon(Icons.history_rounded, size: 18, color: Colors.blue),
-                        label: const Text('Claim History', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _buildSectionHeader(
+                            'My Active Processing',
+                            Icons.play_circle_fill_rounded,
+                            Colors.green,
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _showHistory(currentOperatorId),
+                            icon: const Icon(
+                              Icons.history_rounded,
+                              size: 18,
+                              color: Colors.blue,
+                            ),
+                            label: const Text(
+                              'Claim History',
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
+                      if (myActiveProcessing.isEmpty)
+                        _buildEmptySection(
+                          'You are not currently processing any jobs.',
+                        )
+                      else
+                        ...myActiveProcessing.map(
+                          (r) => _buildJobCard(r, true),
+                        ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _buildSectionHeader(
+                            'Available to Process',
+                            Icons.assignment_returned_rounded,
+                            kGold,
+                          ),
+                          Text(
+                            '${availableJobs.length} total',
+                            style: TextStyle(
+                              color: context.mutedTextColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      _buildFilterChips(),
+                      const SizedBox(height: 16),
+                      if (availableJobs.isEmpty)
+                        _buildEmptySection(_getEmptyMessage())
+                      else
+                        ...availableJobs.map((r) => _buildAvailableJobCard(r)),
                     ],
                   ),
-                  if (myActiveProcessing.isEmpty)
-                    _buildEmptySection('You are not currently processing any jobs.')
-                  else
-                    ...myActiveProcessing.map((r) => _buildJobCard(r, true)),
-                  const SizedBox(height: 32),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildSectionHeader('Available to Process', Icons.assignment_returned_rounded, kGold),
-                      Text('${availableJobs.length} total', style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
-                    ],
-                  ),
-                  _buildFilterChips(),
-                  const SizedBox(height: 16),
-                  if (availableJobs.isEmpty)
-                    _buildEmptySection(_getEmptyMessage())
-                  else
-                    ...availableJobs.map((r) => _buildAvailableJobCard(r)),
-                ],
+                ),
               ),
             ),
     );
@@ -195,9 +247,12 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   String _getEmptyMessage() {
     switch (_currentFilter) {
-      case WorkflowFilter.queued: return 'No queued jobs available.';
-      case WorkflowFilter.scheduledToday: return 'No jobs scheduled for today.';
-      case WorkflowFilter.all: return 'No unclaimed jobs in the queue.';
+      case WorkflowFilter.queued:
+        return 'No queued jobs available.';
+      case WorkflowFilter.scheduledToday:
+        return 'No jobs scheduled for today.';
+      case WorkflowFilter.all:
+        return 'No unclaimed jobs in the queue.';
     }
   }
 
@@ -219,11 +274,14 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
   Widget _filterChip(WorkflowFilter filter, String label) {
     final isSelected = _currentFilter == filter;
     return ChoiceChip(
-      label: Text(label, style: TextStyle(
-        color: isSelected ? kBlack : context.textColor,
-        fontSize: 12,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-      )),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? kBlack : context.textColor,
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
       selected: isSelected,
       onSelected: (selected) {
         if (selected) setState(() => _currentFilter = filter);
@@ -240,7 +298,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
   }
 
   Widget _buildAvailableJobCard(ServiceRequestEntity request) {
-     return Container(
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: context.surfaceColor,
@@ -261,34 +319,76 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(request.materialDetails.sourceType ?? 'N/A',
-                          style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('ID: ${request.id.substring(0, 8).toUpperCase()}',
-                          style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
+                      Text(
+                        request.materialDetails.sourceType ?? 'N/A',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        'ID: ${request.id.substring(0, 8).toUpperCase()}',
+                        style: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                    child: Text(request.status.toString().split('.').last.toUpperCase(), style: const TextStyle(color: Colors.orange, fontSize: 9, fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      request.status.toString().split('.').last.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
               const Divider(height: 24),
-              _buildInfoRow(Icons.shopping_bag_outlined, 'Sacks', '${request.materialDetails.numberOfSacks ?? 0}'),
-              if (request.status == ServiceRequestStatus.scheduled && request.processingDetails.scheduledDate != null)
-                _buildInfoRow(Icons.event_available_rounded, 'Scheduled', 
-                  '${request.processingDetails.scheduledDate!.day}/${request.processingDetails.scheduledDate!.month} ${request.processingDetails.scheduledDate!.hour.toString().padLeft(2, '0')}:${request.processingDetails.scheduledDate!.minute.toString().padLeft(2, '0')}'),
-              _buildInfoRow(Icons.history_rounded, 'Created', '${request.createdAt.day}/${request.createdAt.month}'),
+              _buildInfoRow(
+                Icons.shopping_bag_outlined,
+                'Sacks',
+                '${request.materialDetails.numberOfSacks ?? 0}',
+              ),
+              if (request.status == ServiceRequestStatus.scheduled &&
+                  request.processingDetails.scheduledDate != null)
+                _buildInfoRow(
+                  Icons.event_available_rounded,
+                  'Scheduled',
+                  '${request.processingDetails.scheduledDate!.day}/${request.processingDetails.scheduledDate!.month} ${request.processingDetails.scheduledDate!.hour.toString().padLeft(2, '0')}:${request.processingDetails.scheduledDate!.minute.toString().padLeft(2, '0')}',
+                ),
+              _buildInfoRow(
+                Icons.history_rounded,
+                'Created',
+                '${request.createdAt.day}/${request.createdAt.month}',
+              ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => _handleClaim(request),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: kGold,
-                    foregroundColor: kBlack,
-                    minimumSize: const Size(double.infinity, 45),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                child: const Text('Claim & Start Processing', style: TextStyle(fontWeight: FontWeight.bold)),
+                  backgroundColor: kGold,
+                  foregroundColor: kBlack,
+                  minimumSize: const Size(double.infinity, 45),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Claim & Start Processing',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -308,7 +408,9 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     );
 
     result.fold(
-      (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+      (l) => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.message))),
       (_) => _loadTasks(),
     );
   }
@@ -320,11 +422,14 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(width: 10),
-          Text(title,
-              style: TextStyle(
-                  color: context.textColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: TextStyle(
+              color: context.textColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -334,14 +439,20 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 32),
       alignment: Alignment.center,
-      child: Text(message, style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
+      child: Text(
+        message,
+        style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+      ),
     );
   }
 
   Widget _buildJobCard(ServiceRequestEntity request, bool isActive) {
     final stage = request.processingDetails.currentStage;
-    final bool isSackingStage = stage == ProcessingStage.none || stage == ProcessingStage.rebagging || stage == ProcessingStage.millingCrushing;
-    
+    final bool isSackingStage =
+        stage == ProcessingStage.none ||
+        stage == ProcessingStage.rebagging ||
+        stage == ProcessingStage.millingCrushing;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -349,7 +460,11 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: kGold.withOpacity(0.1)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: InkWell(
@@ -366,20 +481,44 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(request.materialDetails.sourceType ?? 'N/A',
-                          style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('ID: ${request.id.substring(0, 8).toUpperCase()}',
-                          style: TextStyle(color: context.mutedTextColor, fontSize: 11, letterSpacing: 1)),
+                      Text(
+                        request.materialDetails.sourceType ?? 'N/A',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        'ID: ${request.id.substring(0, 8).toUpperCase()}',
+                        style: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 11,
+                          letterSpacing: 1,
+                        ),
+                      ),
                     ],
                   ),
                   _buildStageBadge(stage),
                 ],
               ),
               const Divider(height: 32),
-              _buildInfoRow(Icons.shopping_bag_outlined, 'Initial Sacks', '${request.materialDetails.numberOfSacks ?? 0}'),
+              _buildInfoRow(
+                Icons.shopping_bag_outlined,
+                'Initial Sacks',
+                '${request.materialDetails.numberOfSacks ?? 0}',
+              ),
               if (request.processingDetails.sackedQuantity != null)
-                _buildInfoRow(Icons.inventory_2_rounded, 'Processed Sacks', '${request.processingDetails.sackedQuantity}'),
-              _buildInfoRow(Icons.timer_outlined, 'Est. Time', request.processingDetails.estimatedTime ?? 'N/A'),
+                _buildInfoRow(
+                  Icons.inventory_2_rounded,
+                  'Processed Sacks',
+                  '${request.processingDetails.sackedQuantity}',
+                ),
+              _buildInfoRow(
+                Icons.timer_outlined,
+                'Est. Time',
+                request.processingDetails.estimatedTime ?? 'N/A',
+              ),
               if (isActive && !isSackingStage) ...[
                 const SizedBox(height: 16),
                 _buildProgressIndicator(stage),
@@ -394,13 +533,21 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: isActive ? kGold : kGold.withOpacity(0.1),
-                    foregroundColor: isActive ? kBlack : kGold,
-                    elevation: isActive ? 2 : 0,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  backgroundColor: isActive ? kGold : kGold.withOpacity(0.1),
+                  foregroundColor: isActive ? kBlack : kGold,
+                  elevation: isActive ? 2 : 0,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 child: Text(
-                  isSackingStage ? (request.processingDetails.currentStage == ProcessingStage.millingCrushing ? 'MANAGE BATCHES' : 'START SACKING') : _getActionLabel(request),
+                  isSackingStage
+                      ? (request.processingDetails.currentStage ==
+                                ProcessingStage.millingCrushing
+                            ? 'MANAGE BATCHES'
+                            : 'START SACKING')
+                      : _getActionLabel(request),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -423,19 +570,24 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   void _showHistory(String? operatorId) {
     if (operatorId == null) return;
-    
-    final myHistory = _requests.where((r) => 
-      (r.status == ServiceRequestStatus.processingCompleted || 
-       r.status == ServiceRequestStatus.goldHandoff || 
-       r.status == ServiceRequestStatus.completed) &&
-      r.processingDetails.assignedOperatorIds.contains(operatorId)
-    ).toList();
+
+    final myHistory = _requests
+        .where(
+          (r) =>
+              (r.status == ServiceRequestStatus.processingCompleted ||
+                  r.status == ServiceRequestStatus.goldHandoff ||
+                  r.status == ServiceRequestStatus.completed) &&
+              r.processingDetails.assignedOperatorIds.contains(operatorId),
+        )
+        .toList();
 
     showModalBottomSheet(
       context: context,
       backgroundColor: context.bgColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.7,
         maxChildSize: 0.9,
@@ -443,54 +595,101 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         builder: (context, scrollController) => Column(
           children: [
             const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: context.mutedTextColor.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.mutedTextColor.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const Padding(
               padding: EdgeInsets.all(24),
               child: Row(
                 children: [
                   Icon(Icons.history_rounded, color: kGold),
                   SizedBox(width: 12),
-                  Text('CLAIM HISTORY', style: TextStyle(color: kGold, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                  Text(
+                    'CLAIM HISTORY',
+                    style: TextStyle(
+                      color: kGold,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
                 ],
               ),
             ),
             Expanded(
-              child: myHistory.isEmpty 
-                ? Center(child: Text('No completed claims found.', style: TextStyle(color: context.mutedTextColor)))
-                : ListView.builder(
-                    controller: scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: myHistory.length,
-                    itemBuilder: (context, index) {
-                      final r = myHistory[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: context.surfaceColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: context.textColor.withOpacity(0.05)),
-                        ),
-                        child: Row(
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(r.materialDetails.sourceType ?? 'N/A', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
-                                Text('ID: ${r.id.substring(0,8).toUpperCase()}', style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
-                              ],
+              child: myHistory.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No completed claims found.',
+                        style: TextStyle(color: context.mutedTextColor),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      itemCount: myHistory.length,
+                      itemBuilder: (context, index) {
+                        final r = myHistory[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: context.surfaceColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: context.textColor.withOpacity(0.05),
                             ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                              child: Text(r.status.name.toUpperCase(), style: const TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                          ),
+                          child: Row(
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    r.materialDetails.sourceType ?? 'N/A',
+                                    style: TextStyle(
+                                      color: context.textColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'ID: ${r.id.substring(0, 8).toUpperCase()}',
+                                    style: TextStyle(
+                                      color: context.mutedTextColor,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  r.status.name.toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.green,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -523,14 +722,16 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         newStage: ProcessingStage.rebagging,
       );
       result.fold(
-        (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+        (l) => ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.message))),
         (_) => _loadTasks(),
       );
     } else {
       // Transition to next stage
       final nextStage = _getNextStage(request.processingDetails.currentStage);
-      final newStatus = (nextStage == ProcessingStage.completed) 
-          ? ServiceRequestStatus.processingCompleted 
+      final newStatus = (nextStage == ProcessingStage.completed)
+          ? ServiceRequestStatus.processingCompleted
           : ServiceRequestStatus.processing;
 
       final result = await _service.updateProcessingStatus(
@@ -541,7 +742,9 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         newStage: nextStage,
       );
       result.fold(
-        (l) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.message))),
+        (l) => ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.message))),
         (_) => _loadTasks(),
       );
     }
@@ -549,27 +752,43 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
 
   ProcessingStage _getNextStage(ProcessingStage current) {
     switch (current) {
-      case ProcessingStage.none: return ProcessingStage.rebagging;
-      case ProcessingStage.rebagging: return ProcessingStage.loading;
-      case ProcessingStage.loading: return ProcessingStage.millingCrushing;
-      case ProcessingStage.millingCrushing: return ProcessingStage.unloading;
-      case ProcessingStage.unloading: return ProcessingStage.washingSeparation;
-      case ProcessingStage.washingSeparation: return ProcessingStage.refining;
-      case ProcessingStage.refining: return ProcessingStage.completed;
-      default: return ProcessingStage.completed;
+      case ProcessingStage.none:
+        return ProcessingStage.rebagging;
+      case ProcessingStage.rebagging:
+        return ProcessingStage.loading;
+      case ProcessingStage.loading:
+        return ProcessingStage.millingCrushing;
+      case ProcessingStage.millingCrushing:
+        return ProcessingStage.unloading;
+      case ProcessingStage.unloading:
+        return ProcessingStage.washingSeparation;
+      case ProcessingStage.washingSeparation:
+        return ProcessingStage.refining;
+      case ProcessingStage.refining:
+        return ProcessingStage.completed;
+      default:
+        return ProcessingStage.completed;
     }
   }
 
   String _getStageName(ProcessingStage stage) {
     switch (stage) {
-      case ProcessingStage.rebagging: return 'Rebagging';
-      case ProcessingStage.loading: return 'Loading';
-      case ProcessingStage.millingCrushing: return 'Milling / Crushing';
-      case ProcessingStage.unloading: return 'Unloading';
-      case ProcessingStage.washingSeparation: return 'Washing / Separation';
-      case ProcessingStage.refining: return 'Refining';
-      case ProcessingStage.completed: return 'Completed';
-      default: return 'Pending';
+      case ProcessingStage.rebagging:
+        return 'Rebagging';
+      case ProcessingStage.loading:
+        return 'Loading';
+      case ProcessingStage.millingCrushing:
+        return 'Milling / Crushing';
+      case ProcessingStage.unloading:
+        return 'Unloading';
+      case ProcessingStage.washingSeparation:
+        return 'Washing / Separation';
+      case ProcessingStage.refining:
+        return 'Refining';
+      case ProcessingStage.completed:
+        return 'Completed';
+      default:
+        return 'Pending';
     }
   }
 
@@ -583,7 +802,12 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
       ),
       child: Text(
         _getStageName(stage).toUpperCase(),
-        style: const TextStyle(color: kGold, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        style: const TextStyle(
+          color: kGold,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -606,8 +830,18 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Processing Progress', style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
-            Text('${(progress * 100).toInt()}%', style: const TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold)),
+            Text(
+              'Processing Progress',
+              style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+            ),
+            Text(
+              '${(progress * 100).toInt()}%',
+              style: const TextStyle(
+                color: kGold,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -631,20 +865,35 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         children: [
           Icon(icon, size: 16, color: kGold.withOpacity(0.7)),
           const SizedBox(width: 8),
-          Text(label, style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
+          Text(
+            label,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+          ),
           const Spacer(),
-          Text(value, style: TextStyle(color: context.textColor, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(
+            value,
+            style: TextStyle(
+              color: context.textColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  void _showRequestDetails(ServiceRequestEntity request, {bool isActive = false}) {
+  void _showRequestDetails(
+    ServiceRequestEntity request, {
+    bool isActive = false,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.bgColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.8,
         maxChildSize: 0.95,
@@ -660,39 +909,88 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                   width: 40,
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(color: context.mutedTextColor.withOpacity(0.3), borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(
+                    color: context.mutedTextColor.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Full Information', style: TextStyle(color: kGold, fontSize: 22, fontWeight: FontWeight.bold)),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  const Text(
+                    'Full Information',
+                    style: TextStyle(
+                      color: kGold,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
               _buildDetailSection('MINER DETAILS', [
                 _buildDetailRow('Primary Miner', _getMinerName(request)),
                 if (request.participatingMinerIds.length > 1)
-                  _buildDetailRow('Group Members', request.participatingMinerIds.where((id) => id != request.creatorId).map((id) {
-                     // Since we don't have participants' names in the entity, 
-                     // we still do a lookup in _allUsers for them.
-                     UserEntity? user;
-                     for(var u in _allUsers) { if(u.userId == id) { user = u; break; } }
-                     return user != null ? '${user.fname} ${user.lname}' : 'Unknown Miner';
-                  }).join(', ')),
+                  _buildDetailRow(
+                    'Group Members',
+                    request.participatingMinerIds
+                        .where((id) => id != request.creatorId)
+                        .map((id) {
+                          // Since we don't have participants' names in the entity,
+                          // we still do a lookup in _allUsers for them.
+                          UserEntity? user;
+                          for (var u in _allUsers) {
+                            if (u.userId == id) {
+                              user = u;
+                              break;
+                            }
+                          }
+                          return user != null
+                              ? '${user.fname} ${user.lname}'
+                              : 'Unknown Miner';
+                        })
+                        .join(', '),
+                  ),
               ]),
               const SizedBox(height: 24),
               _buildDetailSection('MATERIAL SUMMARY', [
-                _buildDetailRow('Condition', request.materialDetails.condition ?? 'N/A'),
-                _buildDetailRow('State', request.materialDetails.state ?? 'N/A'),
-                _buildDetailRow('Sacks', '${request.materialDetails.numberOfSacks ?? 0}'),
-                _buildDetailRow('Source Type', request.materialDetails.sourceType ?? 'N/A'),
-                _buildDetailRow('Source Name', request.materialDetails.source ?? 'N/A'),
+                _buildDetailRow(
+                  'Condition',
+                  request.materialDetails.condition ?? 'N/A',
+                ),
+                _buildDetailRow(
+                  'State',
+                  request.materialDetails.state ?? 'N/A',
+                ),
+                _buildDetailRow(
+                  'Sacks',
+                  '${request.materialDetails.numberOfSacks ?? 0}',
+                ),
+                _buildDetailRow(
+                  'Source Type',
+                  request.materialDetails.sourceType ?? 'N/A',
+                ),
+                _buildDetailRow(
+                  'Source Name',
+                  request.materialDetails.source ?? 'N/A',
+                ),
               ]),
               if (request.materialDetails.photoUrls.isNotEmpty) ...[
                 const SizedBox(height: 24),
-                const Text('MATERIAL PHOTOS', style: TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                const Text(
+                  'MATERIAL PHOTOS',
+                  style: TextStyle(
+                    color: kGold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 100,
@@ -705,23 +1003,40 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: kGold.withOpacity(0.2)),
-                        image: DecorationImage(image: NetworkImage(request.materialDetails.photoUrls[index]), fit: BoxFit.cover),
+                        image: DecorationImage(
+                          image: NetworkImage(
+                            request.materialDetails.photoUrls[index],
+                          ),
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ],
-              if (request.materialDetails.notes != null && request.materialDetails.notes!.isNotEmpty) ...[
+              if (request.materialDetails.notes != null &&
+                  request.materialDetails.notes!.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 _buildDetailSection('MINER NOTES', [
-                  Text(request.materialDetails.notes!, style: TextStyle(color: context.textColor, fontSize: 13, height: 1.5)),
+                  Text(
+                    request.materialDetails.notes!,
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
                 ]),
               ],
               const SizedBox(height: 32),
-              if (isActive && request.status == ServiceRequestStatus.processing && 
-                  (request.processingDetails.currentStage == ProcessingStage.none || 
-                   request.processingDetails.currentStage == ProcessingStage.rebagging ||
-                   request.processingDetails.currentStage == ProcessingStage.millingCrushing))
+              if (isActive &&
+                  request.status == ServiceRequestStatus.processing &&
+                  (request.processingDetails.currentStage ==
+                          ProcessingStage.none ||
+                      request.processingDetails.currentStage ==
+                          ProcessingStage.rebagging ||
+                      request.processingDetails.currentStage ==
+                          ProcessingStage.millingCrushing))
                 SizedBox(
                   width: double.infinity,
                   height: 54,
@@ -731,14 +1046,22 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
                       _navigateToSacking(request);
                     },
                     icon: const Icon(Icons.shopping_bag_outlined, size: 20),
-                    label: Text(request.processingDetails.currentStage == ProcessingStage.millingCrushing 
-                      ? 'MANAGE BATCHES' 
-                      : 'START SACKING / MILLING', 
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    label: Text(
+                      request.processingDetails.currentStage ==
+                              ProcessingStage.millingCrushing
+                          ? 'MANAGE BATCHES'
+                          : 'START SACKING / MILLING',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kGold,
                       foregroundColor: kBlack,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
@@ -753,7 +1076,15 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: TextStyle(color: kGold.withOpacity(0.7), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        Text(
+          title,
+          style: TextStyle(
+            color: kGold.withOpacity(0.7),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
         const SizedBox(height: 12),
         ...children,
       ],
@@ -766,8 +1097,18 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: context.mutedTextColor, fontSize: 13)),
-          Text(value, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(
+            label,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: context.textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );

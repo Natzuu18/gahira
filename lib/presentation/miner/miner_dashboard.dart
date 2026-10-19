@@ -94,17 +94,10 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
           ),
         ),
         iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
-      ),
-      endDrawer: MinerDrawer(
-        currentMenu: MinerMenu.dashboard,
-        minerName: widget.minerName,
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {

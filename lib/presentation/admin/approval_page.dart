@@ -44,6 +44,7 @@ class PendingAccount {
 
   // Appointment info
   final DateTime? appointmentDate;
+  final String? availabilityId;
   final String? startTime;
   final String? endTime;
   final String? address;
@@ -60,6 +61,7 @@ class PendingAccount {
     required this.requestedAt,
     this.documents = const [],
     this.appointmentDate,
+    this.availabilityId,
     this.startTime,
     this.endTime,
     this.address,
@@ -131,6 +133,7 @@ class ApprovalService {
             requestedAt: DateTime.parse(app['created_at'] as String),
             documents: documents,
             appointmentDate: availability != null ? DateTime.parse(availability['date'] as String) : null,
+            availabilityId: app['availability_id'] as String?,
             startTime: availability?['start_time'],
             endTime: availability?['end_time'],
             address: availability?['address'],

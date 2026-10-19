@@ -64,6 +64,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   String? _appointmentError;
   DateTime _viewingDate = DateTime(DateTime.now().year, DateTime.now().month);
   String? _selectedTime;
+  String? _selectedAvailabilityId;
 
   List<Map<String, String>> _availableSlots = [];
   List<Map<String, dynamic>> _miningUnits = [];
@@ -152,6 +153,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     final formatError = _phoneFormatValidator(_phoneController.text);
     if (formatError != null) {
       setState(() => _phoneVerifyError = formatError);
+      _showTopNotification(context, formatError, isError: true);
       return;
     }
 
@@ -171,23 +173,14 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           _isSendingOtp = false;
           _phoneVerifyError = failure.message;
         });
+        _showTopNotification(context, failure.message, isError: true);
       },
       (_) {
         setState(() {
           _isSendingOtp = false;
           _otpSent = true;
         });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Verification code sent to ${_phoneController.text.trim()}',
-            ),
-            backgroundColor: Colors.blueGrey.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+        _showTopNotification(context, 'Verification code sent to ${_phoneController.text.trim()}', isError: false);
       },
     );
   }
@@ -196,6 +189,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     final code = _otpController.text.trim();
     if (code.length != 6) {
       setState(() => _phoneVerifyError = 'Enter the 6-digit code');
+      _showTopNotification(context, 'Please enter the 6-digit code', isError: true);
       return;
     }
 
@@ -218,6 +212,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           _isVerifyingOtp = false;
           _phoneVerifyError = failure.message;
         });
+        _showTopNotification(context, failure.message, isError: true);
       },
       (token) {
         setState(() {
@@ -227,6 +222,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           _otpSent = false;
           _otpController.clear();
         });
+        _showTopNotification(context, 'Phone number verified successfully!', isError: false);
       },
     );
   }
@@ -256,6 +252,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         setState(() {
           _availableSlots = slots.map((s) {
             return {
+              'availability_id': s['availability_id']?.toString() ?? '',
               'date': s['date'].toString(),
               'time': _displayTime(s['start_time'].toString()),
               'address': s['address'].toString(),
@@ -295,6 +292,129 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     }
   }
 
+  bool _checkFormChecklist() {
+    final hasFirstName = _firstNameController.text.trim().isNotEmpty;
+    final hasLastName = _lastNameController.text.trim().isNotEmpty;
+    final hasPhone = _phoneController.text.trim().isNotEmpty;
+    final isPhoneVerified = _isPhoneVerified;
+    final hasEmail = _emailController.text.trim().isNotEmpty && _emailController.text.contains('@');
+    final hasAddress = _addressController.text.trim().isNotEmpty;
+
+    final hasMiningUnit = _selectedMiningUnitId != null || _miningUnitController.text.trim().isNotEmpty;
+    final hasClientDocument = _clientDocumentFile != null;
+
+    final hasResume = _resumeFile != null;
+    final hasAppointment = _appointmentDate != null && _selectedTime != null;
+
+    final bool isComplete = _role == UserRole.miner
+        ? (hasFirstName && hasLastName && hasPhone && isPhoneVerified && hasEmail && hasAddress && hasMiningUnit && hasClientDocument)
+        : (hasFirstName && hasLastName && hasPhone && isPhoneVerified && hasEmail && hasAddress && hasResume && hasAppointment);
+
+    if (!isComplete) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: ctx.surfaceColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.fact_check_outlined, color: kGold),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Form Completion Checklist',
+                  style: TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Please complete all required items before submitting your application:',
+                  style: TextStyle(color: ctx.textColor, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                _buildChecklistItem(ctx, 'First Name', hasFirstName),
+                _buildChecklistItem(ctx, 'Last Name', hasLastName),
+                _buildChecklistItem(ctx, 'Phone Number Provided', hasPhone),
+                _buildChecklistItem(ctx, 'Phone Number Verified (SMS OTP)', isPhoneVerified),
+                _buildChecklistItem(ctx, 'Valid Email Address', hasEmail),
+                _buildChecklistItem(ctx, 'Address Details', hasAddress),
+                if (_role == UserRole.miner) ...[
+                  _buildChecklistItem(ctx, 'Associated Mining Unit', hasMiningUnit),
+                  _buildChecklistItem(ctx, 'Valid ID / Business Document', hasClientDocument),
+                ] else ...[
+                  _buildChecklistItem(ctx, 'Resume Document Uploaded', hasResume),
+                  _buildChecklistItem(ctx, 'Interview Date & Time Scheduled', hasAppointment),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kGold,
+                foregroundColor: kBlack,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Complete Missing Fields', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  Widget _buildChecklistItem(BuildContext ctx, String label, bool isDone) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDone ? Colors.green.withOpacity(0.08) : Colors.red.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDone ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isDone ? Icons.check_circle_rounded : Icons.cancel_rounded,
+            color: isDone ? Colors.green : Colors.redAccent,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: ctx.textColor,
+                fontSize: 12,
+                fontWeight: isDone ? FontWeight.w500 : FontWeight.bold,
+              ),
+            ),
+          ),
+          Text(
+            isDone ? 'READY' : 'MISSING',
+            style: TextStyle(
+              color: isDone ? Colors.green : Colors.redAccent,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleRegister() async {
     final formValid = _formKey.currentState!.validate();
 
@@ -319,10 +439,17 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     });
 
     if (!formValid ||
+        !_checkFormChecklist() ||
         _resumeError != null ||
         _appointmentError != null ||
         _miningUnitError != null ||
         _clientDocumentError != null) {
+      final String firstError = _resumeError ??
+          _appointmentError ??
+          _miningUnitError ??
+          _clientDocumentError ??
+          'Please complete all required fields in the signup form.';
+      _showTopNotification(context, firstError, isError: true);
       return;
     }
 
@@ -383,6 +510,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         resumeBase64: _resumeFile?.bytes != null ? base64Encode(_resumeFile!.bytes!) : null,
         resumeName: _resumeFile?.name,
         appointmentDate: formattedAppointmentDate,
+        availabilityId: _selectedAvailabilityId,
       );
 
       final result = await service.register(registrationDto);
@@ -392,64 +520,85 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
 
       result.fold(
         (failure) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(failure.message)),
-                ],
-              ),
-              backgroundColor: Colors.redAccent,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          );
+          _showTopNotification(context, failure.message, isError: true);
         },
         (userDto) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.check_circle_outline, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Registered successfully. Wait for the admin response',
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.green.shade600,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          );
-
-          // For new registrations (clients/operators), we don't log them in yet 
-          // because their status is 'pending'. We go back to landing or login.
+          _showTopNotification(context, 'Registered successfully. Wait for the admin response', isError: false);
           Navigator.of(context).pop();
         },
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(child: Text('Registration failed: ${e.toString()}')),
-            ],
-          ),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _showTopNotification(context, 'Registration failed: ${e.toString().replaceAll("Exception: ", "")}', isError: true);
     }
+  }
+
+  void _showTopNotification(BuildContext context, String message, {bool isError = true}) {
+    final overlay = Overlay.of(context);
+    late OverlayEntry overlayEntry;
+
+    overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 16,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: isError ? const Color(0xFFE53935) : const Color(0xFF2E7D32),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    if (overlayEntry.mounted) {
+                      overlayEntry.remove();
+                    }
+                  },
+                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(overlayEntry);
+
+    Future.delayed(const Duration(seconds: 4), () {
+      if (overlayEntry.mounted) {
+        overlayEntry.remove();
+      }
+    });
   }
 
   @override
@@ -1319,7 +1468,8 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
               onTap: isAvailable
                   ? () => setState(() {
                         _appointmentDate = currentDate;
-                        _selectedTime = null; // Reset time when date changes
+                        _selectedTime = null;
+                        _selectedAvailabilityId = null;
                         _appointmentError = null;
                       })
                   : null,
@@ -1379,7 +1529,6 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
             final dateStr = DateFormat('yyyy-MM-dd').format(_appointmentDate!);
             final daySlots = chosenMonthSlots
                 .where((s) => s['date'] == dateStr)
-                .map((s) => s['time']!)
                 .toList();
 
             if (daySlots.isEmpty) return const SizedBox.shrink();
@@ -1392,7 +1541,9 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
-                  children: daySlots.map((time) {
+                  children: daySlots.map((slotMap) {
+                    final time = slotMap['time']!;
+                    final availId = slotMap['availability_id'];
                     final isSelected = _selectedTime == time;
                     return ChoiceChip(
                       label: Text(
@@ -1407,6 +1558,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                       onSelected: (selected) {
                         setState(() {
                           _selectedTime = selected ? time : null;
+                          _selectedAvailabilityId = selected ? availId : null;
                           _appointmentError = null;
                         });
                       },

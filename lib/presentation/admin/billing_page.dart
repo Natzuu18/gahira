@@ -9,7 +9,6 @@ import '../../infrastructure/repositories/supabase_service_request_repository.da
 import '../../infrastructure/repositories/supabase_user_repository.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import '../shared_widgets/admin_bottom_nav_bar.dart';
 
 class BillingPage extends StatefulWidget {
   const BillingPage({super.key});
@@ -115,7 +114,6 @@ class _BillingPageState extends State<BillingPage> {
             ],
           ),
         ),
-        bottomNavigationBar: buildAdminBottomNavBar(context, selectedIndex: 3),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator(color: kGold))
             : TabBarView(
@@ -212,7 +210,7 @@ class _BillingPageState extends State<BillingPage> {
       style: TextStyle(color: context.textColor),
       decoration: InputDecoration(
         hintText: 'Search by Miner name or Ref ID...',
-        hintStyle: TextStyle(color: context.mutedTextColor.withOpacity(0.5)),
+        hintStyle: TextStyle(color: context.mutedTextColor.withValues(alpha: 0.5)),
         prefixIcon: const Icon(Icons.search, color: kGold, size: 20),
         filled: true,
         fillColor: context.surfaceColor,
@@ -236,7 +234,7 @@ class _BillingPageState extends State<BillingPage> {
           Icon(
             Icons.no_accounts_rounded,
             size: 48,
-            color: context.mutedTextColor.withOpacity(0.2),
+            color: context.mutedTextColor.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 16),
           Text(
@@ -253,10 +251,10 @@ class _BillingPageState extends State<BillingPage> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [kGold.withOpacity(0.2), kGold.withOpacity(0.05)],
+          colors: [kGold.withValues(alpha: 0.2), kGold.withValues(alpha: 0.05)],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.3)),
+        border: Border.all(color: kGold.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -296,7 +294,7 @@ class _BillingPageState extends State<BillingPage> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kGold.withOpacity(0.1)),
+        border: Border.all(color: kGold.withValues(alpha: 0.1)),
       ),
       child: Column(
         children: [
@@ -411,7 +409,7 @@ class _BillingPageState extends State<BillingPage> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.1)),
+        border: Border.all(color: kGold.withValues(alpha: 0.1)),
       ),
       child: Row(
         children: [
@@ -423,7 +421,7 @@ class _BillingPageState extends State<BillingPage> {
           Container(
             width: 1,
             height: 40,
-            color: kGold.withOpacity(0.1),
+            color: kGold.withValues(alpha: 0.1),
             margin: const EdgeInsets.symmetric(horizontal: 14),
           ),
           _buildHeaderStat(
@@ -483,13 +481,13 @@ class _BillingPageState extends State<BillingPage> {
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isReadyForBilling ? kGold : kGold.withOpacity(0.1),
+          color: isReadyForBilling ? kGold : kGold.withValues(alpha: 0.1),
           width: isReadyForBilling ? 2 : 1,
         ),
         boxShadow: isReadyForBilling
             ? [
                 BoxShadow(
-                  color: kGold.withOpacity(0.2),
+                  color: kGold.withValues(alpha: 0.2),
                   blurRadius: 10,
                   spreadRadius: 1,
                 ),
@@ -587,7 +585,7 @@ class _BillingPageState extends State<BillingPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isReadyForBilling
                       ? kGold
-                      : kGold.withOpacity(0.5),
+                      : kGold.withValues(alpha: 0.5),
                   foregroundColor: kBlack,
                   minimumSize: const Size(double.infinity, 44),
                   shape: RoundedRectangleBorder(
@@ -616,9 +614,9 @@ class _BillingPageState extends State<BillingPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         status.name.toUpperCase(),
@@ -660,7 +658,7 @@ class _BillingPageState extends State<BillingPage> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
+                color: Colors.grey.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -717,7 +715,7 @@ class _BillingPageState extends State<BillingPage> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kGold.withOpacity(0.1)),
+        border: Border.all(color: kGold.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -785,14 +783,14 @@ class _BillingPageState extends State<BillingPage> {
         decoration: BoxDecoration(
           color: context.surfaceColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: kGold.withOpacity(0.2)),
+          border: Border.all(color: kGold.withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: kGold.withOpacity(0.1),
+                color: kGold.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: kGold),
@@ -858,7 +856,7 @@ class _BillingPageState extends State<BillingPage> {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(0.3),
+                        color: Colors.grey.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -881,7 +879,7 @@ class _BillingPageState extends State<BillingPage> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
+                          color: Colors.blue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
@@ -936,9 +934,9 @@ class _BillingPageState extends State<BillingPage> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.05),
+                      color: Colors.green.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.green.withOpacity(0.2)),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
                     ),
                     child: Column(
                       children: [
@@ -1058,7 +1056,7 @@ class _BillingPageState extends State<BillingPage> {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(0.3),
+                        color: Colors.grey.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -1081,7 +1079,7 @@ class _BillingPageState extends State<BillingPage> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
+                          color: Colors.blue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
@@ -1129,7 +1127,7 @@ class _BillingPageState extends State<BillingPage> {
                         ],
                       ),
                     );
-                  }).toList(),
+                  }),
                   TextButton.icon(
                     onPressed: () => _showAddExpenseDialog(
                       (name, amt) => setModalState(
@@ -1466,7 +1464,7 @@ class _BillingPageState extends State<BillingPage> {
                 children: [
                   if (isGoldBought) ...[
                     _buildSummaryRow(
-                      'Gold Purchase (${goldWeight}g @ P${buyingPrice})',
+                      'Gold Purchase (${goldWeight}g @ P$buyingPrice)',
                       'P ${NumberFormat("#,##0.00").format(goldValue!)}',
                     ),
                     const SizedBox(height: 8),
@@ -1546,8 +1544,7 @@ class _BillingPageState extends State<BillingPage> {
                         ],
                       ),
                     ),
-                  )
-                  .toList(),
+                  ),
             ],
             const SizedBox(height: 32),
             ElevatedButton(
@@ -1581,7 +1578,8 @@ class _BillingPageState extends State<BillingPage> {
                   ],
                 );
 
-                Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
+                if (!context.mounted) return;
                 result.fold(
                   (l) => ScaffoldMessenger.of(
                     context,
@@ -1676,6 +1674,8 @@ class _BillingPageState extends State<BillingPage> {
     );
     final breakdown = latestReq.financialDetails?.participantBreakdown ?? [];
 
+    if (!context.mounted) return;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1714,8 +1714,7 @@ class _BillingPageState extends State<BillingPage> {
                       _showIndividualPaymentStep(request, p);
                     },
                   ),
-                )
-                .toList(),
+                ),
             const SizedBox(height: 32),
           ],
         ),
@@ -1903,7 +1902,8 @@ class _BillingPageState extends State<BillingPage> {
                         currentStatus: request.status.name,
                       );
 
-                      Navigator.pop(context);
+                      if (context.mounted) Navigator.pop(context);
+                      if (!context.mounted) return;
                       result.fold(
                         (l) => ScaffoldMessenger.of(
                           context,
@@ -1953,6 +1953,8 @@ class _BillingPageState extends State<BillingPage> {
     double amountPaidRecord = totalBill;
     DateTime paymentDate = DateTime.now();
     PlatformFile? selectedReceipt;
+
+    if (!context.mounted) return;
 
     showModalBottomSheet(
       context: context,
@@ -2119,8 +2121,9 @@ class _BillingPageState extends State<BillingPage> {
                         firstDate: DateTime(2020),
                         lastDate: DateTime.now(),
                       );
-                      if (picked != null)
+                      if (picked != null) {
                         setModalState(() => paymentDate = picked);
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.all(16),
@@ -2173,7 +2176,8 @@ class _BillingPageState extends State<BillingPage> {
                         currentStatus: latestReq.status.name,
                       );
 
-                      Navigator.pop(context);
+                      if (context.mounted) Navigator.pop(context);
+                      if (!context.mounted) return;
                       result.fold(
                         (l) => ScaffoldMessenger.of(
                           context,

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import '../shared_widgets/adminDrawer.dart';
 
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
@@ -12,93 +11,117 @@ class ReportPage extends StatefulWidget {
 }
 
 class _ReportPageState extends State<ReportPage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _selectedRange = 'This Week';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
         elevation: 0,
-        leadingWidth: 64,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: _buildLogoMark(),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: kGold),
+          onPressed: () => Navigator.maybePop(context),
+          tooltip: 'Back',
         ),
         title: const Text(
-          'GAHIRA',
+          'REPORTS & ANALYTICS',
           style: TextStyle(
             color: kGold,
             fontWeight: FontWeight.bold,
-            letterSpacing: 3,
+            letterSpacing: 2,
             fontSize: 16,
           ),
         ),
-        iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            tooltip: 'Menu',
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
       ),
-      endDrawer: const AdminDrawer(currentMenu: AdminMenu.reports),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with Filter
+            // Header with Date Range Filter
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Performance Report',
-                  style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Performance Analytics',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Real-time production, uptime, and efficiency report',
+                        style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 _buildDropdownFilter(),
               ],
             ),
             const SizedBox(height: 24),
 
-            // Performance KPIs
-            Row(
-              children: [
-                Expanded(child: _buildKpiCard('Total Yield', '1,240 Tons', Icons.inventory_2_rounded)),
-                const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Avg. Efficiency', '92.4%', Icons.speed_rounded)),
-              ],
+            // Performance KPIs Grid
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: (constraints.maxWidth - 12) / 2,
+                      child: _buildKpiCard('Total Yield', '1,240 Tons', Icons.inventory_2_rounded, '+12.4% vs last week'),
+                    ),
+                    SizedBox(
+                      width: (constraints.maxWidth - 12) / 2,
+                      child: _buildKpiCard('Avg. Efficiency', '92.4%', Icons.speed_rounded, 'Optimal state'),
+                    ),
+                    SizedBox(
+                      width: (constraints.maxWidth - 12) / 2,
+                      child: _buildKpiCard('Active Jobs', '18 Operations', Icons.settings_input_component_rounded, 'In processing'),
+                    ),
+                    SizedBox(
+                      width: (constraints.maxWidth - 12) / 2,
+                      child: _buildKpiCard('Gold Recovered', '4,850 Grams', Icons.monetization_on_rounded, 'Verified yield'),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
 
             // Weekly Production Chart
             _buildChartContainer(
-              title: 'Weekly Production Output',
-              subtitle: 'Daily tonnage across all mills',
+              title: 'Production Output (Tonnage)',
+              subtitle: 'Daily material output across all ball mills',
               child: const _ProductionBarChart(),
             ),
             const SizedBox(height: 24),
 
-            // System Performance (Line Chart Mockup)
+            // System Performance & Health Chart
             _buildChartContainer(
-              title: 'System Uptime & Health',
-              subtitle: 'Performance stability over last 24h',
+              title: 'System Uptime & Stability',
+              subtitle: 'Operational uptime and machine stability trend',
               child: const _PerformanceLineChart(),
             ),
             const SizedBox(height: 24),
 
-            // Detailed Production Table Mockup
+            // Detailed Production Table
             Text(
-              'Production Breakdown',
+              'Equipment Production Breakdown',
               style: TextStyle(
                 color: context.textColor,
                 fontSize: 18,
@@ -116,10 +139,10 @@ class _ReportPageState extends State<ReportPage> {
 
   Widget _buildDropdownFilter() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
         color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: kGold.withOpacity(0.3)),
       ),
       child: DropdownButtonHideUnderline(
@@ -127,7 +150,7 @@ class _ReportPageState extends State<ReportPage> {
           value: _selectedRange,
           dropdownColor: context.surfaceColor,
           icon: const Icon(Icons.keyboard_arrow_down_rounded, color: kGold, size: 20),
-          style: TextStyle(color: kGold, fontSize: 13, fontWeight: FontWeight.w600),
+          style: const TextStyle(color: kGold, fontSize: 13, fontWeight: FontWeight.bold),
           items: ['Today', 'This Week', 'This Month', 'Yearly']
               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
               .toList(),
@@ -137,23 +160,40 @@ class _ReportPageState extends State<ReportPage> {
     );
   }
 
-  Widget _buildKpiCard(String title, String value, IconData icon) {
+  Widget _buildKpiCard(String title, String value, IconData icon, String footnote) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.1)),
+        border: Border.all(color: kGold.withOpacity(0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: kGold, size: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icon, color: kGold, size: 22),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: kGold.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  footnote,
+                  style: const TextStyle(color: kGold, fontSize: 9, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           Text(
             value,
             style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: 2),
           Text(
             title,
             style: TextStyle(color: context.mutedTextColor, fontSize: 12),
@@ -169,14 +209,14 @@ class _ReportPageState extends State<ReportPage> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.1)),
+        border: Border.all(color: kGold.withOpacity(0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: TextStyle(color: context.textColor, fontSize: 16, fontWeight: FontWeight.w600),
+            style: TextStyle(color: context.textColor, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           Text(
             subtitle,
@@ -194,49 +234,61 @@ class _ReportPageState extends State<ReportPage> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kGold.withOpacity(0.05)),
+        border: Border.all(color: kGold.withOpacity(0.1)),
       ),
       child: Column(
         children: [
-          _buildTableRow('Mill ID', 'Yield (T)', 'Status', isHeader: true),
+          _buildTableRow('Mill / Machine ID', 'Type', 'Yield (Tons)', 'Status', isHeader: true),
           const Divider(height: 1),
-          _buildTableRow('Mill #01', '420', 'Optimal'),
-          _buildTableRow('Mill #02', '385', 'Optimal'),
-          _buildTableRow('Mill #03', '120', 'Low Yield'),
-          _buildTableRow('Mill #04', '315', 'Maintenance'),
+          _buildTableRow('Ball Mill #01', 'Primary Mill', '420', 'Optimal'),
+          _buildTableRow('Ball Mill #02', 'Secondary Mill', '385', 'Optimal'),
+          _buildTableRow('Ball Mill #03', 'Primary Mill', '120', 'Low Yield'),
+          _buildTableRow('Processing Plant #01', 'Refinery Unit', '315', 'Maintenance'),
         ],
       ),
     );
   }
 
-  Widget _buildTableRow(String id, String yield, String status, {bool isHeader = false}) {
+  Widget _buildTableRow(String id, String type, String yieldVal, String status, {bool isHeader = false}) {
     final style = TextStyle(
       color: isHeader ? kGold : context.textColor,
       fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
-      fontSize: isHeader ? 12 : 13,
+      fontSize: isHeader ? 11 : 12,
     );
+
+    Color statusColor = Colors.green;
+    if (status == 'Low Yield') statusColor = Colors.orange;
+    if (status == 'Maintenance') statusColor = Colors.redAccent;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Expanded(child: Text(id, style: style)),
-          Expanded(child: Text(yield, style: style, textAlign: TextAlign.center)),
-          Expanded(child: Text(status, style: style, textAlign: TextAlign.right)),
+          Expanded(flex: 2, child: Text(id, style: style)),
+          Expanded(flex: 2, child: Text(type, style: TextStyle(color: context.mutedTextColor, fontSize: 11))),
+          Expanded(flex: 1, child: Text(yieldVal, style: style, textAlign: TextAlign.center)),
+          Expanded(
+            flex: 2,
+            child: isHeader
+                ? Text(status, style: style, textAlign: TextAlign.right)
+                : Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: statusColor.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        status,
+                        style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildLogoMark() {
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: kGold, width: 1.6),
-        color: context.bgColor,
-      ),
-      child: const Icon(Icons.settings_input_component_rounded, color: kGold, size: 16),
     );
   }
 }
@@ -247,7 +299,7 @@ class _ProductionBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.5];
-    final labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -258,19 +310,19 @@ class _ProductionBarChart extends StatelessWidget {
           children: [
             Expanded(
               child: Container(
-                width: 20,
+                width: 22,
                 decoration: BoxDecoration(
-                  color: kGold.withOpacity(index == 3 ? 1.0 : 0.3),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                  color: kGold.withOpacity(index == 3 ? 1.0 : 0.25),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                 ),
                 alignment: Alignment.bottomCenter,
                 child: FractionallySizedBox(
                   heightFactor: data[index],
                   child: Container(
-                    width: 20,
+                    width: 22,
                     decoration: BoxDecoration(
                       color: kGold,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                     ),
                   ),
                 ),
@@ -279,7 +331,7 @@ class _ProductionBarChart extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               labels[index],
-              style: TextStyle(color: context.mutedTextColor, fontSize: 10),
+              style: TextStyle(color: context.mutedTextColor, fontSize: 11, fontWeight: FontWeight.bold),
             ),
           ],
         );
@@ -344,7 +396,7 @@ class _LineChartPainter extends CustomPainter {
 
     // Draw grid lines
     final gridPaint = Paint()
-      ..color = color.withOpacity(0.05)
+      ..color = color.withOpacity(0.08)
       ..strokeWidth = 1;
     for (var i = 0; i <= 4; i++) {
       final y = size.height * (i / 4);

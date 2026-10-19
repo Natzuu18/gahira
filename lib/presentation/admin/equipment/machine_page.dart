@@ -31,13 +31,19 @@ class _MachinePageState extends State<MachinePage> {
     setState(() => _isLoading = true);
     final result = await _repository.getMachines();
     result.fold(
-      (failure) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message))),
+      (failure) => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(failure.message))),
       (list) => setState(() {
         _machines = list;
         // Sorting Logic: Sort based on whether status is 'in_use' or 'maintenance'
         _machines.sort((a, b) {
-          final aInUse = a['status']?.toString().toLowerCase() == 'in_use' ? 1 : 0;
-          final bInUse = b['status']?.toString().toLowerCase() == 'in_use' ? 1 : 0;
+          final aInUse = a['status']?.toString().toLowerCase() == 'in_use'
+              ? 1
+              : 0;
+          final bInUse = b['status']?.toString().toLowerCase() == 'in_use'
+              ? 1
+              : 0;
           return bInUse.compareTo(aInUse);
         });
         _isLoading = false;
@@ -52,7 +58,8 @@ class _MachinePageState extends State<MachinePage> {
       final name = m['machine_name']?.toString().toLowerCase() ?? '';
       final code = m['machine_code']?.toString().toLowerCase() ?? '';
       final location = m['location']?.toString().toLowerCase() ?? '';
-      final matchesSearch = query.isEmpty ||
+      final matchesSearch =
+          query.isEmpty ||
           name.contains(query) ||
           code.contains(query) ||
           location.contains(query);
@@ -115,7 +122,11 @@ class _MachinePageState extends State<MachinePage> {
                 Expanded(
                   child: Text(
                     'Set Maintenance: ${item['machine_name'] ?? item['drum_name']}',
-                    style: TextStyle(color: context.textColor, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -132,7 +143,14 @@ class _MachinePageState extends State<MachinePage> {
                   const SizedBox(height: 16),
 
                   // Reason Selection
-                  Text('Reason for Maintenance', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Reason for Maintenance',
+                    style: TextStyle(
+                      color: kGold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: selectedReason,
@@ -141,14 +159,26 @@ class _MachinePageState extends State<MachinePage> {
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: context.bgColor,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     items: predefinedReasons.map((r) {
-                      return DropdownMenuItem(value: r, child: Text(r, style: TextStyle(color: context.textColor)));
+                      return DropdownMenuItem(
+                        value: r,
+                        child: Text(
+                          r,
+                          style: TextStyle(color: context.textColor),
+                        ),
+                      );
                     }).toList(),
                     onChanged: (val) {
-                      if (val != null) setDialogState(() => selectedReason = val);
+                      if (val != null)
+                        setDialogState(() => selectedReason = val);
                     },
                   ),
 
@@ -159,11 +189,19 @@ class _MachinePageState extends State<MachinePage> {
                       style: TextStyle(color: context.textColor),
                       decoration: InputDecoration(
                         hintText: 'Enter custom reason...',
-                        hintStyle: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                        hintStyle: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 12,
+                        ),
                         filled: true,
                         fillColor: context.bgColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ],
@@ -171,7 +209,14 @@ class _MachinePageState extends State<MachinePage> {
                   const SizedBox(height: 16),
 
                   // Span Time Selection
-                  Text('Maintenance Span Time / Duration', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Maintenance Span Time / Duration',
+                    style: TextStyle(
+                      color: kGold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: selectedSpanTime,
@@ -180,14 +225,26 @@ class _MachinePageState extends State<MachinePage> {
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: context.bgColor,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     items: predefinedSpanTimes.map((st) {
-                      return DropdownMenuItem(value: st, child: Text(st, style: TextStyle(color: context.textColor)));
+                      return DropdownMenuItem(
+                        value: st,
+                        child: Text(
+                          st,
+                          style: TextStyle(color: context.textColor),
+                        ),
+                      );
                     }).toList(),
                     onChanged: (val) {
-                      if (val != null) setDialogState(() => selectedSpanTime = val);
+                      if (val != null)
+                        setDialogState(() => selectedSpanTime = val);
                     },
                   ),
 
@@ -198,11 +255,19 @@ class _MachinePageState extends State<MachinePage> {
                       style: TextStyle(color: context.textColor),
                       decoration: InputDecoration(
                         hintText: 'Enter duration (e.g., 5 Hours, 4 Days)...',
-                        hintStyle: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                        hintStyle: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 12,
+                        ),
                         filled: true,
                         fillColor: context.bgColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ],
@@ -212,29 +277,53 @@ class _MachinePageState extends State<MachinePage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                 onPressed: () async {
-                  final finalReason = isCustomReason && customReasonController.text.trim().isNotEmpty
+                  final finalReason =
+                      isCustomReason &&
+                          customReasonController.text.trim().isNotEmpty
                       ? customReasonController.text.trim()
                       : selectedReason;
-                  final finalSpan = isCustomSpan && customSpanController.text.trim().isNotEmpty
+                  final finalSpan =
+                      isCustomSpan &&
+                          customSpanController.text.trim().isNotEmpty
                       ? customSpanController.text.trim()
                       : selectedSpanTime;
 
-                  final descText = 'Reason: $finalReason | Span Time: $finalSpan';
+                  final descText =
+                      'Reason: $finalReason | Span Time: $finalSpan';
 
                   Navigator.pop(context);
 
                   if (isMachine) {
-                    await _applyMachineMaintenance(item, descText, finalReason, finalSpan);
+                    await _applyMachineMaintenance(
+                      item,
+                      descText,
+                      finalReason,
+                      finalSpan,
+                    );
                   } else {
-                    await _applyDrumMaintenance(item, descText, finalReason, finalSpan);
+                    await _applyDrumMaintenance(
+                      item,
+                      descText,
+                      finalReason,
+                      finalSpan,
+                    );
                   }
                 },
-                child: const Text('Confirm Maintenance', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Confirm Maintenance',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           );
@@ -244,8 +333,11 @@ class _MachinePageState extends State<MachinePage> {
   }
 
   void _showMaintenanceRequestModal([Map<String, dynamic>? initialMachine]) {
-    String? selectedMachineId = initialMachine?['machine_id']?.toString() ??
-        (_machines.isNotEmpty ? _machines.first['machine_id'].toString() : null);
+    String? selectedMachineId =
+        initialMachine?['machine_id']?.toString() ??
+        (_machines.isNotEmpty
+            ? _machines.first['machine_id'].toString()
+            : null);
     String? selectedDrumId;
     String selectedType = 'Machine';
     String selectedReason = 'Routine Check & Cleaning';
@@ -291,7 +383,8 @@ class _MachinePageState extends State<MachinePage> {
               (m) => m['machine_id'].toString() == selectedMachineId,
               orElse: () => <String, dynamic>{},
             );
-            final List<dynamic> availableDrums = selectedMachineMap['drums'] ?? [];
+            final List<dynamic> availableDrums =
+                selectedMachineMap['drums'] ?? [];
 
             return Padding(
               padding: EdgeInsets.only(
@@ -318,7 +411,11 @@ class _MachinePageState extends State<MachinePage> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        const Icon(Icons.build_circle_outlined, color: Colors.orange, size: 24),
+                        const Icon(
+                          Icons.build_circle_outlined,
+                          color: Colors.orange,
+                          size: 24,
+                        ),
                         const SizedBox(width: 10),
                         Text(
                           'Maintenance Request',
@@ -333,11 +430,21 @@ class _MachinePageState extends State<MachinePage> {
                     const SizedBox(height: 4),
                     Text(
                       'Submit a request for scheduled or urgent equipment maintenance.',
-                      style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                      style: TextStyle(
+                        color: context.mutedTextColor,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 20),
 
-                    Text('Target Equipment', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Target Equipment',
+                      style: TextStyle(
+                        color: kGold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -347,7 +454,8 @@ class _MachinePageState extends State<MachinePage> {
                             selected: selectedType == 'Machine',
                             selectedColor: Colors.orange,
                             onSelected: (val) {
-                              if (val) setModalState(() => selectedType = 'Machine');
+                              if (val)
+                                setModalState(() => selectedType = 'Machine');
                             },
                           ),
                         ),
@@ -358,7 +466,8 @@ class _MachinePageState extends State<MachinePage> {
                             selected: selectedType == 'Drum',
                             selectedColor: Colors.orange,
                             onSelected: (val) {
-                              if (val) setModalState(() => selectedType = 'Drum');
+                              if (val)
+                                setModalState(() => selectedType = 'Drum');
                             },
                           ),
                         ),
@@ -366,7 +475,14 @@ class _MachinePageState extends State<MachinePage> {
                     ),
                     const SizedBox(height: 16),
 
-                    Text('Select Machine', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Select Machine',
+                      style: TextStyle(
+                        color: kGold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: selectedMachineId,
@@ -375,13 +491,21 @@ class _MachinePageState extends State<MachinePage> {
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: context.bgColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                       items: _machines.map((m) {
                         return DropdownMenuItem<String>(
                           value: m['machine_id'].toString(),
-                          child: Text(m['machine_name'] ?? 'Machine', style: TextStyle(color: context.textColor)),
+                          child: Text(
+                            m['machine_name'] ?? 'Machine',
+                            style: TextStyle(color: context.textColor),
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -394,7 +518,14 @@ class _MachinePageState extends State<MachinePage> {
                     const SizedBox(height: 16),
 
                     if (selectedType == 'Drum') ...[
-                      Text('Select Drum', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                      Text(
+                        'Select Drum',
+                        style: TextStyle(
+                          color: kGold,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       DropdownButtonFormField<String>(
                         value: selectedDrumId,
@@ -403,15 +534,30 @@ class _MachinePageState extends State<MachinePage> {
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: context.bgColor,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          hintText: availableDrums.isEmpty ? 'No drums available' : 'Choose a drum',
-                          hintStyle: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          hintText: availableDrums.isEmpty
+                              ? 'No drums available'
+                              : 'Choose a drum',
+                          hintStyle: TextStyle(
+                            color: context.mutedTextColor,
+                            fontSize: 12,
+                          ),
                         ),
-                        items: availableDrums.map<DropdownMenuItem<String>>((d) {
+                        items: availableDrums.map<DropdownMenuItem<String>>((
+                          d,
+                        ) {
                           return DropdownMenuItem<String>(
                             value: d['drum_id'].toString(),
-                            child: Text(d['drum_name'] ?? 'Drum', style: TextStyle(color: context.textColor)),
+                            child: Text(
+                              d['drum_name'] ?? 'Drum',
+                              style: TextStyle(color: context.textColor),
+                            ),
                           );
                         }).toList(),
                         onChanged: (val) {
@@ -421,7 +567,14 @@ class _MachinePageState extends State<MachinePage> {
                       const SizedBox(height: 16),
                     ],
 
-                    Text('Priority / Urgency', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Priority / Urgency',
+                      style: TextStyle(
+                        color: kGold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: selectedPriority,
@@ -430,22 +583,38 @@ class _MachinePageState extends State<MachinePage> {
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: context.bgColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                       items: ['Low', 'Medium', 'High', 'Emergency'].map((p) {
                         return DropdownMenuItem<String>(
                           value: p,
-                          child: Text(p, style: TextStyle(color: context.textColor)),
+                          child: Text(
+                            p,
+                            style: TextStyle(color: context.textColor),
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {
-                        if (val != null) setModalState(() => selectedPriority = val);
+                        if (val != null)
+                          setModalState(() => selectedPriority = val);
                       },
                     ),
                     const SizedBox(height: 16),
 
-                    Text('Reason for Maintenance', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Reason for Maintenance',
+                      style: TextStyle(
+                        color: kGold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: selectedReason,
@@ -454,14 +623,26 @@ class _MachinePageState extends State<MachinePage> {
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: context.bgColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                       items: predefinedReasons.map((r) {
-                        return DropdownMenuItem(value: r, child: Text(r, style: TextStyle(color: context.textColor)));
+                        return DropdownMenuItem(
+                          value: r,
+                          child: Text(
+                            r,
+                            style: TextStyle(color: context.textColor),
+                          ),
+                        );
                       }).toList(),
                       onChanged: (val) {
-                        if (val != null) setModalState(() => selectedReason = val);
+                        if (val != null)
+                          setModalState(() => selectedReason = val);
                       },
                     ),
                     if (isCustomReason) ...[
@@ -471,17 +652,32 @@ class _MachinePageState extends State<MachinePage> {
                         style: TextStyle(color: context.textColor),
                         decoration: InputDecoration(
                           hintText: 'Enter custom reason...',
-                          hintStyle: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                          hintStyle: TextStyle(
+                            color: context.mutedTextColor,
+                            fontSize: 12,
+                          ),
                           filled: true,
                           fillColor: context.bgColor,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                     ],
                     const SizedBox(height: 16),
 
-                    Text('Duration / Span Time', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Duration / Span Time',
+                      style: TextStyle(
+                        color: kGold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: selectedSpanTime,
@@ -490,31 +686,56 @@ class _MachinePageState extends State<MachinePage> {
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: context.bgColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                       items: predefinedSpanTimes.map((st) {
-                        return DropdownMenuItem(value: st, child: Text(st, style: TextStyle(color: context.textColor)));
+                        return DropdownMenuItem(
+                          value: st,
+                          child: Text(
+                            st,
+                            style: TextStyle(color: context.textColor),
+                          ),
+                        );
                       }).toList(),
                       onChanged: (val) {
-                        if (val != null) setModalState(() => selectedSpanTime = val);
+                        if (val != null)
+                          setModalState(() => selectedSpanTime = val);
                       },
                     ),
                     const SizedBox(height: 16),
 
-                    Text('Additional Notes / Remarks', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Additional Notes / Remarks',
+                      style: TextStyle(
+                        color: kGold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: descriptionController,
                       maxLines: 3,
                       style: TextStyle(color: context.textColor),
                       decoration: InputDecoration(
-                        hintText: 'Describe issue, symptoms or requested repairs...',
-                        hintStyle: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                        hintText:
+                            'Describe issue, symptoms or requested repairs...',
+                        hintStyle: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 12,
+                        ),
                         filled: true,
                         fillColor: context.bgColor,
                         contentPadding: const EdgeInsets.all(12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -526,9 +747,14 @@ class _MachinePageState extends State<MachinePage> {
                             onPressed: () => Navigator.pop(context),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
-                            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(color: Colors.grey),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -537,13 +763,20 @@ class _MachinePageState extends State<MachinePage> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.orange,
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             onPressed: () async {
-                              final finalReason = isCustomReason && customReasonController.text.trim().isNotEmpty
+                              final finalReason =
+                                  isCustomReason &&
+                                      customReasonController.text
+                                          .trim()
+                                          .isNotEmpty
                                   ? customReasonController.text.trim()
                                   : selectedReason;
-                              final descText = 'Reason: $finalReason | Priority: $selectedPriority | Span: $selectedSpanTime${descriptionController.text.trim().isNotEmpty ? ' | Notes: ${descriptionController.text.trim()}' : ''}';
+                              final descText =
+                                  'Reason: $finalReason | Priority: $selectedPriority | Span: $selectedSpanTime${descriptionController.text.trim().isNotEmpty ? ' | Notes: ${descriptionController.text.trim()}' : ''}';
 
                               if (selectedMachineId != null) {
                                 if (selectedType == 'Machine') {
@@ -553,10 +786,16 @@ class _MachinePageState extends State<MachinePage> {
                                     finalReason,
                                     selectedSpanTime,
                                   );
-                                } else if (selectedType == 'Drum' && selectedDrumId != null) {
+                                } else if (selectedType == 'Drum' &&
+                                    selectedDrumId != null) {
                                   final drumMap = availableDrums.firstWhere(
-                                    (d) => d['drum_id'].toString() == selectedDrumId,
-                                    orElse: () => <String, dynamic>{'drum_id': selectedDrumId, 'machine_id': selectedMachineId},
+                                    (d) =>
+                                        d['drum_id'].toString() ==
+                                        selectedDrumId,
+                                    orElse: () => <String, dynamic>{
+                                      'drum_id': selectedDrumId,
+                                      'machine_id': selectedMachineId,
+                                    },
                                   );
                                   await _applyDrumMaintenance(
                                     drumMap,
@@ -570,14 +809,22 @@ class _MachinePageState extends State<MachinePage> {
                                   Navigator.pop(context);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Maintenance request submitted for $selectedType!'),
+                                      content: Text(
+                                        'Maintenance request submitted for $selectedType!',
+                                      ),
                                       backgroundColor: Colors.orange,
                                     ),
                                   );
                                 }
                               }
                             },
-                            child: const Text('Submit Request', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            child: const Text(
+                              'Submit Request',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -630,7 +877,9 @@ class _MachinePageState extends State<MachinePage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${machine['machine_name']} set to Maintenance ($reason, $spanTime)'),
+          content: Text(
+            '${machine['machine_name']} set to Maintenance ($reason, $spanTime)',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -701,7 +950,9 @@ class _MachinePageState extends State<MachinePage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Drum "${drum['drum_name']}" set to Maintenance ($reason, $spanTime)'),
+          content: Text(
+            'Drum "${drum['drum_name']}" set to Maintenance ($reason, $spanTime)',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -733,11 +984,17 @@ class _MachinePageState extends State<MachinePage> {
 
   void _showAddEditDialog([Map<String, dynamic>? machine]) {
     final isEdit = machine != null;
-    final nameController = TextEditingController(text: machine?['machine_name']);
-    final codeController = TextEditingController(text: machine?['machine_code']);
-    final typeController = TextEditingController(text: machine?['machine_type'] ?? 'Ball Mill');
+    final nameController = TextEditingController(
+      text: machine?['machine_name'],
+    );
+    final codeController = TextEditingController(
+      text: machine?['machine_code'],
+    );
+    final typeController = TextEditingController(
+      text: machine?['machine_type'] ?? 'Ball Mill',
+    );
     final locController = TextEditingController(text: machine?['location']);
-    
+
     String statusValue = 'available';
     if (machine != null) {
       statusValue = machine['status']?.toString().toLowerCase() ?? 'available';
@@ -748,7 +1005,10 @@ class _MachinePageState extends State<MachinePage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: context.surfaceColor,
-          title: Text(isEdit ? 'Edit Machine' : 'Add Machine', style: const TextStyle(color: kGold)),
+          title: Text(
+            isEdit ? 'Edit Machine' : 'Add Machine',
+            style: const TextStyle(color: kGold),
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -763,9 +1023,18 @@ class _MachinePageState extends State<MachinePage> {
                   dropdownColor: context.surfaceColor,
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
-                    DropdownMenuItem(value: 'available', child: Text('Available')),
-                    DropdownMenuItem(value: 'maintenance', child: Text('Maintenance')),
-                    DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
+                    DropdownMenuItem(
+                      value: 'available',
+                      child: Text('Available'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'maintenance',
+                      child: Text('Maintenance'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'inactive',
+                      child: Text('Inactive'),
+                    ),
                     DropdownMenuItem(value: 'in_use', child: Text('In Use')),
                   ],
                   onChanged: (v) => setDialogState(() => statusValue = v!),
@@ -774,7 +1043,10 @@ class _MachinePageState extends State<MachinePage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: kGold),
               onPressed: () async {
@@ -790,7 +1062,9 @@ class _MachinePageState extends State<MachinePage> {
                   if (statusValue == 'maintenance') {
                     final List<dynamic> drums = machine['drums'] ?? [];
                     for (final drum in drums) {
-                      await _repository.updateDrum(drum['drum_id'].toString(), {'status': 'maintenance'});
+                      await _repository.updateDrum(drum['drum_id'].toString(), {
+                        'status': 'maintenance',
+                      });
                     }
                   }
                 } else {
@@ -799,7 +1073,10 @@ class _MachinePageState extends State<MachinePage> {
                 if (mounted) Navigator.pop(context);
                 _fetchMachines();
               },
-              child: Text(isEdit ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
+              child: Text(
+                isEdit ? 'Update' : 'Add',
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -824,7 +1101,14 @@ class _MachinePageState extends State<MachinePage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.surfaceColor,
-        title: const Text('Add Drum to Machine', style: TextStyle(color: kGold, fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Add Drum to Machine',
+          style: TextStyle(
+            color: kGold,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -836,7 +1120,10 @@ class _MachinePageState extends State<MachinePage> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: kGold),
             onPressed: () async {
@@ -851,8 +1138,11 @@ class _MachinePageState extends State<MachinePage> {
               if (mounted) Navigator.pop(context);
               _fetchMachines();
             },
-            child: const Text('Add Drum', style: TextStyle(color: kBlack, fontWeight: FontWeight.bold)),
-          )
+            child: const Text(
+              'Add Drum',
+              style: TextStyle(color: kBlack, fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ),
     );
@@ -897,7 +1187,10 @@ class _MachinePageState extends State<MachinePage> {
                   : null,
               filled: true,
               fillColor: context.bgColor,
-              contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 12,
+                horizontal: 16,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(color: kGold.withValues(alpha: 0.2)),
@@ -915,33 +1208,36 @@ class _MachinePageState extends State<MachinePage> {
           ),
           const SizedBox(height: 12),
           // Filter Chips & Maintenance Request Button
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildFilterChip('All'),
-                const SizedBox(width: 8),
-                _buildFilterChip('Available'),
-                const SizedBox(width: 8),
-                _buildFilterChip('Maintenance'),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    minimumSize: Size.zero,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _buildFilterChip('All'),
+              _buildFilterChip('Available'),
+              _buildFilterChip('Maintenance'),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
-                  onPressed: () => _showMaintenanceRequestModal(),
-                  icon: const Icon(Icons.build_circle_outlined, size: 16),
-                  label: const Text(
-                    'Maintenance Request',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  minimumSize: Size.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
                   ),
                 ),
-              ],
-            ),
+                onPressed: () => _showMaintenanceRequestModal(),
+                icon: const Icon(Icons.build_circle_outlined, size: 16),
+                label: const Text(
+                  'Maintenance Request',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -992,11 +1288,15 @@ class _MachinePageState extends State<MachinePage> {
           padding: const EdgeInsets.only(left: 16),
           child: _buildLogoMark(),
         ),
-        title: const Text('MACHINES', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2)),
-        actions: const [
-          ThemeToggleButton(),
-          SizedBox(width: 8),
-        ],
+        title: const Text(
+          'MACHINES',
+          style: TextStyle(
+            color: kGold,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+          ),
+        ),
+        actions: const [ThemeToggleButton(), SizedBox(width: 8)],
       ),
       endDrawer: const AdminDrawer(currentMenu: AdminMenu.machines),
       body: _isLoading
@@ -1009,7 +1309,10 @@ class _MachinePageState extends State<MachinePage> {
                       ? Center(
                           child: Text(
                             'No machines found.',
-                            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+                            style: TextStyle(
+                              color: context.mutedTextColor,
+                              fontSize: 13,
+                            ),
                           ),
                         )
                       : ListView.builder(
@@ -1019,21 +1322,32 @@ class _MachinePageState extends State<MachinePage> {
                             final m = displayedMachines[index];
                             final List<dynamic> drumsList = m['drums'] ?? [];
                             final isMachineInMaintenance =
-                                m['status']?.toString().toLowerCase() == 'maintenance';
+                                m['status']?.toString().toLowerCase() ==
+                                'maintenance';
 
                             return Card(
                               color: context.surfaceColor,
                               margin: const EdgeInsets.only(bottom: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               child: ExpansionTile(
-                                leading: const Icon(Icons.precision_manufacturing, color: kGold),
+                                leading: const Icon(
+                                  Icons.precision_manufacturing,
+                                  color: kGold,
+                                ),
                                 title: Text(
                                   m['machine_name'],
-                                  style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    color: context.textColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 subtitle: Text(
                                   '${m['machine_code']} | ${m['location']}',
-                                  style: TextStyle(color: context.mutedTextColor),
+                                  style: TextStyle(
+                                    color: context.mutedTextColor,
+                                  ),
                                 ),
                                 trailing: _buildStatusChip(m['status']),
                                 childrenPadding: const EdgeInsets.all(16),
@@ -1041,20 +1355,35 @@ class _MachinePageState extends State<MachinePage> {
                                 children: [
                                   // Allocated drums section header
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         'Allocated Drums (${drumsList.length})',
-                                        style: const TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 13),
+                                        style: const TextStyle(
+                                          color: kGold,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
                                       ),
                                       TextButton.icon(
-                                        onPressed: () => _showAddDrumDialog(m['machine_id'].toString()),
-                                        icon: const Icon(Icons.add, size: 16, color: kGold),
+                                        onPressed: () => _showAddDrumDialog(
+                                          m['machine_id'].toString(),
+                                        ),
+                                        icon: const Icon(
+                                          Icons.add,
+                                          size: 16,
+                                          color: kGold,
+                                        ),
                                         label: const Text(
                                           'Add Drum',
-                                          style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold),
+                                          style: TextStyle(
+                                            color: kGold,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                      )
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
@@ -1062,48 +1391,80 @@ class _MachinePageState extends State<MachinePage> {
                                   if (drumsList.isEmpty)
                                     Text(
                                       'No drums allocated to this machine.',
-                                      style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                                      style: TextStyle(
+                                        color: context.mutedTextColor,
+                                        fontSize: 12,
+                                      ),
                                     )
                                   else
                                     Wrap(
                                       spacing: 8,
                                       runSpacing: 8,
                                       children: drumsList.map((d) {
-                                        final dStatus = d['status']?.toString().toLowerCase() ?? 'available';
+                                        final dStatus =
+                                            d['status']
+                                                ?.toString()
+                                                .toLowerCase() ??
+                                            'available';
                                         final isDrumMaintenance =
-                                            dStatus == 'maintenance' || isMachineInMaintenance;
+                                            dStatus == 'maintenance' ||
+                                            isMachineInMaintenance;
                                         final dColor = isDrumMaintenance
                                             ? Colors.orange
-                                            : (dStatus == 'available' ? Colors.green : Colors.red);
-                                        final dStatusLabel = isMachineInMaintenance
+                                            : (dStatus == 'available'
+                                                  ? Colors.green
+                                                  : Colors.red);
+                                        final dStatusLabel =
+                                            isMachineInMaintenance
                                             ? 'Machine Maint.'
-                                            : (isDrumMaintenance ? 'Maintenance' : dStatus.toUpperCase());
+                                            : (isDrumMaintenance
+                                                  ? 'Maintenance'
+                                                  : dStatus.toUpperCase());
 
                                         return InkWell(
                                           onTap: () {
-                                            if (isDrumMaintenance && !isMachineInMaintenance) {
+                                            if (isDrumMaintenance &&
+                                                !isMachineInMaintenance) {
                                               _restoreDrumAvailable(d);
                                             } else if (!isMachineInMaintenance) {
-                                              _showSetMaintenanceDialog(d, false);
+                                              _showSetMaintenanceDialog(
+                                                d,
+                                                false,
+                                              );
                                             } else {
-                                              ScaffoldMessenger.of(context).showSnackBar(
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
                                                 const SnackBar(
-                                                  content: Text('Cannot change drum status while parent machine is under Maintenance.'),
-                                                  backgroundColor: Colors.redAccent,
+                                                  content: Text(
+                                                    'Cannot change drum status while parent machine is under Maintenance.',
+                                                  ),
+                                                  backgroundColor:
+                                                      Colors.redAccent,
                                                 ),
                                               );
                                             }
                                           },
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 6,
+                                            ),
                                             decoration: BoxDecoration(
                                               color: context.bgColor,
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                               border: Border.all(
                                                 color: isDrumMaintenance
-                                                    ? Colors.orange.withValues(alpha: 0.5)
-                                                    : kGold.withValues(alpha: 0.2),
+                                                    ? Colors.orange.withValues(
+                                                        alpha: 0.5,
+                                                      )
+                                                    : kGold.withValues(
+                                                        alpha: 0.2,
+                                                      ),
                                               ),
                                             ),
                                             child: Row(
@@ -1112,7 +1473,9 @@ class _MachinePageState extends State<MachinePage> {
                                                 Icon(
                                                   Icons.reorder_rounded,
                                                   size: 14,
-                                                  color: isDrumMaintenance ? Colors.orange : kGold,
+                                                  color: isDrumMaintenance
+                                                      ? Colors.orange
+                                                      : kGold,
                                                 ),
                                                 const SizedBox(width: 6),
                                                 Text(
@@ -1125,17 +1488,27 @@ class _MachinePageState extends State<MachinePage> {
                                                 ),
                                                 const SizedBox(width: 6),
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 5,
+                                                        vertical: 1,
+                                                      ),
                                                   decoration: BoxDecoration(
-                                                    color: dColor.withValues(alpha: 0.15),
-                                                    borderRadius: BorderRadius.circular(4),
+                                                    color: dColor.withValues(
+                                                      alpha: 0.15,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
                                                   ),
                                                   child: Text(
                                                     dStatusLabel,
                                                     style: TextStyle(
                                                       color: dColor,
                                                       fontSize: 9,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
                                                   ),
                                                 ),
@@ -1147,76 +1520,120 @@ class _MachinePageState extends State<MachinePage> {
                                     ),
 
                                   // Drum Maintenance Detail Banners
-                                  ...drumsList.where((d) {
-                                    final dStatus = d['status']?.toString().toLowerCase() ?? 'available';
-                                    return dStatus == 'maintenance' || isMachineInMaintenance;
-                                  }).map((d) {
-                                    final drumName = d['drum_name'] ?? 'Drum';
-                                    final dDesc = (d['description'] != null && d['description'].toString().isNotEmpty)
-                                        ? d['description'].toString()
-                                        : (isMachineInMaintenance && m['description'] != null && m['description'].toString().isNotEmpty
-                                            ? 'Inherited from Machine: ${m['description']}'
-                                            : 'Under maintenance');
+                                  ...drumsList
+                                      .where((d) {
+                                        final dStatus =
+                                            d['status']
+                                                ?.toString()
+                                                .toLowerCase() ??
+                                            'available';
+                                        return dStatus == 'maintenance' ||
+                                            isMachineInMaintenance;
+                                      })
+                                      .map((d) {
+                                        final drumName =
+                                            d['drum_name'] ?? 'Drum';
+                                        final dDesc =
+                                            (d['description'] != null &&
+                                                d['description']
+                                                    .toString()
+                                                    .isNotEmpty)
+                                            ? d['description'].toString()
+                                            : (isMachineInMaintenance &&
+                                                      m['description'] !=
+                                                          null &&
+                                                      m['description']
+                                                          .toString()
+                                                          .isNotEmpty
+                                                  ? 'Inherited from Machine: ${m['description']}'
+                                                  : 'Under maintenance');
 
-                                    return Container(
-                                      width: double.infinity,
-                                      margin: const EdgeInsets.only(top: 8),
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.orange.withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
+                                        return Container(
+                                          width: double.infinity,
+                                          margin: const EdgeInsets.only(top: 8),
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.orange.withValues(
+                                              alpha: 0.08,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.orange.withValues(
+                                                alpha: 0.3,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              const Icon(Icons.build_circle_outlined, color: Colors.orange, size: 14),
-                                              const SizedBox(width: 6),
+                                              Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.build_circle_outlined,
+                                                    color: Colors.orange,
+                                                    size: 14,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    '$drumName Maintenance Reason',
+                                                    style: const TextStyle(
+                                                      color: Colors.orange,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 11,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
                                               Text(
-                                                '$drumName Maintenance Reason',
-                                                style: const TextStyle(
-                                                  color: Colors.orange,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 11,
+                                                dDesc,
+                                                style: TextStyle(
+                                                  color: context.textColor,
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w500,
                                                 ),
                                               ),
                                             ],
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            dDesc,
-                                            style: TextStyle(
-                                              color: context.textColor,
-                                              fontSize: 11.5,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }),
+                                        );
+                                      }),
 
                                   // Maintenance Banner if machine is in maintenance
                                   if (isMachineInMaintenance &&
                                       m['description'] != null &&
-                                      m['description'].toString().isNotEmpty) ...[
+                                      m['description']
+                                          .toString()
+                                          .isNotEmpty) ...[
                                     const SizedBox(height: 12),
                                     Container(
                                       width: double.infinity,
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: Colors.orange.withValues(alpha: 0.1),
+                                        color: Colors.orange.withValues(
+                                          alpha: 0.1,
+                                        ),
                                         borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                                        border: Border.all(
+                                          color: Colors.orange.withValues(
+                                            alpha: 0.3,
+                                          ),
+                                        ),
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Row(
                                             children: [
-                                              Icon(Icons.build_circle_outlined, color: Colors.orange, size: 16),
+                                              Icon(
+                                                Icons.build_circle_outlined,
+                                                color: Colors.orange,
+                                                size: 16,
+                                              ),
                                               SizedBox(width: 6),
                                               Text(
                                                 'MAINTENANCE DETAILS',
@@ -1249,22 +1666,40 @@ class _MachinePageState extends State<MachinePage> {
 
                                   // Actions Row: Set Maintenance & Precise Edit Button
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       // Maintenance Quick Action Toggle
                                       ElevatedButton.icon(
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: isMachineInMaintenance
-                                              ? Colors.green.withValues(alpha: 0.15)
-                                              : Colors.orange.withValues(alpha: 0.15),
-                                          foregroundColor: isMachineInMaintenance ? Colors.green : Colors.orange,
+                                          backgroundColor:
+                                              isMachineInMaintenance
+                                              ? Colors.green.withValues(
+                                                  alpha: 0.15,
+                                                )
+                                              : Colors.orange.withValues(
+                                                  alpha: 0.15,
+                                                ),
+                                          foregroundColor:
+                                              isMachineInMaintenance
+                                              ? Colors.green
+                                              : Colors.orange,
                                           elevation: 0,
                                           side: BorderSide(
-                                            color: isMachineInMaintenance ? Colors.green : Colors.orange,
+                                            color: isMachineInMaintenance
+                                                ? Colors.green
+                                                : Colors.orange,
                                             width: 1.2,
                                           ),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
                                         ),
                                         onPressed: () {
                                           if (isMachineInMaintenance) {
@@ -1274,16 +1709,24 @@ class _MachinePageState extends State<MachinePage> {
                                           }
                                         },
                                         icon: Icon(
-                                          isMachineInMaintenance ? Icons.build_circle : Icons.warning_amber_rounded,
+                                          isMachineInMaintenance
+                                              ? Icons.build_circle
+                                              : Icons.warning_amber_rounded,
                                           size: 16,
-                                          color: isMachineInMaintenance ? Colors.green : Colors.orange,
+                                          color: isMachineInMaintenance
+                                              ? Colors.green
+                                              : Colors.orange,
                                         ),
                                         label: Text(
-                                          isMachineInMaintenance ? 'Set Available' : 'Set Maintenance',
+                                          isMachineInMaintenance
+                                              ? 'Set Available'
+                                              : 'Set Maintenance',
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 12,
-                                            color: isMachineInMaintenance ? Colors.green : Colors.orange,
+                                            color: isMachineInMaintenance
+                                                ? Colors.green
+                                                : Colors.orange,
                                           ),
                                         ),
                                       ),
@@ -1292,15 +1735,33 @@ class _MachinePageState extends State<MachinePage> {
                                       OutlinedButton.icon(
                                         style: OutlinedButton.styleFrom(
                                           foregroundColor: kGold,
-                                          side: const BorderSide(color: kGold, width: 1.2),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                          side: const BorderSide(
+                                            color: kGold,
+                                            width: 1.2,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 8,
+                                          ),
                                         ),
                                         onPressed: () => _showAddEditDialog(m),
-                                        icon: const Icon(Icons.edit_outlined, size: 16, color: kGold),
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          size: 16,
+                                          color: kGold,
+                                        ),
                                         label: const Text(
                                           'Edit Machine',
-                                          style: TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 12),
+                                          style: TextStyle(
+                                            color: kGold,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -1323,7 +1784,9 @@ class _MachinePageState extends State<MachinePage> {
 
   Widget _buildStatusChip(String status) {
     final s = status.toLowerCase();
-    Color color = s == 'available' ? Colors.green : (s == 'inactive' ? Colors.red : Colors.orange);
+    Color color = s == 'available'
+        ? Colors.green
+        : (s == 'inactive' ? Colors.red : Colors.orange);
     String label = status.toUpperCase();
     if (s == 'available') label = 'AVAILABLE';
     if (s == 'maintenance') label = 'MAINTENANCE';
@@ -1332,8 +1795,19 @@ class _MachinePageState extends State<MachinePage> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }

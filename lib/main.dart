@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 
 import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_main_layout.dart';
+import './presentation/client/miner_main_layout.dart';
 import './presentation/operator/operator_dashboard.dart';
-import './presentation/client/client_dashboard.dart';
-import './presentation/miner/miner_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
 import './presentation/landing/change_password_page.dart';
@@ -190,15 +189,11 @@ class _LoginPageState extends State<LoginPage>
           builder: (_) => OperatorDashboardPage(operatorName: name),
         ),
       );
-    } else if (normalizedRole == 'client') {
+    } else if (normalizedRole == 'client' || normalizedRole == 'miner') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => ClientDashboardPage(clientName: name),
+          builder: (_) => MinerMainLayout(minerName: name),
         ),
-      );
-    } else if (normalizedRole == 'miner') {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => MinerDashboardPage(minerName: name)),
       );
     } else {
       // Placeholder for other roles

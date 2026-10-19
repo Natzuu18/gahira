@@ -47,18 +47,10 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           ),
         ),
         iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            tooltip: 'Menu',
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
-      ),
-      endDrawer: MinerDrawer(
-        currentMenu: MinerMenu.profile,
-        minerName: 'Miner',
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

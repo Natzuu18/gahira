@@ -130,24 +130,11 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           ),
         ),
         iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
-          const SizedBox(width: 8),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
       ),
-      endDrawer: _currentUser?.roleId == 'client'
-          ? ClientDrawer(
-              currentMenu: ClientMenu.serviceRequests,
-              clientName: _currentUser?.fname ?? 'Client',
-            )
-          : MinerDrawer(
-              currentMenu: MinerMenu.serviceRequests,
-              minerName: _currentUser?.fname ?? 'Miner',
-            ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showRequestWorkflow(),
         backgroundColor: kGold,

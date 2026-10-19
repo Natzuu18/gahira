@@ -22,6 +22,7 @@ class RegistrationDto {
   final String? resumeBase64;
   final String? resumeName;
   final String? appointmentDate; // ISO 8601
+  final String? availabilityId;
 
   const RegistrationDto({
     required this.firstName,
@@ -38,6 +39,7 @@ class RegistrationDto {
     this.resumeBase64,
     this.resumeName,
     this.appointmentDate,
+    this.availabilityId,
   });
 
   factory RegistrationDto.fromEntity(RegistrationData entity) {
@@ -59,6 +61,7 @@ class RegistrationDto {
           entity.resume != null ? base64Encode(entity.resume!) : null,
       resumeName: entity.resumeName,
       appointmentDate: entity.appointmentDate?.toIso8601String(),
+      availabilityId: entity.availabilityId,
     );
   }
 
@@ -91,6 +94,7 @@ class RegistrationDto {
           : null,
       resumeName: resumeName,
       appointmentDate: parsedAppointmentDate,
+      availabilityId: availabilityId,
     );
   }
 
@@ -110,6 +114,7 @@ class RegistrationDto {
       'resume': resumeBase64,
       'resumeName': resumeName,
       'appointmentDate': appointmentDate,
+      'availabilityId': availabilityId,
     };
   }
 }

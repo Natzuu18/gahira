@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import '../miner/miner_drawer.dart';
-
-// Gahira Ball Mill Management System - Billing Page
-// Clients can view their bills, make payments, and view payment history
 
 class BillingPage extends StatefulWidget {
   const BillingPage({super.key});
@@ -16,6 +12,7 @@ class BillingPage extends StatefulWidget {
 
 class _BillingPageState extends State<BillingPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  String _selectedTxnFilter = 'All';
 
   final List<Map<String, dynamic>> _mockBills = [
     {
@@ -67,181 +64,323 @@ class _BillingPageState extends State<BillingPage> {
     },
   ];
 
+  final List<Map<String, dynamic>> _mockTransactions = [
+    {
+      'id': 'TXN-2024-025',
+      'type': 'Payment',
+      'description': 'Payment for INV-2024-007',
+      'amount': 18500.00,
+      'date': '2024-01-14',
+      'status': 'Completed',
+    },
+    {
+      'id': 'TXN-2024-024',
+      'type': 'Payment',
+      'description': 'Payment for INV-2024-006',
+      'amount': 32000.00,
+      'date': '2024-01-09',
+      'status': 'Completed',
+    },
+    {
+      'id': 'TXN-2024-023',
+      'type': 'Invoice',
+      'description': 'Invoice for REQ-2024-015',
+      'amount': -25000.00,
+      'date': '2024-01-15',
+      'status': 'Pending',
+    },
+    {
+      'id': 'TXN-2024-022',
+      'type': 'Payment',
+      'description': 'Payment for INV-2024-005',
+      'amount': 21000.00,
+      'date': '2024-01-08',
+      'status': 'Completed',
+    },
+    {
+      'id': 'TXN-2024-021',
+      'type': 'Refund',
+      'description': 'Refund for overpayment',
+      'amount': 1500.00,
+      'date': '2024-01-05',
+      'status': 'Completed',
+    },
+    {
+      'id': 'TXN-2024-020',
+      'type': 'Invoice',
+      'description': 'Invoice for REQ-2024-011',
+      'amount': -32000.00,
+      'date': '2024-01-05',
+      'status': 'Paid',
+    },
+    {
+      'id': 'TXN-2024-019',
+      'type': 'Payment',
+      'description': 'Payment for INV-2024-004',
+      'amount': 15000.00,
+      'date': '2024-01-03',
+      'status': 'Completed',
+    },
+  ];
+
   @override
   Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: context.bgColor,
+        appBar: AppBar(
+          backgroundColor: context.surfaceColor,
+          elevation: 0,
+          leadingWidth: 64,
+          leading: Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: _buildLogoMark(),
+          ),
+          title: const Text(
+            'BILLING & TRANSACTIONS',
+            style: TextStyle(
+              color: kGold,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+              fontSize: 16,
+            ),
+          ),
+          actions: const [
+            ThemeToggleButton(),
+            SizedBox(width: 8),
+          ],
+          bottom: TabBar(
+            labelColor: kGold,
+            unselectedLabelColor: context.mutedTextColor,
+            indicatorColor: kGold,
+            tabs: const [
+              Tab(text: 'BILLING & INVOICES'),
+              Tab(text: 'TRANSACTION HISTORY'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _buildBillingTab(),
+            _buildTransactionHistoryTab(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBillingTab() {
     final unpaidBills = _mockBills.where((b) => b['status'] == 'Unpaid').toList();
     final paidBills = _mockBills.where((b) => b['status'] == 'Paid').toList();
     final totalDue = unpaidBills.fold<double>(0.0, (sum, bill) => sum + bill['amount']);
     final totalPaid = paidBills.fold<double>(0.0, (sum, bill) => sum + bill['amount']);
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: context.bgColor,
-      appBar: AppBar(
-        backgroundColor: context.surfaceColor,
-        elevation: 0,
-        leadingWidth: 64,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: _buildLogoMark(),
-        ),
-        title: const Text(
-          'GAHIRA',
-          style: TextStyle(
-            color: kGold,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 3,
-            fontSize: 16,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Billing & Invoices',
+            style: TextStyle(
+              color: context.textColor,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            tooltip: 'Menu',
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+          const SizedBox(height: 4),
+          Text(
+            'View and manage your invoices and processing settlements',
+            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
           ),
+          const SizedBox(height: 24),
+
+          // Summary Cards
+          Row(
+            children: [
+              Expanded(
+                child: _buildSummaryCard(
+                  'Total Due',
+                  '₱${totalDue.toStringAsFixed(2)}',
+                  Icons.account_balance_wallet_outlined,
+                  Colors.orange,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildSummaryCard(
+                  'Total Paid',
+                  '₱${totalPaid.toStringAsFixed(2)}',
+                  Icons.check_circle_outline,
+                  Colors.green,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // Unpaid Bills Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Unpaid Bills (${unpaidBills.length})',
+                style: TextStyle(
+                  color: context.textColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (unpaidBills.isNotEmpty)
+                ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.payment, size: 18),
+                  label: const Text('Pay All'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kGold,
+                    foregroundColor: kBlack,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (unpaidBills.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: context.surfaceColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: kGold.withOpacity(0.1)),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    const Icon(Icons.check_circle_outline, color: Colors.green, size: 48),
+                    const SizedBox(height: 16),
+                    Text(
+                      'All caught up!',
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'You have no unpaid bills',
+                      style: TextStyle(color: context.mutedTextColor, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ...unpaidBills.map((bill) => _buildBillCard(bill)),
+
+          const SizedBox(height: 32),
+
+          // Paid Bills Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Paid Invoices (${paidBills.length})',
+                style: TextStyle(
+                  color: context.textColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...paidBills.map((bill) => _buildBillCard(bill)),
         ],
       ),
-      endDrawer: MinerDrawer(
-        currentMenu: MinerMenu.billing,
-        minerName: 'Miner',
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Text(
-              'Billing',
-              style: TextStyle(
-                color: context.textColor,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'View and manage your invoices and payments',
-              style: TextStyle(
-                color: context.mutedTextColor,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 24),
+    );
+  }
 
-            // Summary Cards
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSummaryCard(
-                    'Total Due',
-                    '₱${totalDue.toStringAsFixed(2)}',
-                    Icons.account_balance_wallet_outlined,
-                    Colors.orange,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSummaryCard(
-                    'Total Paid',
-                    '₱${totalPaid.toStringAsFixed(2)}',
-                    Icons.check_circle_outline,
-                    Colors.green,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
+  Widget _buildTransactionHistoryTab() {
+    final filtered = _selectedTxnFilter == 'All'
+        ? _mockTransactions
+        : _mockTransactions.where((t) => t['type'] == _selectedTxnFilter).toList();
 
-            // Unpaid Bills Section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Unpaid Bills (${unpaidBills.length})',
-                  style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (unpaidBills.isNotEmpty)
-                  ElevatedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.payment, size: 18),
-                    label: const Text('Pay All'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kGold,
-                      foregroundColor: kBlack,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Transaction History',
+            style: TextStyle(
+              color: context.textColor,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Complete financial log of all payments, invoices, and refunds',
+            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+
+          // Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: ['All', 'Payment', 'Invoice', 'Refund'].map((label) {
+                final isSelected = _selectedTxnFilter == label;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: Text(label),
+                    selected: isSelected,
+                    selectedColor: kGold.withOpacity(0.2),
+                    labelStyle: TextStyle(
+                      color: isSelected ? kGold : context.textColor,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 12,
                     ),
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() => _selectedTxnFilter = label);
+                      }
+                    },
                   ),
-              ],
+                );
+              }).toList(),
             ),
-            const SizedBox(height: 16),
-            if (unpaidBills.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: context.surfaceColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: kGold.withOpacity(0.1)),
-                ),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.check_circle_outline, 
-                          color: Colors.green, size: 48),
-                      const SizedBox(height: 16),
-                      Text(
-                        'All caught up!',
-                        style: TextStyle(
-                          color: context.textColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'You have no unpaid bills',
-                        style: TextStyle(
-                          color: context.mutedTextColor,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              ...unpaidBills.map((bill) => _buildBillCard(bill)),
+          ),
+          const SizedBox(height: 24),
 
-            const SizedBox(height: 32),
-
-            // Paid Bills Section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Payment History (${paidBills.length})',
-                  style: TextStyle(
-                    color: context.textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('View All', style: TextStyle(color: kGold)),
-                ),
-              ],
+          // Transactions List
+          if (filtered.isEmpty)
+            Center(
+              child: Text(
+                'No transactions found for "$_selectedTxnFilter".',
+                style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+              ),
+            )
+          else
+            ...filtered.map((txn) => _buildTransactionCard(txn)),
+          
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.download_outlined, size: 18),
+              label: const Text('Export Transaction History'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kGold,
+                side: BorderSide(color: kGold.withOpacity(0.5)),
+              ),
             ),
-            const SizedBox(height: 16),
-            ...paidBills.take(3).map((bill) => _buildBillCard(bill)),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -270,10 +409,7 @@ class _BillingPageState extends State<BillingPage> {
           const SizedBox(height: 4),
           Text(
             title,
-            style: TextStyle(
-              color: context.mutedTextColor,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: context.mutedTextColor, fontSize: 12),
           ),
         ],
       ),
@@ -325,10 +461,7 @@ class _BillingPageState extends State<BillingPage> {
                     ),
                     Text(
                       bill['id'],
-                      style: TextStyle(
-                        color: context.mutedTextColor,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: context.mutedTextColor, fontSize: 12),
                     ),
                   ],
                 ),
@@ -366,10 +499,7 @@ class _BillingPageState extends State<BillingPage> {
             children: [
               Text(
                 'Amount',
-                style: TextStyle(
-                  color: context.mutedTextColor,
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: context.mutedTextColor, fontSize: 12),
               ),
               Text(
                 '₱${bill['amount'].toStringAsFixed(2)}',
@@ -386,11 +516,11 @@ class _BillingPageState extends State<BillingPage> {
               padding: const EdgeInsets.only(top: 12),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 14),
+                  const Icon(Icons.check_circle, color: Colors.green, size: 14),
                   const SizedBox(width: 6),
                   Text(
                     'Paid on ${bill['paidDate']}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.green,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -415,6 +545,118 @@ class _BillingPageState extends State<BillingPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildTransactionCard(Map<String, dynamic> txn) {
+    final String type = txn['type'];
+    final double amount = txn['amount'];
+    final bool isPositive = amount > 0;
+    final Color typeColor = _getTxnTypeColor(type);
+    final Color amountColor = isPositive ? Colors.green : kGold;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kGold.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: typeColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(_getTxnTypeIcon(type), color: typeColor, size: 20),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  txn['description'],
+                  style: TextStyle(
+                    color: context.textColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      txn['id'],
+                      style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: typeColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        type,
+                        style: TextStyle(color: typeColor, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${isPositive ? '+' : ''}₱${amount.abs().toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: amountColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                txn['date'],
+                style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getTxnTypeIcon(String type) {
+    switch (type) {
+      case 'Payment':
+        return Icons.payment_outlined;
+      case 'Invoice':
+        return Icons.receipt_long_outlined;
+      case 'Refund':
+        return Icons.currency_exchange;
+      default:
+        return Icons.account_balance_wallet_outlined;
+    }
+  }
+
+  Color _getTxnTypeColor(String type) {
+    switch (type) {
+      case 'Payment':
+        return Colors.green;
+      case 'Invoice':
+        return kGold;
+      case 'Refund':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
   }
 
   Widget _buildDetailItem(String label, String value) {
@@ -442,39 +684,16 @@ class _BillingPageState extends State<BillingPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.surfaceColor,
-        title: Text(
-          'Make Payment',
-          style: TextStyle(color: context.textColor),
-        ),
+        title: Text('Make Payment', style: TextStyle(color: context.textColor)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Invoice: ${bill['id']}',
-              style: TextStyle(
-                color: context.textColor,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            Text('Invoice: ${bill['id']}', style: TextStyle(color: context.textColor, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            Text(
-              'Amount: ₱${bill['amount'].toStringAsFixed(2)}',
-              style: TextStyle(
-                color: kGold,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text('Amount: ₱${bill['amount'].toStringAsFixed(2)}', style: const TextStyle(color: kGold, fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            Text(
-              'This is a placeholder for the payment form.',
-              style: TextStyle(color: context.mutedTextColor),
-            ),
-            const SizedBox(height: 8),
-            _buildPlaceholderItem('Payment method selection'),
-            _buildPlaceholderItem('Card details or bank transfer'),
-            _buildPlaceholderItem('Confirmation'),
+            Text('Select payment method to authorize payment.', style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
           ],
         ),
         actions: [
@@ -499,22 +718,6 @@ class _BillingPageState extends State<BillingPage> {
               foregroundColor: kBlack,
             ),
             child: const Text('Confirm Payment'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderItem(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, bottom: 4),
-      child: Row(
-        children: [
-          const Icon(Icons.check_circle_outline, color: kGold, size: 16),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
           ),
         ],
       ),

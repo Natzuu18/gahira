@@ -19,6 +19,7 @@ class _PinDialogState extends State<PinDialog> {
   final List<TextEditingController> _controllers = List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   bool _isLoading = false;
+  bool _showPin = false;
   String? _errorMessage;
 
   @override
@@ -114,16 +115,16 @@ class _PinDialogState extends State<PinDialog> {
                   onChanged: (v) => _onChanged(v, index),
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
-                  obscureText: true,
+                  obscureText: !_showPin,
                   enabled: !_isLoading,
-                  style: TextStyle(color: context.textColor, fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold),
                   maxLength: 1,
                   decoration: InputDecoration(
                     counterText: '',
                     contentPadding: EdgeInsets.zero,
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: kGold.withOpacity(0.3)),
+                      borderSide: BorderSide(color: kGold.withValues(alpha: 0.3)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -131,16 +132,37 @@ class _PinDialogState extends State<PinDialog> {
                     ),
                     disabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: kGold.withOpacity(0.1)),
+                      borderSide: BorderSide(color: kGold.withValues(alpha: 0.1)),
                     ),
                   ),
                 ),
               );
             }),
           ),
+          const SizedBox(height: 12),
+
+          // Show/Hide PIN Toggle Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: () => setState(() => _showPin = !_showPin),
+                icon: Icon(
+                  _showPin ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  size: 16,
+                  color: kGold,
+                ),
+                label: Text(
+                  _showPin ? 'Hide PIN' : 'Show PIN',
+                  style: const TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+
           if (_errorMessage != null)
             Padding(
-              padding: const EdgeInsets.only(top: 20),
+              padding: const EdgeInsets.only(top: 12),
               child: Text(
                 _errorMessage!,
                 style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
@@ -148,7 +170,7 @@ class _PinDialogState extends State<PinDialog> {
             ),
           if (_isLoading)
             const Padding(
-              padding: EdgeInsets.only(top: 20),
+              padding: EdgeInsets.only(top: 12),
               child: SizedBox(
                 height: 20,
                 width: 20,

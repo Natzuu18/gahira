@@ -54,7 +54,7 @@ class UserModel extends UserEntity {
   }
 
   Map<String, dynamic> toJson() {
-    return {
+    final map = <String, dynamic>{
       'userId': userId,
       'fname': fname,
       'mname': mname,
@@ -67,8 +67,11 @@ class UserModel extends UserEntity {
       'status': status,
       'mining_unit_id': miningUnitId,
       'pin_hash': pinHash,
-      'created_at': createdAt?.toIso8601String(),
     };
+    if (createdAt != null) {
+      map['created_at'] = createdAt!.toIso8601String();
+    }
+    return map;
   }
 
   factory UserModel.fromEntity(UserEntity entity) {

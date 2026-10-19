@@ -72,6 +72,7 @@ class SupabaseApprovalRepository {
             appointment_date,
             appointment_status,
             appointment_remarks,
+            availability_id,
             user:user_id (
               userId,
               fname,
@@ -82,6 +83,7 @@ class SupabaseApprovalRepository {
               role:role_id (role)
             ),
             availability:availability_id (
+              availability_id,
               date,
               start_time,
               end_time,
@@ -344,6 +346,8 @@ class SupabaseApprovalRepository {
             role:role_id(role),
             applications!inner(
               application_id,
+              availability_id,
+              appointment_date,
               created_at,
               response_at,
               status

@@ -25,6 +25,10 @@ import '../admin/emergency_monitor_page.dart';
 // Drop <AdminDrawer currentMenu: AdminMenu.xxx> into any page's
 // `endDrawer:` so the menu (and its navigation) stays consistent.
 
+// Shared drawer menu used across every admin page.
+// Drop <AdminDrawer currentMenu: AdminMenu.xxx> into any page's
+// `endDrawer:` so the menu (and its navigation) stays consistent.
+
 enum AdminMenu {
   dashboard,
   // Miners
@@ -480,8 +484,7 @@ class _PlaceholderPage extends StatelessWidget {
               style: TextStyle(color: context.mutedTextColor, fontSize: 16),
             ),
           ],
-        ),
-      ),
+        )      ),
     );
   }
 }

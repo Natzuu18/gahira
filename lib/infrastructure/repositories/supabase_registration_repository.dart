@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:dartz/dartz.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -127,11 +128,18 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
       }
 
       // 6. Create initial application entry
+      final String applicationId = const Uuid().v4();
+
       await _client.from('applications').insert({
+        'application_id': applicationId,
         'user_id': userId,
         'status': 'pending',
         'temp_pass': tempPassword,
         'document_id': documentPath,
+        'availability_id': data.availabilityId,
+        'appointment_date': data.appointmentDate != null
+            ? DateFormat('yyyy-MM-dd').format(data.appointmentDate!)
+            : null,
         'created_at': DateTime.now().toIso8601String(),
       });
 

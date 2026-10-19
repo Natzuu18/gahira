@@ -53,12 +53,11 @@ class _ProcessingStatusPageState extends State<ProcessingStatusPage> {
         elevation: 0,
         title: const Text('PROCESSING TRACKER', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 16)),
         iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(icon: const Icon(Icons.menu_rounded, color: kGold), onPressed: () => _scaffoldKey.currentState?.openEndDrawer()),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 8),
         ],
       ),
-      endDrawer: MinerDrawer(currentMenu: MinerMenu.processingStatus, minerName: 'Miner'),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kGold))
           : RefreshIndicator(

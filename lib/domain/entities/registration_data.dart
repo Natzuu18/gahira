@@ -21,6 +21,7 @@ class RegistrationData extends Equatable {
   final Uint8List? resume;
   final String? resumeName;
   final DateTime? appointmentDate;
+  final String? availabilityId;
 
   const RegistrationData({
     required this.firstName,
@@ -37,6 +38,7 @@ class RegistrationData extends Equatable {
     this.resume,
     this.resumeName,
     this.appointmentDate,
+    this.availabilityId,
   });
 
   @override
@@ -55,5 +57,6 @@ class RegistrationData extends Equatable {
         resume,
         resumeName,
         appointmentDate,
+        availabilityId,
       ];
 }

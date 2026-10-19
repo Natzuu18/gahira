@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_main_layout.dart';
 import './presentation/client/miner_main_layout.dart';
-import './presentation/operator/operator_dashboard.dart';
+import './presentation/operator/operator_main_layout.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
 import './presentation/landing/change_password_page.dart';
@@ -186,7 +186,7 @@ class _LoginPageState extends State<LoginPage>
     } else if (normalizedRole == 'operator') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => OperatorDashboardPage(operatorName: name),
+          builder: (_) => OperatorMainLayout(operatorName: name),
         ),
       );
     } else if (normalizedRole == 'client' || normalizedRole == 'miner') {

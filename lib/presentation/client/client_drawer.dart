@@ -9,6 +9,7 @@ import 'processing_status_page.dart';
 import 'billing_page.dart';
 import 'transaction_history_page.dart';
 import 'client_profile_page.dart';
+import '../shared_widgets/profile_activity_page.dart';
 
 // Shared drawer menu used across every client page.
 // Drop <ClientDrawer currentMenu: ClientMenu.xxx> into any page's
@@ -21,6 +22,7 @@ enum ClientMenu {
   billing,
   transactionHistory,
   profile,
+  profileActivity,
 }
 
 class ClientDrawer extends StatelessWidget {
@@ -139,6 +141,13 @@ class ClientDrawer extends StatelessWidget {
                     label: 'Profile',
                     menu: ClientMenu.profile,
                     page: const ClientProfilePage(),
+                  ),
+                  _buildItem(
+                    context,
+                    icon: Icons.manage_history_rounded,
+                    label: 'Profile Activity',
+                    menu: ClientMenu.profileActivity,
+                    page: const ProfileActivityPage(),
                   ),
                 ],
               ),

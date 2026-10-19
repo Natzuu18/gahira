@@ -749,23 +749,36 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
               ),
             ),
           const Divider(),
-          const SizedBox(height: 16),
-          const Text(
-            'Audit Trail',
-            style: TextStyle(color: kGold, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          FutureBuilder<Either<Failure, List<Map<String, dynamic>>>>(
-            future: _repository.getAuditTrails(request.id),
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                return snapshot.data!.fold(
-                  (l) => const Text('Error loading history'),
-                  (trails) => AuditTrailViewer(auditTrails: trails),
-                );
-              }
-              return const CircularProgressIndicator();
-            },
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 8),
+            leading: const Icon(Icons.history_rounded, color: kGold),
+            title: const Text(
+              'Audit Trail',
+              style: TextStyle(color: kGold, fontWeight: FontWeight.bold),
+            ),
+            children: [
+              FutureBuilder<Either<Failure, List<Map<String, dynamic>>>>(
+                future: _repository.getAuditTrails(request.id),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return snapshot.data!.fold(
+                      (failure) => Text(
+                        'Error loading history: ${failure.message}',
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                      (trails) => AuditTrailViewer(auditTrails: trails),
+                    );
+                  }
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(color: kGold),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),

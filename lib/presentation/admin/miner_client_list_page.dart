@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:dartz/dartz.dart' hide State;
+import '../../core/error/failures.dart';
 import '../../domain/entities/user_entity.dart';
+import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../infrastructure/repositories/supabase_user_repository.dart';
 import '../../infrastructure/supabase/supabase_config.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/adminDrawer.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/audit_trail_viewer.dart';
 import 'approval_page.dart';
 import 'availability_page.dart';
 import 'add_miner_page.dart';
@@ -21,6 +25,7 @@ class MinerClientListPage extends StatefulWidget {
 class _MinerClientListPageState extends State<MinerClientListPage> with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _repository = SupabaseUserRepository();
+  final _serviceRequestRepository = SupabaseServiceRequestRepository();
   late TabController _tabController;
   
   final TextEditingController _searchController = TextEditingController();
@@ -460,7 +465,10 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     icon: const Icon(Icons.edit_outlined, size: 18),
-                    label: const Text('Edit Miner Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+                    label: Text(
+                      'Edit ${_profileTypeLabel(user)} Profile',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       _showEditUserSheet(user);
@@ -570,6 +578,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
 
   // --- SLIDING SHEET: EDIT USER INFORMATION ---
   void _showEditUserSheet(UserEntity user) {
+    final profileType = _profileTypeLabel(user);
     final firstNameController = TextEditingController(text: user.fname);
     final middleNameController = TextEditingController(text: user.mname);
     final lastNameController = TextEditingController(text: user.lname);
@@ -615,9 +624,9 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'EDIT MINER INFORMATION',
-                          style: TextStyle(
+                        Text(
+                          'EDIT $profileType INFORMATION',
+                          style: const TextStyle(
                             color: kGold,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -680,7 +689,12 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                               ),
                               (_) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Miner information updated successfully'), backgroundColor: Colors.green),
+                                  SnackBar(
+                                    content: Text(
+                                      '$profileType information updated successfully',
+                                    ),
+                                    backgroundColor: Colors.green,
+                                  ),
                                 );
                                 _fetchUsers();
                               },
@@ -699,6 +713,14 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
       },
     );
   }
+
+  String _profileTypeLabel(UserEntity user) => switch (
+    user.roleId.toLowerCase()
+  ) {
+    'operator' => 'Operator',
+    'client' => 'Client',
+    _ => 'Miner',
+  };
 
   Widget _buildEditTextField(
     TextEditingController controller, 
@@ -1232,35 +1254,74 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                           final quantity = req['quantity']?.toString() ?? '1';
 
                           return Container(
-                            padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: context.bgColor,
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(color: context.textColor.withOpacity(0.08)),
                             ),
-                            child: Row(
+                            child: Column(
                               children: [
-                                CircleAvatar(
-                                  backgroundColor: kGold.withOpacity(0.1),
-                                  child: const Icon(Icons.assignment_outlined, color: kGold, size: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
                                     children: [
-                                      Text(
-                                        serviceType,
-                                        style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                      CircleAvatar(
+                                        backgroundColor: kGold.withOpacity(0.1),
+                                        child: const Icon(Icons.assignment_outlined, color: kGold, size: 20),
                                       ),
-                                      Text(
-                                        'Quantity: $quantity sacks • Date: $formattedDate',
-                                        style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              serviceType,
+                                              style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                            ),
+                                            Text(
+                                              'Quantity: $quantity sacks • Date: $formattedDate',
+                                              style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
                                       ),
+                                      _buildStatusBadge(status),
                                     ],
                                   ),
                                 ),
-                                _buildStatusBadge(status),
+                                ExpansionTile(
+                                  tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                                  childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                                  leading: const Icon(Icons.history_rounded, color: kGold, size: 20),
+                                  title: const Text(
+                                    'Audit Trail',
+                                    style: TextStyle(color: kGold, fontSize: 13, fontWeight: FontWeight.w600),
+                                  ),
+                                  children: [
+                                    FutureBuilder<Either<Failure, List<Map<String, dynamic>>>>(
+                                      future: _serviceRequestRepository.getAuditTrails(
+                                        req['service_request_id']?.toString() ?? '',
+                                      ),
+                                      builder: (context, auditSnapshot) {
+                                        if (auditSnapshot.hasData) {
+                                          return auditSnapshot.data!.fold(
+                                            (failure) => Text(
+                                              'Error loading audit trail: ${failure.message}',
+                                              style: const TextStyle(color: Colors.redAccent),
+                                            ),
+                                            (trails) => AuditTrailViewer(auditTrails: trails),
+                                          );
+                                        }
+                                        return const Padding(
+                                          padding: EdgeInsets.all(16),
+                                          child: Center(
+                                            child: CircularProgressIndicator(color: kGold),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           );

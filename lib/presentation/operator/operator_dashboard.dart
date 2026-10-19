@@ -5,7 +5,7 @@ import '../../core/error/failures.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'operator_drawer.dart';
+import 'operator_menu.dart';
 import 'processing_workflow_page.dart';
 import 'workforce_shift_page.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
@@ -14,16 +14,20 @@ import '../../infrastructure/models/service_request_model.dart';
 import 'service_verification_page.dart';
 
 class OperatorDashboardPage extends StatefulWidget {
-  const OperatorDashboardPage({super.key, this.operatorName = 'Operator'});
+  const OperatorDashboardPage({
+    super.key,
+    this.operatorName = 'Operator',
+    this.onNavigate,
+  });
 
   final String operatorName;
+  final ValueChanged<OperatorMenu>? onNavigate;
 
   @override
   State<OperatorDashboardPage> createState() => _OperatorDashboardPageState();
 }
 
 class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final SupabaseServiceRequestRepository _requestRepository =
       SupabaseServiceRequestRepository();
   late Future<Either<Failure, List<ServiceRequestModel>>> _requestsFuture;
@@ -44,10 +48,18 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
+  void _openMenu(OperatorMenu menu, Widget fallbackPage) {
+    final onNavigate = widget.onNavigate;
+    if (onNavigate != null) {
+      onNavigate(menu);
+    } else {
+      _openPage(fallbackPage);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
@@ -74,15 +86,7 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
             tooltip: 'Refresh dashboard',
             onPressed: _refreshRequests,
           ),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
         ],
-      ),
-      endDrawer: OperatorDrawer(
-        currentMenu: OperatorMenu.dashboard,
-        operatorName: widget.operatorName,
       ),
       body: FutureBuilder<Either<Failure, List<ServiceRequestModel>>>(
         future: _requestsFuture,
@@ -213,21 +217,30 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
                         'Verify miner material',
                         'Review incoming requests',
                         Icons.fact_check_outlined,
-                        () => _openPage(const ServiceVerificationPage()),
+                        () => _openMenu(
+                          OperatorMenu.serviceVerification,
+                          const ServiceVerificationPage(),
+                        ),
                       ),
                       _buildQuickActionButton(
                         context,
                         'Manage processing',
                         'Claim jobs and update stages',
                         Icons.settings_input_component_rounded,
-                        () => _openPage(const ProcessingWorkflowPage()),
+                        () => _openMenu(
+                          OperatorMenu.processing,
+                          const ProcessingWorkflowPage(),
+                        ),
                       ),
                       _buildQuickActionButton(
                         context,
                         'Workforce & shifts',
                         'Check team availability',
                         Icons.groups_2_outlined,
-                        () => _openPage(const WorkforceShiftPage()),
+                        () => _openMenu(
+                          OperatorMenu.workforce,
+                          const WorkforceShiftPage(),
+                        ),
                       ),
                     ],
                   );
@@ -243,7 +256,10 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => _openPage(const ServiceVerificationPage()),
+                    onPressed: () => _openMenu(
+                      OperatorMenu.serviceVerification,
+                      const ServiceVerificationPage(),
+                    ),
                     child: const Text('View all'),
                   ),
                 ],
@@ -468,7 +484,10 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
             Icon(Icons.chevron_right, color: context.mutedTextColor, size: 20),
           ],
         ),
-        onTap: () => _openPage(
+        onTap: () => _openMenu(
+          isPending
+              ? OperatorMenu.serviceVerification
+              : OperatorMenu.processing,
           isPending
               ? const ServiceVerificationPage()
               : const ProcessingWorkflowPage(),

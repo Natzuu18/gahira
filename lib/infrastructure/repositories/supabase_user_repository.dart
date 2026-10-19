@@ -288,6 +288,35 @@ class SupabaseUserRepository implements UserRepository {
     }
   }
 
+  Future<Either<Failure, List<Map<String, dynamic>>>> getProfileActivity(
+    String userId,
+  ) async {
+    try {
+      final response = await _client
+          .from('profile_activity_logs')
+          .select(
+            'id, updated_by_name, updated_by_role, changed_fields, created_at',
+          )
+          .eq('profile_user_id', userId)
+          .order('created_at', ascending: false)
+          .limit(100);
+      return Right(List<Map<String, dynamic>>.from(response));
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205') {
+        return const Left(
+          ServerFailure(
+            'Profile activity is not set up in the database yet. Run '
+            'database/profile_activity_schema.sql in the Supabase SQL Editor, '
+            'then refresh this page.',
+          ),
+        );
+      }
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
   @override
   Future<Either<Failure, void>> deleteUser(String userId) async {
     try {

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import '../miner/miner_drawer.dart';
+import '../shared_widgets/profile_activity_page.dart';
 import 'package:gahira/main.dart';
 
 // Gahira Ball Mill Management System - Client Profile Page
@@ -47,10 +47,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           ),
         ),
         iconTheme: const IconThemeData(color: kGold),
-        actions: const [
-          ThemeToggleButton(),
-          SizedBox(width: 8),
-        ],
+        actions: const [ThemeToggleButton(), SizedBox(width: 8)],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -69,10 +66,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
             const SizedBox(height: 8),
             Text(
               'Manage your account settings and preferences',
-              style: TextStyle(
-                color: context.mutedTextColor,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: context.mutedTextColor, fontSize: 14),
             ),
             const SizedBox(height: 32),
 
@@ -95,11 +89,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                         border: Border.all(color: kGold, width: 2),
                         color: context.bgColor,
                       ),
-                      child: const Icon(
-                        Icons.person,
-                        color: kGold,
-                        size: 40,
-                      ),
+                      child: const Icon(Icons.person, color: kGold, size: 40),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -121,7 +111,10 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                   ),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: kGold.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -160,17 +153,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               ),
             ),
             const SizedBox(height: 16),
-            _buildInfoCard(
-              Icons.phone_outlined,
-              'Phone',
-              '+63 912 345 6789',
-            ),
+            _buildInfoCard(Icons.phone_outlined, 'Phone', '+63 912 345 6789'),
             const SizedBox(height: 12),
-            _buildInfoCard(
-              Icons.email_outlined,
-              'Email',
-              'client@example.com',
-            ),
+            _buildInfoCard(Icons.email_outlined, 'Email', 'client@example.com'),
             const SizedBox(height: 12),
             _buildInfoCard(
               Icons.location_on_outlined,
@@ -247,16 +232,16 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
             ),
             const SizedBox(height: 16),
             _buildActionButton(
-              Icons.lock_outline,
-              'Change Password',
-              () {},
+              Icons.manage_history_rounded,
+              'Profile Activity',
+              () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileActivityPage()),
+              ),
             ),
             const SizedBox(height: 12),
-            _buildActionButton(
-              Icons.help_outline,
-              'Help & Support',
-              () {},
-            ),
+            _buildActionButton(Icons.lock_outline, 'Change Password', () {}),
+            const SizedBox(height: 12),
+            _buildActionButton(Icons.help_outline, 'Help & Support', () {}),
             const SizedBox(height: 12),
             _buildActionButton(
               Icons.description_outlined,
@@ -323,10 +308,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               children: [
                 Text(
                   label,
-                  style: TextStyle(
-                    color: context.mutedTextColor,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: context.mutedTextColor, fontSize: 12),
                 ),
                 Text(
                   value,
@@ -374,19 +356,12 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: context.mutedTextColor,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: context.mutedTextColor, fontSize: 12),
                 ),
               ],
             ),
           ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: kGold,
-          ),
+          Switch(value: value, onChanged: onChanged, activeColor: kGold),
         ],
       ),
     );
@@ -419,7 +394,10 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                   ),
                 ),
                 const Spacer(),
-                Icon(Icons.chevron_right_rounded, color: context.mutedTextColor),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: context.mutedTextColor,
+                ),
               ],
             ),
           ),

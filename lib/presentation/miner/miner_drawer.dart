@@ -8,6 +8,7 @@ import '../client/processing_status_page.dart';
 import '../client/billing_page.dart';
 import '../client/transaction_history_page.dart';
 import '../client/client_profile_page.dart';
+import '../shared_widgets/profile_activity_page.dart';
 
 enum MinerMenu {
   dashboard,
@@ -16,6 +17,7 @@ enum MinerMenu {
   billing,
   transactionHistory,
   profile,
+  profileActivity,
 }
 
 class MinerDrawer extends StatelessWidget {
@@ -134,6 +136,13 @@ class MinerDrawer extends StatelessWidget {
                     menu: MinerMenu.profile,
                     page: const ClientProfilePage(),
                   ),
+                  _buildItem(
+                    context,
+                    icon: Icons.manage_history_rounded,
+                    label: 'Profile Activity',
+                    menu: MinerMenu.profileActivity,
+                    page: const ProfileActivityPage(),
+                  ),
                 ],
               ),
             ),
@@ -186,9 +195,13 @@ class MinerDrawer extends StatelessWidget {
       onTap: () {
         Navigator.of(context).pop();
         if (!selected) {
-          Navigator.of(
-            context,
-          ).pushReplacement(MaterialPageRoute(builder: (_) => page));
+          final navigator = Navigator.of(context);
+          final route = MaterialPageRoute<void>(builder: (_) => page);
+          if (menu == MinerMenu.profileActivity) {
+            navigator.push(route);
+          } else {
+            navigator.pushReplacement(route);
+          }
         }
       },
     );

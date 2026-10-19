@@ -7,7 +7,6 @@ import '../../infrastructure/repositories/supabase_user_repository.dart';
 import '../../domain/entities/user_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'operator_drawer.dart';
 import 'sacking_page.dart';
 
 enum WorkflowFilter { all, queued, scheduledToday }
@@ -20,7 +19,6 @@ class ProcessingWorkflowPage extends StatefulWidget {
 }
 
 class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final SupabaseServiceRequestRepository _repository =
       SupabaseServiceRequestRepository();
   final SupabaseUserRepository _userRepository = SupabaseUserRepository();
@@ -141,7 +139,6 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
         .toList();
 
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
@@ -156,17 +153,7 @@ class _ProcessingWorkflowPageState extends State<ProcessingWorkflowPage> {
           ),
         ),
         iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
-        ],
-      ),
-      endDrawer: const OperatorDrawer(
-        currentMenu: OperatorMenu.processing,
-        operatorName: 'Operator',
+        actions: [const ThemeToggleButton()],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kGold))

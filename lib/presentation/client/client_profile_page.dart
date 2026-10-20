@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/profile_activity_page.dart';
 import 'package:gahira/main.dart';
 
 // Gahira Ball Mill Management System - Client Profile Page
@@ -230,6 +231,14 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               ),
             ),
             const SizedBox(height: 16),
+            _buildActionButton(
+              Icons.manage_history_rounded,
+              'Profile Activity',
+              () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileActivityPage()),
+              ),
+            ),
+            const SizedBox(height: 12),
             _buildActionButton(Icons.lock_outline, 'Change Password', () {}),
             const SizedBox(height: 12),
             _buildActionButton(Icons.help_outline, 'Help & Support', () {}),

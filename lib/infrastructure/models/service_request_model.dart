@@ -35,7 +35,7 @@ class ServiceRequestModel extends ServiceRequestEntity {
         creatorName = '${first['fname'] ?? ''} ${first['lname'] ?? ''}'.trim();
       }
     }
-    
+
     // Parse verifications if they exist (from join on operator_verified_services)
     final List<OperatorVerification> verificationList = [];
     if (json['operator_verified_services'] != null) {
@@ -43,18 +43,22 @@ class ServiceRequestModel extends ServiceRequestEntity {
       final List verificationsRaw = raw is List ? raw : [raw];
 
       for (var v in verificationsRaw) {
-        verificationList.add(OperatorVerification(
-          id: v['verification_id']?.toString() ?? '',
-          operatorId: v['operator_id']?.toString() ?? '',
-          verifiedAt: v['verified_at'] != null ? DateTime.parse(v['verified_at']) : DateTime.now(),
-          actualSacks: v['actual_sacks'] ?? 0,
-          condition: v['condition'] ?? '',
-          state: v['state'] ?? '',
-          source: v['source'] ?? '',
-          isAccurate: v['is_accurate'] ?? true,
-          notes: v['correction_notes'],
-          processingEstimate: v['processing_estimate'],
-        ));
+        verificationList.add(
+          OperatorVerification(
+            id: v['verification_id']?.toString() ?? '',
+            operatorId: v['operator_id']?.toString() ?? '',
+            verifiedAt: v['verified_at'] != null
+                ? DateTime.parse(v['verified_at'])
+                : DateTime.now(),
+            actualSacks: v['actual_sacks'] ?? 0,
+            condition: v['condition'] ?? '',
+            state: v['state'] ?? '',
+            source: v['source'] ?? '',
+            isAccurate: v['is_accurate'] ?? true,
+            notes: v['correction_notes'],
+            processingEstimate: v['processing_estimate'],
+          ),
+        );
       }
     }
 
@@ -104,7 +108,8 @@ class ServiceRequestModel extends ServiceRequestEntity {
     return ServiceRequestModel(
       id: json['service_request_id']?.toString() ?? '',
       creatorId: json['user_id']?.toString() ?? '',
-      participatingMinerIds: (json['participating_miners'] as List<dynamic>?)
+      participatingMinerIds:
+          (json['participating_miners'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -116,7 +121,8 @@ class ServiceRequestModel extends ServiceRequestEntity {
         numberOfSacks: finalSacks,
         notes: json['material_notes']?.toString(),
         documentUrl: null,
-        photoUrls: (json['photo_urls'] as List<dynamic>?)
+        photoUrls:
+            (json['photo_urls'] as List<dynamic>?)
                 ?.map((e) => e.toString())
                 .toList() ??
             [],
@@ -127,8 +133,12 @@ class ServiceRequestModel extends ServiceRequestEntity {
         processingNotes: json['processing_notes']?.toString(),
         sackedQuantity: json['sacked_quantity'] as int?,
         minerSacksProcessed: json['miner_sacks_processed'] as int? ?? 0,
-        unloadingStartedAt: json['unloading_started_at'] != null ? DateTime.parse(json['unloading_started_at']) : null,
-        unloadingCompletedAt: json['unloading_completed_at'] != null ? DateTime.parse(json['unloading_completed_at']) : null,
+        unloadingStartedAt: json['unloading_started_at'] != null
+            ? DateTime.parse(json['unloading_started_at'])
+            : null,
+        unloadingCompletedAt: json['unloading_completed_at'] != null
+            ? DateTime.parse(json['unloading_completed_at'])
+            : null,
         estimatedTime: estimatedTime,
         scheduledDate: scheduledDate,
         assignedOperatorIds: assignedOperators,
@@ -147,20 +157,30 @@ class ServiceRequestModel extends ServiceRequestEntity {
         totalBill: (json['total_bill'] as num? ?? 0).toDouble(),
         amountToMiner: (json['amount_to_miner'] as num? ?? 0).toDouble(),
         paymentAmount: (json['payment_amount'] as num? ?? 0).toDouble(),
+        remainingBalance: (json['remaining_balance'] as num?)?.toDouble(),
         paymentReceiptUrl: json['payment_receipt_url']?.toString(),
-        paymentDate: json['payment_date'] != null ? DateTime.parse(json['payment_date']) : null,
-        participantBreakdown: (json['service_participant_financials'] as List<dynamic>?)
-            ?.map((e) => ParticipantFinancial(
-                  userId: e['user_id']?.toString() ?? '',
-                  userName: e['users'] != null ? '${e['users']['fname']} ${e['users']['lname']}' : null,
-                  shareAmount: (e['share_amount'] as num? ?? 0).toDouble(),
-                  individualExpenses: (e['individual_expenses'] as num? ?? 0).toDouble(),
-                  individualExpenseReason: e['individual_expense_reason']?.toString(),
-                  totalDue: (e['total_due'] as num? ?? 0).toDouble(),
-                  amountPaid: (e['amount_paid'] as num? ?? 0).toDouble(),
-                  status: e['status']?.toString() ?? 'unpaid',
-                ))
-            .toList(),
+        paymentDate: json['payment_date'] != null
+            ? DateTime.parse(json['payment_date'])
+            : null,
+        participantBreakdown:
+            (json['service_participant_financials'] as List<dynamic>?)
+                ?.map(
+                  (e) => ParticipantFinancial(
+                    userId: e['user_id']?.toString() ?? '',
+                    userName: e['users'] != null
+                        ? '${e['users']['fname']} ${e['users']['lname']}'
+                        : null,
+                    shareAmount: (e['share_amount'] as num? ?? 0).toDouble(),
+                    individualExpenses: (e['individual_expenses'] as num? ?? 0)
+                        .toDouble(),
+                    individualExpenseReason: e['individual_expense_reason']
+                        ?.toString(),
+                    totalDue: (e['total_due'] as num? ?? 0).toDouble(),
+                    amountPaid: (e['amount_paid'] as num? ?? 0).toDouble(),
+                    status: e['status']?.toString() ?? 'unpaid',
+                  ),
+                )
+                .toList(),
       ),
       status: ServiceRequestStatus.values.firstWhere(
         (e) => e.name == (json['status']?.toString()),
@@ -169,13 +189,23 @@ class ServiceRequestModel extends ServiceRequestEntity {
       isOperatorAssisted: json['is_operator_assisted'] as bool? ?? false,
       assistedByOperatorId: json['assisted_by_operator_id']?.toString(),
       approvedBy: json['approved_by']?.toString(),
-      approvedAt: json['approved_at'] != null ? DateTime.parse(json['approved_at']) : null,
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : DateTime.now(),
+      approvedAt: json['approved_at'] != null
+          ? DateTime.parse(json['approved_at'])
+          : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : DateTime.now(),
       billingId: json['billing_id']?.toString(),
       emergencyReason: json['emergency_reason']?.toString(),
-      emergencyStoppedAt: json['emergency_stopped_at'] != null ? DateTime.parse(json['emergency_stopped_at']) : null,
-      emergencyResolvedAt: json['emergency_resolved_at'] != null ? DateTime.parse(json['emergency_resolved_at']) : null,
+      emergencyStoppedAt: json['emergency_stopped_at'] != null
+          ? DateTime.parse(json['emergency_stopped_at'])
+          : null,
+      emergencyResolvedAt: json['emergency_resolved_at'] != null
+          ? DateTime.parse(json['emergency_resolved_at'])
+          : null,
       creatorName: creatorName,
     );
   }
@@ -204,8 +234,10 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'processing_notes': processingDetails.processingNotes,
       'sacked_quantity': processingDetails.sackedQuantity,
       'miner_sacks_processed': processingDetails.minerSacksProcessed,
-      'unloading_started_at': processingDetails.unloadingStartedAt?.toIso8601String(),
-      'unloading_completed_at': processingDetails.unloadingCompletedAt?.toIso8601String(),
+      'unloading_started_at': processingDetails.unloadingStartedAt
+          ?.toIso8601String(),
+      'unloading_completed_at': processingDetails.unloadingCompletedAt
+          ?.toIso8601String(),
       'emergency_reason': emergencyReason,
       'emergency_stopped_at': emergencyStoppedAt?.toIso8601String(),
       'emergency_resolved_at': emergencyResolvedAt?.toIso8601String(),
@@ -219,6 +251,7 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'total_bill': financialDetails?.totalBill,
       'amount_to_miner': financialDetails?.amountToMiner,
       'payment_amount': financialDetails?.paymentAmount,
+      'remaining_balance': financialDetails?.remainingBalance,
       'payment_receipt_url': financialDetails?.paymentReceiptUrl,
       'payment_date': financialDetails?.paymentDate?.toIso8601String(),
     };

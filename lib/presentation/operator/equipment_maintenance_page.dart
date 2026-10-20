@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../infrastructure/repositories/supabase_equipment_repository.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'operator_drawer.dart';
 
 class EquipmentMaintenancePage extends StatefulWidget {
   const EquipmentMaintenancePage({super.key});
@@ -13,7 +12,6 @@ class EquipmentMaintenancePage extends StatefulWidget {
 }
 
 class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final SupabaseEquipmentRepository _repository = SupabaseEquipmentRepository();
 
   List<Map<String, dynamic>> _machines = [];
@@ -46,7 +44,6 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        key: _scaffoldKey,
         backgroundColor: context.bgColor,
         appBar: AppBar(
           backgroundColor: context.surfaceColor,
@@ -66,14 +63,7 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
             ),
           ),
           iconTheme: const IconThemeData(color: kGold),
-          actions: [
-            const ThemeToggleButton(),
-            IconButton(
-              icon: const Icon(Icons.menu_rounded, color: kGold),
-              tooltip: 'Menu',
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-            ),
-          ],
+          actions: [const ThemeToggleButton()],
           bottom: TabBar(
             labelColor: kGold,
             unselectedLabelColor: context.mutedTextColor,
@@ -84,10 +74,6 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
               Tab(text: 'Maintenance'),
             ],
           ),
-        ),
-        endDrawer: const OperatorDrawer(
-          currentMenu: OperatorMenu.equipment,
-          operatorName: 'Operator',
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator(color: kGold))

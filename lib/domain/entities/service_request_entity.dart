@@ -15,7 +15,7 @@ enum ServiceRequestStatus {
   partiallyPaid,
   completed,
   cancelled,
-  emergencyStop
+  emergencyStop,
 }
 
 enum ProcessingStage {
@@ -26,7 +26,7 @@ enum ProcessingStage {
   unloading,
   washingSeparation,
   refining,
-  completed
+  completed,
 }
 
 class ServiceRequestEntity extends Equatable {
@@ -119,26 +119,26 @@ class ServiceRequestEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        creatorId,
-        participatingMinerIds,
-        materialDetails,
-        processingDetails,
-        verificationDetails,
-        financialDetails,
-        status,
-        isOperatorAssisted,
-        assistedByOperatorId,
-        approvedBy,
-        approvedAt,
-        createdAt,
-        updatedAt,
-        billingId,
-        emergencyReason,
-        emergencyStoppedAt,
-        emergencyResolvedAt,
-        creatorName,
-      ];
+    id,
+    creatorId,
+    participatingMinerIds,
+    materialDetails,
+    processingDetails,
+    verificationDetails,
+    financialDetails,
+    status,
+    isOperatorAssisted,
+    assistedByOperatorId,
+    approvedBy,
+    approvedAt,
+    createdAt,
+    updatedAt,
+    billingId,
+    emergencyReason,
+    emergencyStoppedAt,
+    emergencyResolvedAt,
+    creatorName,
+  ];
 }
 
 class MaterialDetails extends Equatable {
@@ -150,7 +150,8 @@ class MaterialDetails extends Equatable {
   final String? notes;
   final String? documentUrl;
   final List<String> photoUrls;
-  final List<OperatorVerification> verifications; // List of verifications from Operators
+  final List<OperatorVerification>
+  verifications; // List of verifications from Operators
 
   const MaterialDetails({
     this.condition,
@@ -190,29 +191,29 @@ class MaterialDetails extends Equatable {
 
   @override
   List<Object?> get props => [
-        condition,
-        state,
-        sourceType,
-        source,
-        numberOfSacks,
-        notes,
-        documentUrl,
-        photoUrls,
-        verifications
-      ];
+    condition,
+    state,
+    sourceType,
+    source,
+    numberOfSacks,
+    notes,
+    documentUrl,
+    photoUrls,
+    verifications,
+  ];
 }
 
 class OperatorVerification extends Equatable {
   final String id;
   final String operatorId;
   final DateTime verifiedAt;
-  
+
   // Verified/Corrected Material Details
   final int actualSacks;
   final String condition;
   final String state;
   final String source;
-  
+
   // Verification Outcome
   final bool isAccurate;
   final String? notes; // correction_notes
@@ -233,24 +234,25 @@ class OperatorVerification extends Equatable {
 
   @override
   List<Object?> get props => [
-    id, 
-    operatorId, 
-    verifiedAt, 
-    actualSacks, 
-    condition, 
-    state, 
-    source, 
-    isAccurate, 
-    notes, 
-    processingEstimate
+    id,
+    operatorId,
+    verifiedAt,
+    actualSacks,
+    condition,
+    state,
+    source,
+    isAccurate,
+    notes,
+    processingEstimate,
   ];
 }
 
 class ProcessingDetails extends Equatable {
   final String requirements;
   final String? processingNotes;
-  final int? sackedQuantity; 
-  final int? minerSacksProcessed; // Tracks cumulative miner sacks processed in batches
+  final int? sackedQuantity;
+  final int?
+  minerSacksProcessed; // Tracks cumulative miner sacks processed in batches
   final DateTime? unloadingStartedAt;
   final DateTime? unloadingCompletedAt;
   final String? estimatedTime; // Set by Operator
@@ -298,8 +300,18 @@ class ProcessingDetails extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [requirements, processingNotes, sackedQuantity, minerSacksProcessed, unloadingStartedAt, unloadingCompletedAt, estimatedTime, scheduledDate, assignedOperatorIds, currentStage];
+  List<Object?> get props => [
+    requirements,
+    processingNotes,
+    sackedQuantity,
+    minerSacksProcessed,
+    unloadingStartedAt,
+    unloadingCompletedAt,
+    estimatedTime,
+    scheduledDate,
+    assignedOperatorIds,
+    currentStage,
+  ];
 }
 
 class FinancialDetails extends Equatable {
@@ -307,17 +319,18 @@ class FinancialDetails extends Equatable {
   final double? goldBuyingPrice;
   final double? goldPurchaseValue;
   final bool deductBillFromGold;
-  
+
   final double processingFee;
   final double otherExpenses;
   final double totalBill;
-  
+
   final double amountToMiner;
-  
+
   final double paymentAmount;
+  final double? remainingBalance;
   final String? paymentReceiptUrl;
   final DateTime? paymentDate;
-  
+
   // Group-specific fields
   final List<ParticipantFinancial>? participantBreakdown;
 
@@ -331,6 +344,7 @@ class FinancialDetails extends Equatable {
     this.totalBill = 0,
     this.amountToMiner = 0,
     this.paymentAmount = 0,
+    this.remainingBalance,
     this.paymentReceiptUrl,
     this.paymentDate,
     this.participantBreakdown,
@@ -338,19 +352,20 @@ class FinancialDetails extends Equatable {
 
   @override
   List<Object?> get props => [
-        goldWeightGrams,
-        goldBuyingPrice,
-        goldPurchaseValue,
-        deductBillFromGold,
-        processingFee,
-        otherExpenses,
-        totalBill,
-        amountToMiner,
-        paymentAmount,
-        paymentReceiptUrl,
-        paymentDate,
-        participantBreakdown,
-      ];
+    goldWeightGrams,
+    goldBuyingPrice,
+    goldPurchaseValue,
+    deductBillFromGold,
+    processingFee,
+    otherExpenses,
+    totalBill,
+    amountToMiner,
+    paymentAmount,
+    remainingBalance,
+    paymentReceiptUrl,
+    paymentDate,
+    participantBreakdown,
+  ];
 }
 
 class ParticipantFinancial extends Equatable {
@@ -375,7 +390,16 @@ class ParticipantFinancial extends Equatable {
   });
 
   @override
-  List<Object?> get props => [userId, userName, shareAmount, individualExpenses, individualExpenseReason, totalDue, amountPaid, status];
+  List<Object?> get props => [
+    userId,
+    userName,
+    shareAmount,
+    individualExpenses,
+    individualExpenseReason,
+    totalDue,
+    amountPaid,
+    status,
+  ];
 }
 
 class VerificationDetails extends Equatable {

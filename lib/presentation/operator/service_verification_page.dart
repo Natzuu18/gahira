@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/pin_dialog.dart';
-import 'operator_drawer.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../infrastructure/repositories/supabase_user_repository.dart';
 import '../../application/services/service_request_service.dart';
@@ -23,7 +22,6 @@ class ServiceVerificationPage extends StatefulWidget {
 }
 
 class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final SupabaseServiceRequestRepository _repository =
       SupabaseServiceRequestRepository();
   late final ServiceRequestService _service;
@@ -116,7 +114,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
         .toList();
 
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
@@ -129,16 +126,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             fontSize: 16,
           ),
         ),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
-        ],
-      ),
-      endDrawer: const OperatorDrawer(
-        currentMenu: OperatorMenu.serviceVerification,
+        actions: [const ThemeToggleButton()],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showMinerDirectory,

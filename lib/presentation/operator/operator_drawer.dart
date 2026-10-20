@@ -11,16 +11,8 @@ import 'equipment_maintenance_page.dart';
 import 'workforce_shift_page.dart';
 import 'sms_notification_page.dart';
 import 'emergency_stop_dialog.dart';
-
-enum OperatorMenu {
-  dashboard,
-  serviceVerification,
-  clientService,
-  processing,
-  equipment,
-  workforce,
-  sms,
-}
+import '../shared_widgets/profile_activity_page.dart';
+import 'operator_menu.dart';
 
 class OperatorDrawer extends StatelessWidget {
   const OperatorDrawer({
@@ -146,6 +138,13 @@ class OperatorDrawer extends StatelessWidget {
                     menu: OperatorMenu.sms,
                     page: const SMSNotificationPage(),
                   ),
+                  _buildItem(
+                    context,
+                    icon: Icons.manage_history_rounded,
+                    label: 'Profile Activity',
+                    menu: OperatorMenu.profileActivity,
+                    page: const ProfileActivityPage(),
+                  ),
                 ],
               ),
             ),
@@ -220,9 +219,13 @@ class OperatorDrawer extends StatelessWidget {
       onTap: () {
         Navigator.of(context).pop();
         if (!selected) {
-          Navigator.of(
-            context,
-          ).pushReplacement(MaterialPageRoute(builder: (_) => page));
+          final navigator = Navigator.of(context);
+          final route = MaterialPageRoute<void>(builder: (_) => page);
+          if (menu == OperatorMenu.profileActivity) {
+            navigator.push(route);
+          } else {
+            navigator.pushReplacement(route);
+          }
         }
       },
     );

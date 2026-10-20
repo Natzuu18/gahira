@@ -8,6 +8,7 @@ import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/emergency_alert_banner.dart';
 import 'approval_page.dart';
+import 'billing_page.dart';
 import 'payments_history_page.dart';
 import 'availability_page.dart';
 import '../../domain/entities/availability_entity.dart';
@@ -111,6 +112,45 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     return transactions.take(4).toList();
   }
 
+  List<ServiceRequestEntity> get _pendingPayments {
+    final requests = _serviceRequests.where((request) {
+      if (request.status == ServiceRequestStatus.processingCompleted) {
+        return true;
+      }
+      if (request.status != ServiceRequestStatus.goldHandoff &&
+          request.status != ServiceRequestStatus.partiallyPaid) {
+        return false;
+      }
+      return _outstandingBalance(request) > 0;
+    }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return requests;
+  }
+
+  double _outstandingBalance(ServiceRequestEntity request) {
+    final financialDetails = request.financialDetails;
+    if (financialDetails == null) return 0;
+
+    final participants = financialDetails.participantBreakdown;
+    if (participants != null && participants.isNotEmpty) {
+      return participants.fold<double>(
+        0,
+        (total, participant) =>
+            total + math.max(participant.totalDue - participant.amountPaid, 0),
+      );
+    }
+
+    if (financialDetails.remainingBalance != null) {
+      return math.max(financialDetails.remainingBalance!, 0);
+    }
+    if (request.status == ServiceRequestStatus.goldHandoff) {
+      return math.max(financialDetails.totalBill, 0);
+    }
+    return math.max(
+      financialDetails.totalBill - financialDetails.paymentAmount,
+      0,
+    );
+  }
+
   List<AvailabilityEntity> get _todayAppointments {
     final now = DateTime.now();
     return _todayAvailabilities
@@ -174,6 +214,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                         _buildServiceOverview(),
                         const SizedBox(height: 24),
                         _buildPendingApplications(),
+                        const SizedBox(height: 24),
+                        _buildPendingPayments(),
                         const SizedBox(height: 24),
                         _buildPaymentTransactions(),
                       ],
@@ -645,6 +687,119 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           : transactions.isEmpty
           ? _buildDashboardEmpty('No payment transactions recorded.')
           : Column(children: transactions.map(_buildPaymentRow).toList()),
+    );
+  }
+
+  Widget _buildPendingPayments() {
+    final requests = _pendingPayments;
+    final totalOutstanding = requests.fold<double>(
+      0,
+      (total, request) => total + _outstandingBalance(request),
+    );
+    return _buildDashboardSection(
+      title: 'PENDING PAYMENTS / BILLS',
+      icon: Icons.receipt_long_rounded,
+      accent: const Color(0xFFD18C27),
+      actionLabel: 'Open billing',
+      onAction: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const BillingPage()),
+      ),
+      child: _isLoadingOverview
+          ? const LinearProgressIndicator(
+              color: Color(0xFFD18C27),
+              minHeight: 2,
+            )
+          : requests.isEmpty
+          ? _buildDashboardEmpty('No outstanding bills or payments.')
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 10, 2, 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${requests.length} pending item${requests.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        '₱${NumberFormat('#,##0.00').format(totalOutstanding)} due',
+                        style: const TextStyle(
+                          color: Color(0xFFD18C27),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...requests.take(4).map(_buildPendingPaymentRow),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildPendingPaymentRow(ServiceRequestEntity request) {
+    final reference =
+        request.billingId ??
+        'SR-${request.id.substring(0, math.min(6, request.id.length)).toUpperCase()}';
+    final statusLabel = switch (request.status) {
+      ServiceRequestStatus.processingCompleted => 'Bill pending',
+      ServiceRequestStatus.partiallyPaid => 'Partially paid',
+      _ => 'Unpaid',
+    };
+    final balanceLabel =
+        request.status == ServiceRequestStatus.processingCompleted
+        ? 'Not billed'
+        : '₱${NumberFormat('#,##0.00').format(_outstandingBalance(request))}';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        children: [
+          _buildWhiteIcon(
+            Icons.account_balance_wallet_outlined,
+            const Color(0xFFD18C27),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  request.creatorName ?? 'Miner',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$reference · $statusLabel',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            balanceLabel,
+            style: const TextStyle(
+              color: Color(0xFFD18C27),
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

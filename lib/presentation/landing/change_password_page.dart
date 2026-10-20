@@ -5,7 +5,7 @@ import '../shared_widgets/appColor.dart';
 import '../../infrastructure/repositories/supabase_user_repository.dart';
 import '../../domain/entities/user_entity.dart';
 import '../admin/admin_main_layout.dart';
-import '../operator/operator_dashboard.dart';
+import '../operator/operator_main_layout.dart';
 import '../client/client_dashboard.dart';
 import '../miner/miner_dashboard.dart';
 import '../../main.dart';
@@ -131,7 +131,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       );
     } else if (role == 'operator') {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => OperatorDashboardPage(operatorName: name)),
+        MaterialPageRoute(builder: (_) => OperatorMainLayout(operatorName: name)),
         (route) => false,
       );
     } else if (role == 'client') {

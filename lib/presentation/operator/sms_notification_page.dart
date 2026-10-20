@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'operator_drawer.dart';
 
 class SMSNotificationPage extends StatefulWidget {
   const SMSNotificationPage({super.key});
@@ -12,7 +11,6 @@ class SMSNotificationPage extends StatefulWidget {
 }
 
 class _SMSNotificationPageState extends State<SMSNotificationPage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _recipientController = TextEditingController();
 
@@ -105,7 +103,6 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        key: _scaffoldKey,
         backgroundColor: context.bgColor,
         appBar: AppBar(
           backgroundColor: context.surfaceColor,
@@ -132,11 +129,6 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
               tooltip: 'Compose SMS',
             ),
             const ThemeToggleButton(),
-            IconButton(
-              icon: const Icon(Icons.menu_rounded, color: kGold),
-              tooltip: 'Menu',
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-            ),
           ],
           bottom: TabBar(
             labelColor: kGold,
@@ -147,10 +139,6 @@ class _SMSNotificationPageState extends State<SMSNotificationPage> {
               Tab(text: 'Templates'),
             ],
           ),
-        ),
-        endDrawer: const OperatorDrawer(
-          currentMenu: OperatorMenu.sms,
-          operatorName: 'Operator',
         ),
         body: TabBarView(children: [_buildHistoryTab(), _buildTemplatesTab()]),
       ),

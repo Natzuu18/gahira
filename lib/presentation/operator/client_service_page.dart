@@ -7,7 +7,6 @@ import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/pin_dialog.dart';
 import '../shared_widgets/audit_trail_viewer.dart';
-import 'operator_drawer.dart';
 
 class ClientServicePage extends StatefulWidget {
   const ClientServicePage({super.key});
@@ -17,7 +16,6 @@ class ClientServicePage extends StatefulWidget {
 }
 
 class _ClientServicePageState extends State<ClientServicePage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final SupabaseServiceRequestRepository _repository =
       SupabaseServiceRequestRepository();
   late final ServiceRequestService _service;
@@ -69,7 +67,6 @@ class _ClientServicePageState extends State<ClientServicePage> {
         .toList();
 
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
@@ -83,17 +80,7 @@ class _ClientServicePageState extends State<ClientServicePage> {
           ),
         ),
         iconTheme: const IconThemeData(color: kGold),
-        actions: [
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, color: kGold),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
-        ],
-      ),
-      endDrawer: const OperatorDrawer(
-        currentMenu: OperatorMenu.clientService,
-        operatorName: 'Operator',
+        actions: [const ThemeToggleButton()],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: kGold))

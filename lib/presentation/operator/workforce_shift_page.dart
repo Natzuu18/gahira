@@ -6,7 +6,6 @@ import '../../domain/entities/user_entity.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
-import 'operator_drawer.dart';
 
 class WorkforceShiftPage extends StatefulWidget {
   const WorkforceShiftPage({super.key});
@@ -16,7 +15,6 @@ class WorkforceShiftPage extends StatefulWidget {
 }
 
 class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final SupabaseUserRepository _userRepository = SupabaseUserRepository();
   final SupabaseServiceRequestRepository _requestRepository =
       SupabaseServiceRequestRepository();
@@ -86,7 +84,6 @@ class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        key: _scaffoldKey,
         backgroundColor: context.bgColor,
         appBar: AppBar(
           backgroundColor: context.surfaceColor,
@@ -106,13 +103,7 @@ class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
             ),
           ),
           iconTheme: const IconThemeData(color: kGold),
-          actions: [
-            const ThemeToggleButton(),
-            IconButton(
-              icon: const Icon(Icons.menu_rounded, color: kGold),
-              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-            ),
-          ],
+          actions: [const ThemeToggleButton()],
           bottom: TabBar(
             labelColor: kGold,
             unselectedLabelColor: context.mutedTextColor,
@@ -122,10 +113,6 @@ class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
               Tab(text: 'Active Tasks'),
             ],
           ),
-        ),
-        endDrawer: const OperatorDrawer(
-          currentMenu: OperatorMenu.workforce,
-          operatorName: 'Operator',
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator(color: kGold))

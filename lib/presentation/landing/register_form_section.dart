@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../application/dtos/registration_dto.dart';
@@ -27,6 +28,7 @@ class RegisterFormSection extends StatefulWidget {
 }
 
 class _RegisterFormSectionState extends State<RegisterFormSection> {
+  static const int _maxUploadBytes = 10 * 1024 * 1024;
   final _formKey = GlobalKey<FormState>();
 
   final _firstNameController = TextEditingController();
@@ -108,11 +110,20 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
 
     setState(() {
-      _resumeFile = result.files.single;
-      _resumeError = null;
+      if (file.size > _maxUploadBytes) {
+        _resumeFile = null;
+        _resumeError = 'File must be 10 MB or smaller';
+      } else {
+        _resumeFile = file;
+        _resumeError = null;
+      }
     });
+    if (file.size > _maxUploadBytes) {
+      _showTopNotification(context, 'File must be 10 MB or smaller', isError: true);
+    }
   }
 
   void _removeResume() {
@@ -126,11 +137,20 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
 
     setState(() {
-      _clientDocumentFile = result.files.single;
-      _clientDocumentError = null;
+      if (file.size > _maxUploadBytes) {
+        _clientDocumentFile = null;
+        _clientDocumentError = 'File must be 10 MB or smaller';
+      } else {
+        _clientDocumentFile = file;
+        _clientDocumentError = null;
+      }
     });
+    if (file.size > _maxUploadBytes) {
+      _showTopNotification(context, 'File must be 10 MB or smaller', isError: true);
+    }
   }
 
   void _removeClientDocument() {
@@ -143,9 +163,17 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     if (v == null || v.trim().isEmpty) {
       return 'Phone number is required';
     }
-    final digitsOnly = v.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digitsOnly.length < 7) {
-      return 'Enter a valid phone number';
+    if (!RegExp(r'^\d{11}$').hasMatch(v.trim())) {
+      return 'Phone number must be exactly 11 digits';
+    }
+    return null;
+  }
+
+  String? _nameValidator(String? value, String label, {bool required = true}) {
+    final name = value?.trim() ?? '';
+    if (name.isEmpty) return required ? '$label is required' : null;
+    if (!RegExp(r'^[A-Z]').hasMatch(name)) {
+      return 'The first letter of $label must be capitalized';
     }
     return null;
   }
@@ -444,7 +472,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     // validate them manually alongside the form, scoped to the active role.
     setState(() {
       _resumeError = (_role == UserRole.operator && _resumeFile == null)
-          ? 'Please attach your resume'
+          ? (_resumeError ?? 'Please attach your resume')
           : null;
       final today = DateTime.now();
       final todayStart = DateTime(today.year, today.month, today.day);
@@ -463,7 +491,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           : null;
       _clientDocumentError =
       (_role == UserRole.miner && _clientDocumentFile == null)
-          ? 'Please attach a valid ID or business document'
+          ? (_clientDocumentError ?? 'Please attach a valid ID or business document')
           : null;
     });
 
@@ -672,9 +700,9 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   controller: _firstNameController,
                   hint: 'Enter your first name',
                   icon: Icons.badge_outlined,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'First name is required'
-                      : null,
+                  textCapitalization: TextCapitalization.words,
+                  capitalizeFirstLetter: true,
+                  validator: (v) => _nameValidator(v, 'first name'),
                 ),
                 const SizedBox(height: 18),
 
@@ -685,6 +713,13 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   controller: _middleNameController,
                   hint: 'Enter your middle name',
                   icon: Icons.badge_outlined,
+                  textCapitalization: TextCapitalization.words,
+                  capitalizeFirstLetter: true,
+                  validator: (v) => _nameValidator(
+                    v,
+                    'middle name',
+                    required: false,
+                  ),
                 ),
                 const SizedBox(height: 18),
 
@@ -695,9 +730,9 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   controller: _lastNameController,
                   hint: 'Enter your last name',
                   icon: Icons.badge_outlined,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Last name is required'
-                      : null,
+                  textCapitalization: TextCapitalization.words,
+                  capitalizeFirstLetter: true,
+                  validator: (v) => _nameValidator(v, 'last name'),
                 ),
                 const SizedBox(height: 18),
 
@@ -706,21 +741,23 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                 _buildPhoneVerificationField(context),
                 const SizedBox(height: 18),
 
-                _buildLabel('Gmail'),
+                _buildLabel('Email Address'),
                 const SizedBox(height: 8),
                 _buildTextField(
                   context,
                   controller: _emailController,
-                  hint: 'yourname@gmail.com',
+                  hint: 'you@example.com',
                   icon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) {
-                      return 'Gmail address is required';
+                      return 'Email address is required';
                     }
-                    final value = v.trim().toLowerCase();
-                    if (!value.endsWith('@gmail.com')) {
-                      return 'Please use a valid @gmail.com address';
+                    final value = v.trim();
+                    if (!RegExp(
+                      r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$',
+                    ).hasMatch(value)) {
+                      return 'Enter a valid email address';
                     }
                     return null;
                   },
@@ -1044,6 +1081,10 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                 controller: _phoneController,
                 enabled: !_isPhoneVerified,
                 keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(11),
+                ],
                 style: TextStyle(color: context.textColor),
                 cursorColor: kGold,
                 validator: (v) {
@@ -1721,12 +1762,15 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
         Widget? suffixIcon,
         void Function(String)? onChanged,
         String? Function(String?)? validator,
+        TextCapitalization textCapitalization = TextCapitalization.none,
+        bool capitalizeFirstLetter = false,
       }) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
       maxLines: obscureText ? 1 : maxLines,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
       validator: validator,
       style: TextStyle(color: context.textColor),
       cursorColor: kGold,
@@ -1756,7 +1800,24 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           borderSide: const BorderSide(color: Colors.redAccent),
         ),
       ),
-      onChanged: onChanged,
+      onChanged: onChanged ??
+          (capitalizeFirstLetter
+              ? (value) => _capitalizeFirstLetter(controller, value)
+              : null),
+    );
+  }
+
+  void _capitalizeFirstLetter(TextEditingController controller, String value) {
+    if (value.isEmpty) return;
+    final capitalized = value[0].toUpperCase() + value.substring(1);
+    if (capitalized == value) return;
+
+    final selectionOffset = controller.selection.extentOffset;
+    controller.value = controller.value.copyWith(
+      text: capitalized,
+      selection: TextSelection.collapsed(
+        offset: selectionOffset.clamp(0, capitalized.length),
+      ),
     );
   }
 }

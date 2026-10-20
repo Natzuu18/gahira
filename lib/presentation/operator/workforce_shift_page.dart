@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../infrastructure/repositories/supabase_user_repository.dart';
-import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../domain/entities/service_request_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 
@@ -16,11 +14,9 @@ class WorkforceShiftPage extends StatefulWidget {
 
 class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
   final SupabaseUserRepository _userRepository = SupabaseUserRepository();
-  final SupabaseServiceRequestRepository _requestRepository =
-      SupabaseServiceRequestRepository();
 
   List<UserEntity> _operators = [];
-  List<ServiceRequestEntity> _activeRequests = [];
+  Map<String, String> _assignedMachines = {};
   bool _isLoading = true;
   String? _currentUserId;
 
@@ -32,35 +28,43 @@ class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     final operatorsRes = await _userRepository.getOperators();
-    final requestsRes = await _requestRepository.getServiceRequests();
+    final machineAssignments = <String, Set<String>>{};
+    try {
+      final ongoingServices = await Supabase.instance.client
+          .from('ongoing_services')
+          .select('operator_id, machines:machine_id(machine_name)');
+      for (final row in ongoingServices) {
+        final operatorId = row['operator_id']?.toString();
+        final machine = row['machines'];
+        final machineName = machine is Map
+            ? machine['machine_name']?.toString()
+            : null;
+        if (operatorId != null && machineName != null && machineName.isNotEmpty) {
+          machineAssignments.putIfAbsent(operatorId, () => <String>{}).add(
+            machineName,
+          );
+        }
+      }
+    } catch (error) {
+      debugPrint('Could not load operator machine assignments: $error');
+    }
 
+    if (!mounted) return;
     setState(() {
       _operators = operatorsRes.fold((l) => [], (r) => r);
-      _activeRequests = requestsRes.fold(
-        (l) => [],
-        (r) => r
-            .where((req) => req.status == ServiceRequestStatus.processing)
-            .toList(),
+      _assignedMachines = machineAssignments.map(
+        (operatorId, names) => MapEntry(operatorId, names.join(', ')),
       );
       _isLoading = false;
     });
   }
 
-  // Find what an operator is working on
-  String _getAssignedTask(String userId) {
-    final matchingTasks = _activeRequests
-        .where((request) => request.assistedByOperatorId == userId)
-        .toList();
-
-    if (matchingTasks.isEmpty) {
-      return 'None';
-    }
-
-    final assignedTask = matchingTasks.first;
-    return 'Ref: ${assignedTask.id.substring(0, 8).toUpperCase()}';
+  String _getAssignedMachine(String userId) {
+    return _assignedMachines[userId] ?? 'None';
   }
 
   Future<void> _toggleDutyStatus(UserEntity operator) async {
@@ -81,45 +85,31 @@ class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: context.bgColor,
-        appBar: AppBar(
-          backgroundColor: context.surfaceColor,
-          elevation: 0,
-          leadingWidth: 64,
-          leading: Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: _buildLogoMark(),
-          ),
-          title: const Text(
-            'WORKFORCE',
-            style: TextStyle(
-              color: kGold,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-              fontSize: 16,
-            ),
-          ),
-          iconTheme: const IconThemeData(color: kGold),
-          actions: [const ThemeToggleButton()],
-          bottom: TabBar(
-            labelColor: kGold,
-            unselectedLabelColor: context.mutedTextColor,
-            indicatorColor: kGold,
-            tabs: const [
-              Tab(text: 'Team Status'),
-              Tab(text: 'Active Tasks'),
-            ],
+    return Scaffold(
+      backgroundColor: context.bgColor,
+      appBar: AppBar(
+        backgroundColor: context.surfaceColor,
+        elevation: 0,
+        leadingWidth: 64,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: _buildLogoMark(),
+        ),
+        title: const Text(
+          'WORKFORCE',
+          style: TextStyle(
+            color: kGold,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+            fontSize: 16,
           ),
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: kGold))
-            : TabBarView(
-                children: [_buildOperatorsTab(), _buildActiveTasksTab()],
-              ),
+        iconTheme: const IconThemeData(color: kGold),
+        actions: [const ThemeToggleButton()],
       ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: kGold))
+          : _buildOperatorsTab(),
     );
   }
 
@@ -197,10 +187,13 @@ class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
                       runSpacing: 8,
                       children: [
                         _buildMiniInfo(
-                          'Assigned Task',
-                          _getAssignedTask(op.userId),
+                          'Assigned Machine',
+                          _getAssignedMachine(op.userId),
                         ),
-                        _buildMiniInfo('Contact', op.email.split('@')[0]),
+                        _buildMiniInfo(
+                          'Contact',
+                          op.contactNum.isEmpty ? 'Not provided' : op.contactNum,
+                        ),
                       ],
                     ),
                   ],
@@ -208,41 +201,6 @@ class _WorkforceShiftPageState extends State<WorkforceShiftPage> {
               );
             },
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActiveTasksTab() {
-    if (_activeRequests.isEmpty) {
-      return const Center(child: Text('No active processing tasks.'));
-    }
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 960),
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _activeRequests.length,
-          itemBuilder: (context, index) {
-            final req = _activeRequests[index];
-            return Card(
-              color: context.surfaceColor,
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                title: Text(
-                  req.materialDetails.sourceType ?? 'Processing',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  'Stage: ${req.processingDetails.currentStage.name.toUpperCase()}',
-                ),
-                trailing: Text(
-                  req.id.substring(0, 8).toUpperCase(),
-                  style: const TextStyle(color: kGold, fontSize: 12),
-                ),
-              ),
-            );
-          },
         ),
       ),
     );

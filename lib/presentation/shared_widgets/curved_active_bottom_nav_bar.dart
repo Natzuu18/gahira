@@ -7,6 +7,7 @@ class CurvedNavItem {
   final String label;
   final Color activeColor;
   final Color inactiveColor;
+  final int? badgeCount;
 
   const CurvedNavItem({
     required this.icon,
@@ -14,6 +15,7 @@ class CurvedNavItem {
     required this.label,
     this.activeColor = kGold,
     Color? inactiveColor,
+    this.badgeCount,
   }) : inactiveColor = inactiveColor ?? activeColor;
 }
 
@@ -125,12 +127,20 @@ class _CurvedActiveBottomNavBarState extends State<CurvedActiveBottomNavBar> wit
                     ),
                   ],
                 ),
-                child: Center(
-                  child: Icon(
-                    selectedItem.selectedIcon,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Center(
+                      child: Icon(
+                        selectedItem.selectedIcon,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    if (selectedItem.badgeCount != null &&
+                        selectedItem.badgeCount! > 0)
+                      _buildBadge(selectedItem.badgeCount!),
+                  ],
                 ),
               ),
             ),
@@ -163,29 +173,47 @@ class _CurvedActiveBottomNavBarState extends State<CurvedActiveBottomNavBar> wit
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: item.activeColor.withValues(alpha: 0.2),
+                                    color: item.activeColor.withValues(
+                                      alpha: 0.2,
+                                    ),
                                     blurRadius: 6,
                                     offset: const Offset(0, 2),
                                   ),
                                 ],
                               ),
-                              child: Icon(
-                                item.icon,
-                                color: Colors.white,
-                                size: 19,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Center(
+                                    child: Icon(
+                                      item.icon,
+                                      color: Colors.white,
+                                      size: 19,
+                                    ),
+                                  ),
+                                  if (item.badgeCount != null &&
+                                      item.badgeCount! > 0)
+                                    _buildBadge(item.badgeCount!),
+                                ],
                               ),
                             )
                           else
-                            const SizedBox(height: 24), // Space reserved for floating active circle
+                            const SizedBox(
+                              height: 24,
+                            ), // Space reserved for floating active circle
                           const SizedBox(height: 4),
                           Text(
                             item.label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: isSelected ? item.activeColor : context.mutedTextColor,
+                              color: isSelected
+                                  ? item.activeColor
+                                  : context.mutedTextColor,
                               fontSize: isSelected ? 11 : 10,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -199,6 +227,32 @@ class _CurvedActiveBottomNavBarState extends State<CurvedActiveBottomNavBar> wit
           ],
         );
       },
+    );
+  }
+
+  Widget _buildBadge(int count) {
+    return Positioned(
+      top: -3,
+      right: -5,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: Colors.redAccent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white, width: 1.5),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          count > 99 ? '99+' : '$count',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            height: 1,
+          ),
+        ),
+      ),
     );
   }
 }

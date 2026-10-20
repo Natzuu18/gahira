@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/error/failures.dart';
 import '../supabase/supabase_config.dart';
@@ -84,6 +85,59 @@ class SupabaseEquipmentRepository {
       return Left(ServerFailure(e.toString()));
     }
   }
+
+  Future<Either<Failure, void>> submitOperatorMaintenanceRequest({
+    required String? machineId,
+    required String? drumId,
+    required String maintenanceType,
+    required String reason,
+    required String operatorId,
+    required PlatformFile photo,
+  }) async {
+    try {
+      final bytes = photo.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        return const Left(ServerFailure('The selected photo could not be read.'));
+      }
+
+      final now = DateTime.now();
+      final extension = photo.name.contains('.')
+          ? photo.name.split('.').last.toLowerCase()
+          : 'jpg';
+      final path =
+          'maintenance/maintenance_${now.millisecondsSinceEpoch}.$extension';
+      final storage = _client.storage.from('serviceRequests');
+      await storage.uploadBinary(
+        path,
+        bytes,
+        fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+      );
+      final photoUrl = storage.getPublicUrl(path);
+      final endTime = now.add(const Duration(hours: 1));
+
+      await _client.from('maintenance_schedule').insert({
+        'machine_id': machineId,
+        'drum_id': drumId,
+        'maintenance_type': maintenanceType,
+        'maintenance_date': _dateString(now),
+        'start_time': _timeString(now),
+        'end_time': _timeString(endTime),
+        'description': reason.trim(),
+        'remarks': 'Evidence photo: $photoUrl',
+        'status': 'scheduled',
+        'performed_by': operatorId,
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not submit maintenance request: $e'));
+    }
+  }
+
+  String _dateString(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  String _timeString(DateTime date) =>
+      '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:00';
 
   Future<Either<Failure, void>> updateMaintenance(String id, Map<String, dynamic> updates) async {
     try {

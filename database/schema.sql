@@ -39,21 +39,16 @@ CREATE TABLE public.applications (
   response_at timestamp with time zone,
   status character varying NOT NULL DEFAULT 'pending'::character varying,
   appointment_date date,
-  appointment_time time without time zone,
   appointment_status character varying DEFAULT 'scheduled'::character varying,
   appointment_remarks text,
   availability_id uuid,
   temp_pass text,
   document_id text,
+  appointment_time time without time zone,
   CONSTRAINT applications_pkey PRIMARY KEY (application_id),
   CONSTRAINT applications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(userId),
   CONSTRAINT applications_availability_id_fkey FOREIGN KEY (availability_id) REFERENCES public.appointment_availability(availability_id)
 );
-CREATE UNIQUE INDEX applications_one_active_booking_per_time_idx
-  ON public.applications (appointment_date, appointment_time)
-  WHERE appointment_date IS NOT NULL
-    AND appointment_time IS NOT NULL
-    AND status <> 'rejected';
 CREATE TABLE public.phone_otp_verifications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   phone text NOT NULL,
@@ -179,7 +174,7 @@ CREATE TABLE public.service_requests (
   start_time time without time zone,
   end_time time without time zone,
   quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
-  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::character varying, 'pending'::character varying, 'pendingOperatorVerification'::character varying, 'returnedToMiner'::character varying, 'accepted'::character varying, 'verified'::character varying, 'queued'::character varying, 'scheduled'::character varying, 'assigned'::character varying, 'processing'::character varying, 'processingCompleted'::character varying, 'goldHandoff'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'emergencyStop'::character varying]::text[])),
+  status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['draft'::character varying, 'pending'::character varying, 'pendingOperatorVerification'::character varying, 'returnedToMiner'::character varying, 'accepted'::character varying, 'verified'::character varying, 'queued'::character varying, 'scheduled'::character varying, 'assigned'::character varying, 'processing'::character varying, 'processingCompleted'::character varying, 'goldHandoff'::character varying, 'partiallyPaid'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'emergencyStop'::character varying]::text[])),
   approved_by uuid,
   approved_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -349,4 +344,16 @@ CREATE TABLE public.refinery_overhead_expenses (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT refinery_overhead_expenses_pkey PRIMARY KEY (expense_id),
   CONSTRAINT refinery_overhead_expenses_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(userId)
+);
+CREATE TABLE public.profile_activity_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  profile_user_id uuid NOT NULL,
+  updated_by uuid,
+  updated_by_name text NOT NULL,
+  updated_by_role text NOT NULL DEFAULT ''::text,
+  changed_fields ARRAY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT profile_activity_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT profile_activity_logs_profile_user_id_fkey FOREIGN KEY (profile_user_id) REFERENCES public.users(userId),
+  CONSTRAINT profile_activity_logs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(userId)
 );

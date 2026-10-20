@@ -215,7 +215,7 @@ Widget _dashboardFor(String role, String name) {
     return AdminMainLayout(adminName: name);
   }
   if (normalizedRole == 'operator') {
-    return OperatorDashboardPage(operatorName: name);
+    return OperatorMainLayout(operatorName: name);
   }
   if (normalizedRole == 'client' || normalizedRole == 'miner') {
     return MinerMainLayout(minerName: name);

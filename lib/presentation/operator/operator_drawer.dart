@@ -6,7 +6,6 @@ import 'package:gahira/main.dart';
 import 'operator_dashboard.dart';
 import 'service_verification_page.dart';
 import 'client_service_page.dart';
-import 'processing_workflow_page.dart';
 import 'equipment_maintenance_page.dart';
 import 'workforce_shift_page.dart';
 import 'sms_notification_page.dart';
@@ -109,13 +108,6 @@ class OperatorDrawer extends StatelessWidget {
                     label: 'Miner Services',
                     menu: OperatorMenu.clientService,
                     page: const ClientServicePage(),
-                  ),
-                  _buildItem(
-                    context,
-                    icon: Icons.settings_input_component_rounded,
-                    label: 'Processing Workflow',
-                    menu: OperatorMenu.processing,
-                    page: const ProcessingWorkflowPage(),
                   ),
                   _buildItem(
                     context,

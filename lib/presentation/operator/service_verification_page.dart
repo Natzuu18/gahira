@@ -13,8 +13,12 @@ import '../../domain/entities/user_entity.dart';
 import '../../infrastructure/supabase/supabase_config.dart';
 import '../../infrastructure/models/user_model.dart';
 
+enum _ServiceRequestFilter { all, queued, scheduledToday }
+
 class ServiceVerificationPage extends StatefulWidget {
-  const ServiceVerificationPage({super.key});
+  const ServiceVerificationPage({super.key, this.onPendingCountChanged});
+
+  final ValueChanged<int>? onPendingCountChanged;
 
   @override
   State<ServiceVerificationPage> createState() =>
@@ -43,16 +47,43 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     setState(() => _isLoading = true);
 
     try {
-      final requestsResult = await _repository.getServiceRequests();
+      final operatorId = Supabase.instance.client.auth.currentUser?.id;
+      if (operatorId == null) {
+        throw StateError('Session expired. Please re-login.');
+      }
+
+      final pendingResult = await _repository
+          .getPendingOperatorVerificationRequests();
+      final verifiedResult = await _repository
+          .getServiceRequestsVerifiedByOperator(operatorId);
+      final ongoingResult = await _repository
+          .getOngoingServiceRequestsForOperator(operatorId);
       final usersResult = await _userRepository.getAllUsers();
 
       if (!mounted) return;
 
       String? errorMessage;
-      requestsResult.fold(
-        (l) => errorMessage = 'Requests: ${l.message}',
-        (list) => _requests = list,
+      List<ServiceRequestEntity> pendingRequests = [];
+      List<ServiceRequestEntity> verifiedRequests = [];
+      List<ServiceRequestEntity> ongoingRequests = [];
+      pendingResult.fold(
+        (l) => errorMessage = 'Pending requests: ${l.message}',
+        (list) {
+          pendingRequests = list;
+          widget.onPendingCountChanged?.call(list.length);
+        },
       );
+      verifiedResult.fold(
+        (l) => errorMessage =
+            '${errorMessage == null ? '' : '$errorMessage. '}Verification history: ${l.message}',
+        (list) => verifiedRequests = list,
+      );
+      ongoingResult.fold(
+        (l) => errorMessage =
+            '${errorMessage == null ? '' : '$errorMessage. '}Ongoing services: ${l.message}',
+        (list) => ongoingRequests = list,
+      );
+      _requests = [...pendingRequests, ...verifiedRequests, ...ongoingRequests];
 
       usersResult.fold(
         (l) => errorMessage = (errorMessage ?? '') + ' Users: ${l.message}',
@@ -102,14 +133,40 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
   @override
   Widget build(BuildContext context) {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
     final pendingRequests = _requests
         .where(
           (r) => r.status == ServiceRequestStatus.pendingOperatorVerification,
         )
         .toList();
+    final serviceRequestItems = _requests
+        .where(
+          (r) =>
+              r.status == ServiceRequestStatus.pendingOperatorVerification ||
+              r.status == ServiceRequestStatus.queued ||
+              r.status == ServiceRequestStatus.scheduled,
+        )
+        .toList();
+    final ongoingRequests = _requests
+        .where(
+          (r) =>
+              (r.status == ServiceRequestStatus.processing ||
+                  r.status == ServiceRequestStatus.emergencyStop) &&
+              operatorId != null &&
+              r.processingDetails.assignedOperatorIds.contains(operatorId),
+        )
+        .toList();
     final verifiedRequests = _requests
         .where(
-          (r) => r.status != ServiceRequestStatus.pendingOperatorVerification,
+          (r) =>
+              r.status != ServiceRequestStatus.pendingOperatorVerification &&
+              r.status != ServiceRequestStatus.processing &&
+              r.status != ServiceRequestStatus.emergencyStop &&
+              r.materialDetails.verifications.any(
+                (verification) =>
+                    verification.operatorId ==
+                    Supabase.instance.client.auth.currentUser?.id,
+              ),
         )
         .toList();
 
@@ -117,25 +174,37 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
-        title: const Text(
-          'SERVICE VERIFICATION',
-          style: TextStyle(
-            color: kGold,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-            fontSize: 16,
-          ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildLogoMark(),
+            const SizedBox(width: 10),
+            const Text(
+              'SERVICES',
+              style: TextStyle(
+                color: kGold,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+                fontSize: 16,
+              ),
+            ),
+          ],
         ),
         actions: [const ThemeToggleButton()],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showMinerDirectory,
-        backgroundColor: kGold,
-        foregroundColor: kBlack,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         icon: const Icon(Icons.add_rounded),
         label: const Text(
           'CREATE REQUEST',
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1,
+          ),
         ),
       ),
       body: _isLoading
@@ -144,29 +213,430 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
               onRefresh: _loadRequests,
               color: kGold,
               child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1000),
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      _buildSectionTitle('PENDING VERIFICATION'),
-                      if (pendingRequests.isEmpty)
-                        _buildEmptyState('No pending verification tasks.')
-                      else
-                        ...pendingRequests.map(
-                          (r) => _buildRequestCard(r, isPending: true),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 100),
+                  children: [
+                    _buildSectionTitle('SERVICE DESK'),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildServiceShortcutCard(
+                            title: 'Service Requests',
+                            subtitle: 'Pending and scheduled work',
+                            count: serviceRequestItems.length,
+                            icon: Icons.assignment_outlined,
+                            color: kGold,
+                            onTap: () => _showServiceListSheet(
+                              title: 'Service Requests',
+                              subtitle: 'Pending verification tasks',
+                              icon: Icons.assignment_outlined,
+                              color: kGold,
+                              requests: serviceRequestItems,
+                              isPending: true,
+                              emptyMessage: 'No pending verification tasks.',
+                              showRequestFilters: true,
+                            ),
+                          ),
                         ),
-
-                      const SizedBox(height: 24),
-                      _buildSectionTitle('VERIFICATION HISTORY'),
-                      ...verifiedRequests.map(
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildServiceShortcutCard(
+                            title: 'Verification History',
+                            subtitle: 'Verified by you',
+                            count: verifiedRequests.length,
+                            icon: Icons.fact_check_rounded,
+                            color: Colors.teal,
+                            onTap: () => _showServiceListSheet(
+                              title: 'Verification History',
+                              subtitle: 'Your completed verification checks',
+                              icon: Icons.fact_check_rounded,
+                              color: Colors.teal,
+                              requests: verifiedRequests,
+                              isPending: false,
+                              emptyMessage: 'No services verified by you yet.',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(child: _buildSectionTitle('ONGOING SERVICES')),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.lightBlue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${ongoingRequests.length} active',
+                            style: const TextStyle(
+                              color: Colors.lightBlue,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (ongoingRequests.isEmpty)
+                      _buildEmptyState('You have no ongoing services.')
+                    else
+                      ...ongoingRequests.map(
                         (r) => _buildRequestCard(r, isPending: false),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildServiceShortcutCard({
+    required String title,
+    required String subtitle,
+    required int count,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(13),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(icon, color: color, size: 22),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.textColor,
+                fontSize: 14,
+                height: 1.15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: context.mutedTextColor, fontSize: 10.5),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onTap,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: color,
+                  side: BorderSide(color: color.withValues(alpha: 0.45)),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Open'),
+                    SizedBox(width: 5),
+                    Icon(Icons.arrow_forward_rounded, size: 15),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoMark() {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: kGold, width: 1.6),
+        color: context.bgColor,
+      ),
+      child: const Icon(
+        Icons.settings_input_component_rounded,
+        color: kGold,
+        size: 16,
+      ),
+    );
+  }
+
+  Future<void> _showServiceListSheet({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required List<ServiceRequestEntity> requests,
+    required bool isPending,
+    required String emptyMessage,
+    bool showRequestFilters = false,
+  }) {
+    var selectedFilter = _ServiceRequestFilter.all;
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.78,
+        minChildSize: 0.48,
+        maxChildSize: 0.94,
+        builder: (context, scrollController) => StatefulBuilder(
+          builder: (context, setSheetState) {
+            final filteredRequests =
+                _filterServiceRequests(requests, selectedFilter);
+            return Container(
+          decoration: BoxDecoration(
+            color: context.surfaceColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+            border: Border.all(color: color.withValues(alpha: 0.22)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: context.mutedTextColor.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.13),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(icon, color: color),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              color: context.textColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 17,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '$subtitle | ${requests.length} total',
+                            style: TextStyle(
+                              color: context.mutedTextColor,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: Icon(Icons.close_rounded, color: context.mutedTextColor),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: color.withValues(alpha: 0.15)),
+              if (showRequestFilters)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _serviceRequestFilterChip(
+                          label: 'All',
+                          filter: _ServiceRequestFilter.all,
+                          selectedFilter: selectedFilter,
+                          onSelected: (filter) => setSheetState(
+                            () => selectedFilter = filter,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _serviceRequestFilterChip(
+                          label: 'Queued',
+                          filter: _ServiceRequestFilter.queued,
+                          selectedFilter: selectedFilter,
+                          onSelected: (filter) => setSheetState(
+                            () => selectedFilter = filter,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _serviceRequestFilterChip(
+                          label: 'Scheduled Today',
+                          filter: _ServiceRequestFilter.scheduledToday,
+                          selectedFilter: selectedFilter,
+                          onSelected: (filter) => setSheetState(
+                            () => selectedFilter = filter,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: filteredRequests.isEmpty
+                    ? ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(18),
+                        children: [
+                          _buildEmptyState(
+                            filteredRequests.isEmpty && requests.isNotEmpty
+                                ? _serviceRequestFilterEmptyMessage(
+                                    selectedFilter,
+                                  )
+                                : emptyMessage,
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+                        itemCount: filteredRequests.length,
+                        itemBuilder: (context, index) => _buildRequestCard(
+                          filteredRequests[index],
+                          isPending: isPending &&
+                              filteredRequests[index].status ==
+                                  ServiceRequestStatus
+                                      .pendingOperatorVerification,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  List<ServiceRequestEntity> _filterServiceRequests(
+    List<ServiceRequestEntity> requests,
+    _ServiceRequestFilter filter,
+  ) {
+    switch (filter) {
+      case _ServiceRequestFilter.queued:
+        return requests
+            .where((request) => request.status == ServiceRequestStatus.queued)
+            .toList();
+      case _ServiceRequestFilter.scheduledToday:
+        final now = DateTime.now();
+        return requests.where((request) {
+          final scheduledDate = request.processingDetails.scheduledDate;
+          return request.status == ServiceRequestStatus.scheduled &&
+              scheduledDate != null &&
+              scheduledDate.year == now.year &&
+              scheduledDate.month == now.month &&
+              scheduledDate.day == now.day;
+        }).toList();
+      case _ServiceRequestFilter.all:
+        return requests;
+    }
+  }
+
+  String _serviceRequestFilterEmptyMessage(_ServiceRequestFilter filter) {
+    switch (filter) {
+      case _ServiceRequestFilter.queued:
+        return 'No queued service requests.';
+      case _ServiceRequestFilter.scheduledToday:
+        return 'No services scheduled for today.';
+      case _ServiceRequestFilter.all:
+        return 'No service requests.';
+    }
+  }
+
+  Widget _serviceRequestFilterChip({
+    required String label,
+    required _ServiceRequestFilter filter,
+    required _ServiceRequestFilter selectedFilter,
+    required ValueChanged<_ServiceRequestFilter> onSelected,
+  }) {
+    final isSelected = selectedFilter == filter;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => onSelected(filter),
+      selectedColor: kGold,
+      backgroundColor: context.bgColor,
+      labelStyle: TextStyle(
+        color: isSelected ? kBlack : context.textColor,
+        fontSize: 12,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
+      side: BorderSide(
+        color: isSelected ? kGold : context.mutedTextColor.withValues(alpha: 0.25),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      showCheckmark: false,
     );
   }
 
@@ -431,20 +901,35 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: request.materialDetails.photoUrls.length,
-                    itemBuilder: (context, index) => Container(
-                      width: 100,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: kGold.withOpacity(0.2)),
-                        image: DecorationImage(
-                          image: NetworkImage(
-                            request.materialDetails.photoUrls[index],
+                    itemBuilder: (context, index) {
+                      final photoUrl = request.materialDetails.photoUrls[index];
+                      return GestureDetector(
+                        onTap: () => _showFullScreenPhoto(photoUrl),
+                        child: Container(
+                          width: 100,
+                          margin: const EdgeInsets.only(right: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: kGold.withOpacity(0.2)),
+                            image: DecorationImage(
+                              image: NetworkImage(photoUrl),
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                          fit: BoxFit.cover,
+                          child: const Align(
+                            alignment: Alignment.bottomRight,
+                            child: Padding(
+                              padding: EdgeInsets.all(5),
+                              child: Icon(
+                                Icons.open_in_full_rounded,
+                                color: Colors.white,
+                                size: 15,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -572,9 +1057,59 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     );
   }
 
+  void _showFullScreenPhoto(String photoUrl) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog.fullscreen(
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            title: const Text('Material Photo'),
+            actions: [
+              IconButton(
+                tooltip: 'Close photo',
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 5,
+              child: Image.network(
+                photoUrl,
+                fit: BoxFit.contain,
+                loadingBuilder: (context, child, progress) =>
+                    progress == null
+                    ? child
+                    : const CircularProgressIndicator(color: kGold),
+                errorBuilder: (context, error, stackTrace) => const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Unable to load this photo.',
+                    style: TextStyle(color: Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showVerificationForm(ServiceRequestEntity request) {
+    final originalSacks = request.materialDetails.numberOfSacks ?? 0;
+    final originalCondition =
+        (request.materialDetails.condition ?? 'Rocky').trim().toLowerCase();
+    final originalState =
+        (request.materialDetails.state ?? 'Dry').trim().toLowerCase();
     final sackController = TextEditingController(
-      text: (request.materialDetails.numberOfSacks ?? 0).toString(),
+      text: originalSacks.toString(),
     );
     final estNumController = TextEditingController(text: '3');
     final remarksController = TextEditingController();
@@ -591,7 +1126,15 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
     String currentSource = request.materialDetails.source ?? '';
 
-    bool isAccurate = true;
+    bool isAccurate() {
+      final actualSacks = int.tryParse(sackController.text.trim());
+      final actualState = currentState == 'Others'
+          ? otherState.trim()
+          : currentState.trim();
+      return actualSacks == originalSacks &&
+          currentCondition.trim().toLowerCase() == originalCondition &&
+          actualState.toLowerCase() == originalState;
+    }
     String timeUnit = 'Hours';
 
     final List<String> conditionOptions = [
@@ -639,6 +1182,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       child: TextFormField(
                         controller: sackController,
                         keyboardType: TextInputType.number,
+                        onChanged: (_) => setModalState(() {}),
                         style: TextStyle(color: context.textColor),
                         decoration: InputDecoration(
                           labelText: 'Actual Sacks',
@@ -730,7 +1274,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     padding: const EdgeInsets.only(top: 8, bottom: 16),
                     child: TextFormField(
                       initialValue: otherState,
-                      onChanged: (v) => otherState = v,
+                      onChanged: (v) {
+                        otherState = v;
+                        setModalState(() {});
+                      },
                       style: TextStyle(color: context.textColor, fontSize: 13),
                       decoration: InputDecoration(
                         hintText: 'Specify material state',
@@ -828,49 +1375,54 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 ),
                 const SizedBox(height: 24),
 
-                const Text(
-                  'Final Verdict',
-                  style: TextStyle(
-                    color: kGold,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
                   ),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text(
-                          'Information Accurate',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        value: true,
-                        groupValue: isAccurate,
-                        activeColor: Colors.green,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setModalState(() => isAccurate = v!),
-                      ),
+                  decoration: BoxDecoration(
+                    color: (isAccurate() ? Colors.green : Colors.redAccent)
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: (isAccurate() ? Colors.green : Colors.redAccent)
+                          .withValues(alpha: 0.35),
                     ),
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text(
-                          'Information Inaccurate',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        value: false,
-                        groupValue: isAccurate,
-                        activeColor: Colors.redAccent,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) => setModalState(() => isAccurate = v!),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isAccurate()
+                            ? Icons.check_circle_rounded
+                            : Icons.error_rounded,
+                        color: isAccurate() ? Colors.green : Colors.redAccent,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Text(
+                        isAccurate() ? 'Accurate' : 'Inaccurate',
+                        style: TextStyle(
+                          color: isAccurate() ? Colors.green : Colors.redAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const Spacer(),
+                      Icon(
+                        Icons.lock_outline_rounded,
+                        size: 16,
+                        color: context.mutedTextColor,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Automatic',
+                        style: TextStyle(
+                          color: context.mutedTextColor,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
 
                 TextFormField(
@@ -878,10 +1430,12 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   style: TextStyle(color: context.textColor),
                   maxLines: 2,
                   decoration: InputDecoration(
-                    labelText: isAccurate
+                    labelText: isAccurate()
                         ? 'General Remarks'
                         : 'Notes for Miner',
-                    hintText: isAccurate ? 'Optional' : 'Explain discrepancies',
+                    hintText: isAccurate()
+                        ? 'Optional'
+                        : 'Explain discrepancies',
                     filled: true,
                     fillColor: context.surfaceColor,
                     border: OutlineInputBorder(
@@ -909,7 +1463,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                           ? otherState
                           : currentState,
                       'source': currentSource,
-                      'isAccurate': isAccurate,
+                      'isAccurate': isAccurate(),
                       'time': '${estNumController.text} $timeUnit',
                       'remarks': remarksController.text,
                     }),

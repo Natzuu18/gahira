@@ -37,6 +37,58 @@ class SupabaseServiceRequestRepository {
     }
   }
 
+  Future<Either<Failure, List<ServiceRequestModel>>>
+  getPendingOperatorVerificationRequests() async {
+    try {
+      final response = await _client
+          .from('service_requests')
+          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))')
+          .eq('status', 'pendingOperatorVerification');
+      return Right(_parseServiceRequestList(response));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, List<ServiceRequestModel>>>
+  getServiceRequestsVerifiedByOperator(String operatorId) async {
+    try {
+      final response = await _client
+          .from('service_requests')
+          .select('*, users:user_id(*), operator_verified_services!inner(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))')
+          .eq('operator_verified_services.operator_id', operatorId);
+      return Right(_parseServiceRequestList(response));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, List<ServiceRequestModel>>>
+  getOngoingServiceRequestsForOperator(String operatorId) async {
+    try {
+      final response = await _client
+          .from('service_requests')
+          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))')
+          .eq('ongoing_services.operator_id', operatorId)
+          .inFilter('status', ['processing', 'emergencyStop']);
+      return Right(_parseServiceRequestList(response));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  List<ServiceRequestModel> _parseServiceRequestList(dynamic response) {
+    return (response as List).map((json) {
+      try {
+        return ServiceRequestModel.fromJson(json);
+      } catch (e) {
+        print('PARSING ERROR FOR ROW: $json');
+        print('ERROR DETAILS: $e');
+        rethrow;
+      }
+    }).toList();
+  }
+
   Future<Either<Failure, ServiceRequestModel>> createServiceRequest(ServiceRequestModel model) async {
     try {
       final data = model.toJson();

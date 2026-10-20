@@ -243,7 +243,12 @@ class _MaintenancePageState extends State<MaintenancePage> {
     final maintType = item['maintenance_type'] ?? 'General Maintenance';
     final maintDate = item['maintenance_date'] ?? 'N/A Date';
     final description = item['description'] ?? 'No additional description provided.';
-    final remarks = item['remarks'] ?? '';
+    final remarksValue = item['remarks']?.toString() ?? '';
+    const evidencePrefix = 'Evidence photo: ';
+    final evidenceUrl = remarksValue.startsWith(evidencePrefix)
+        ? remarksValue.substring(evidencePrefix.length)
+        : null;
+    final remarks = evidenceUrl == null ? remarksValue : '';
 
     final lowerStatus = status.toLowerCase();
     final isPending = lowerStatus == 'scheduled' || lowerStatus == 'pending';
@@ -359,6 +364,37 @@ class _MaintenancePageState extends State<MaintenancePage> {
             ),
           ],
 
+          if (evidenceUrl != null && evidenceUrl.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Supporting Photo',
+              style: TextStyle(
+                color: kGold,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(
+                evidenceUrl,
+                height: 190,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  height: 70,
+                  alignment: Alignment.center,
+                  color: context.bgColor,
+                  child: Text(
+                    'Supporting photo could not be loaded.',
+                    style: TextStyle(color: context.mutedTextColor),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
           const SizedBox(height: 16),
 
           // Admin Review Action Buttons
@@ -375,7 +411,7 @@ class _MaintenancePageState extends State<MaintenancePage> {
                     ),
                     icon: const Icon(Icons.play_arrow_rounded, size: 18),
                     label: const Text('Approve & Start', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    onPressed: () => _updateStatus(item, 'In Progress'),
+                    onPressed: () => _updateStatus(item, 'ongoing'),
                   ),
                 ),
                 const SizedBox(width: 8),

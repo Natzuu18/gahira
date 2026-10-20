@@ -6,7 +6,6 @@ import '../../domain/entities/service_request_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import 'operator_menu.dart';
-import 'processing_workflow_page.dart';
 import 'workforce_shift_page.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../infrastructure/models/service_request_model.dart';
@@ -196,56 +195,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
                 },
               ),
               const SizedBox(height: 22),
-              _buildSectionHeading(
-                'Operator tools',
-                'Get to the next task quickly',
-              ),
-              const SizedBox(height: 10),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final columns = constraints.maxWidth >= 760 ? 3 : 1;
-                  return GridView.count(
-                    crossAxisCount: columns,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: columns == 1 ? 4.4 : 2.8,
-                    children: [
-                      _buildQuickActionButton(
-                        context,
-                        'Verify miner material',
-                        'Review incoming requests',
-                        Icons.fact_check_outlined,
-                        () => _openMenu(
-                          OperatorMenu.serviceVerification,
-                          const ServiceVerificationPage(),
-                        ),
-                      ),
-                      _buildQuickActionButton(
-                        context,
-                        'Manage processing',
-                        'Claim jobs and update stages',
-                        Icons.settings_input_component_rounded,
-                        () => _openMenu(
-                          OperatorMenu.processing,
-                          const ProcessingWorkflowPage(),
-                        ),
-                      ),
-                      _buildQuickActionButton(
-                        context,
-                        'Workforce & shifts',
-                        'Check team availability',
-                        Icons.groups_2_outlined,
-                        () => _openMenu(
-                          OperatorMenu.workforce,
-                          const WorkforceShiftPage(),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
               const SizedBox(height: 22),
               Row(
                 children: [
@@ -310,15 +259,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
                     color: context.textColor,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Verify incoming material, keep jobs moving, and support the team.',
-                  style: TextStyle(
-                    color: context.mutedTextColor,
-                    fontSize: 13,
-                    height: 1.35,
                   ),
                 ),
               ],
@@ -485,12 +425,8 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
           ],
         ),
         onTap: () => _openMenu(
-          isPending
-              ? OperatorMenu.serviceVerification
-              : OperatorMenu.processing,
-          isPending
-              ? const ServiceVerificationPage()
-              : const ProcessingWorkflowPage(),
+          OperatorMenu.serviceVerification,
+          const ServiceVerificationPage(),
         ),
       ),
     );
@@ -552,74 +488,6 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
         message,
         textAlign: TextAlign.center,
         style: TextStyle(color: context.mutedTextColor, fontSize: 13),
-      ),
-    );
-  }
-
-  Widget _buildQuickActionButton(
-    BuildContext context,
-    String label,
-    String subtitle,
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-        decoration: BoxDecoration(
-          color: context.surfaceColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: kGold.withValues(alpha: 0.16)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: kGold.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: kGold, size: 21),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: context.textColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: context.mutedTextColor,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              color: context.mutedTextColor,
-              size: 14,
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -1014,10 +1014,13 @@ class _MachinePageState extends State<MachinePage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildField(nameController, 'Machine Name'),
+                const SizedBox(height: 20),
                 _buildField(codeController, 'Machine Code'),
+                const SizedBox(height: 20),
                 _buildField(typeController, 'Type'),
+                const SizedBox(height: 20),
                 _buildField(locController, 'Location'),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
                   value: statusValue,
                   dropdownColor: context.surfaceColor,

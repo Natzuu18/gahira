@@ -51,7 +51,8 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
             _lname = res['lname'] ?? '';
             _phone = res['contact_num'] ?? '';
             _address = res['address'] ?? '';
-            final fullName = '$_fname ${_mname.isNotEmpty ? '$_mname ' : ''}$_lname'.trim();
+            final fullName =
+                '$_fname ${_mname.isNotEmpty ? '$_mname ' : ''}$_lname'.trim();
             if (fullName.isNotEmpty) {
               _adminName = fullName;
             }
@@ -85,7 +86,11 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                 Expanded(
                   child: Text(
                     'Admin Account Settings',
-                    style: TextStyle(color: kGold, fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(
+                      color: kGold,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               ],
@@ -95,21 +100,40 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Update your admin account details.', style: TextStyle(color: ctx.mutedTextColor, fontSize: 12)),
+                  Text(
+                    'Update your admin account details.',
+                    style: TextStyle(color: ctx.mutedTextColor, fontSize: 12),
+                  ),
                   const SizedBox(height: 16),
                   _buildDialogField(ctx, fnameController, 'First Name'),
                   const SizedBox(height: 12),
-                  _buildDialogField(ctx, mnameController, 'Middle Name (Optional)'),
+                  _buildDialogField(
+                    ctx,
+                    mnameController,
+                    'Middle Name (Optional)',
+                  ),
                   const SizedBox(height: 12),
                   _buildDialogField(ctx, lnameController, 'Last Name'),
                   const SizedBox(height: 12),
-                  _buildDialogField(ctx, phoneController, 'Contact Number', keyboardType: TextInputType.phone),
+                  _buildDialogField(
+                    ctx,
+                    phoneController,
+                    'Contact Number',
+                    keyboardType: TextInputType.phone,
+                  ),
                   const SizedBox(height: 12),
                   _buildDialogField(ctx, addressController, 'Address'),
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
-                  Text('Change Password (Optional)', style: TextStyle(color: kGold, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Change Password (Optional)',
+                    style: TextStyle(
+                      color: kGold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: passwordController,
@@ -118,11 +142,19 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                     decoration: InputDecoration(
                       labelText: 'New Password',
                       hintText: 'Leave blank to keep current password',
-                      hintStyle: TextStyle(color: ctx.mutedTextColor, fontSize: 11),
+                      hintStyle: TextStyle(
+                        color: ctx.mutedTextColor,
+                        fontSize: 11,
+                      ),
                       filled: true,
                       fillColor: ctx.bgColor,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
                 ],
@@ -131,28 +163,40 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
             actions: [
               TextButton(
                 onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: kGold, foregroundColor: kBlack),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kGold,
+                  foregroundColor: kBlack,
+                ),
                 onPressed: isSubmitting
                     ? null
                     : () async {
                         setModalState(() => isSubmitting = true);
                         try {
-                          final user = Supabase.instance.client.auth.currentUser;
+                          final user =
+                              Supabase.instance.client.auth.currentUser;
                           if (user != null) {
-                            await Supabase.instance.client.from('users').update({
-                              'fname': fnameController.text.trim(),
-                              'mname': mnameController.text.trim(),
-                              'lname': lnameController.text.trim(),
-                              'contact_num': phoneController.text.trim(),
-                              'address': addressController.text.trim(),
-                            }).eq('userId', user.id);
+                            await Supabase.instance.client
+                                .from('users')
+                                .update({
+                                  'fname': fnameController.text.trim(),
+                                  'mname': mnameController.text.trim(),
+                                  'lname': lnameController.text.trim(),
+                                  'contact_num': phoneController.text.trim(),
+                                  'address': addressController.text.trim(),
+                                })
+                                .eq('userId', user.id);
 
                             if (passwordController.text.trim().length >= 6) {
                               await Supabase.instance.client.auth.updateUser(
-                                UserAttributes(password: passwordController.text.trim()),
+                                UserAttributes(
+                                  password: passwordController.text.trim(),
+                                ),
                               );
                             }
 
@@ -160,7 +204,9 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                               Navigator.pop(ctx);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Account information updated successfully!'),
+                                  content: Text(
+                                    'Account information updated successfully!',
+                                  ),
                                   backgroundColor: Colors.green,
                                 ),
                               );
@@ -180,8 +226,18 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                         }
                       },
                 child: isSubmitting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: kBlack, strokeWidth: 2))
-                    : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          color: kBlack,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'Save Changes',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
               ),
             ],
           );
@@ -190,7 +246,12 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     );
   }
 
-  Widget _buildDialogField(BuildContext ctx, TextEditingController controller, String label, {TextInputType? keyboardType}) {
+  Widget _buildDialogField(
+    BuildContext ctx,
+    TextEditingController controller,
+    String label, {
+    TextInputType? keyboardType,
+  }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
@@ -199,19 +260,17 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
         labelText: label,
         filled: true,
         fillColor: ctx.bgColor,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
 
   void _logout() async {
-    await Supabase.instance.client.auth.signOut();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
+    await logoutAndNavigateToLogin(context);
   }
 
   Widget _buildLogoMark() {
@@ -252,10 +311,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
             fontSize: 16,
           ),
         ),
-        actions: const [
-          ThemeToggleButton(),
-          SizedBox(width: 8),
-        ],
+        actions: const [ThemeToggleButton(), SizedBox(width: 8)],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -306,7 +362,10 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                           ),
                         const SizedBox(height: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: kGold.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -398,7 +457,10 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                 leading: const Icon(Icons.logout_rounded, color: Colors.red),
                 title: const Text(
                   'Log Out',
-                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 subtitle: Text(
                   'Sign out of your administrator account',

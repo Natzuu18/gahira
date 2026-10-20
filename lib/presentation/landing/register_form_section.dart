@@ -64,6 +64,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   String? _appointmentError;
   DateTime _viewingDate = DateTime(DateTime.now().year, DateTime.now().month);
   String? _selectedTime;
+  String? _selectedStartTime;
   String? _selectedAvailabilityId;
 
   List<Map<String, String>> _availableSlots = [];
@@ -250,14 +251,35 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       },
       (slots) {
         setState(() {
-          _availableSlots = slots.map((s) {
-            return {
-              'availability_id': s['availability_id']?.toString() ?? '',
-              'date': s['date'].toString(),
-              'time': _displayTime(s['start_time'].toString()),
-              'address': s['address'].toString(),
-            };
-          }).toList();
+          _availableSlots = [];
+          for (final slot in slots) {
+            try {
+              final start = DateFormat('HH:mm:ss').parse(slot['start_time'].toString());
+              final end = DateFormat('HH:mm:ss').parse(slot['end_time'].toString());
+              final bookedValue = slot['booked_appointment_times'];
+              final bookedTimes = bookedValue is List
+                  ? bookedValue.map((value) => value.toString().substring(0, 8)).toSet()
+                  : <String>{};
+
+              var cursor = start;
+              while (cursor.add(const Duration(hours: 1)).compareTo(end) <= 0) {
+                final slotEnd = cursor.add(const Duration(hours: 1));
+                final startValue = DateFormat('HH:mm:ss').format(cursor);
+                if (!bookedTimes.contains(startValue)) {
+                  _availableSlots.add({
+                    'availability_id': slot['availability_id']?.toString() ?? '',
+                    'date': slot['date'].toString(),
+                    'time': '${_displayTime(startValue)} - ${_displayTime(DateFormat('HH:mm:ss').format(slotEnd))}',
+                    'start_time': startValue,
+                    'address': slot['address'].toString(),
+                  });
+                }
+                cursor = slotEnd;
+              }
+            } catch (_) {
+              // Skip malformed availability rows instead of showing unusable times.
+            }
+          }
           _isLoadingSlots = false;
         });
       },
@@ -424,9 +446,16 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
       _resumeError = (_role == UserRole.operator && _resumeFile == null)
           ? 'Please attach your resume'
           : null;
-      _appointmentError =
-      (_role == UserRole.operator && (_appointmentDate == null || _selectedTime == null))
-          ? 'Please select an interview date and time'
+      final today = DateTime.now();
+      final todayStart = DateTime(today.year, today.month, today.day);
+      final appointmentIsPast = _appointmentDate != null &&
+          DateTime(_appointmentDate!.year, _appointmentDate!.month, _appointmentDate!.day)
+              .isBefore(todayStart);
+      _appointmentError = (_role == UserRole.operator &&
+              (_appointmentDate == null || _selectedTime == null || appointmentIsPast))
+          ? (appointmentIsPast
+              ? 'Please choose an interview date from today onward'
+              : 'Please select an interview date and time')
           : null;
       _miningUnitError = 
       (_role == UserRole.miner && _selectedMiningUnitId == null && _miningUnitController.text.trim().isEmpty)
@@ -470,24 +499,17 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
 
       final service = RegistrationService(repository);
       
-      // Format appointment date as proper ISO 8601
+      // Store the selected date and the start of its one-hour time slot.
       String? formattedAppointmentDate;
-      if (_appointmentDate != null && _selectedTime != null) {
-        // Parse the display time (e.g., "09:00 AM") and combine with date
+      if (_appointmentDate != null && _selectedStartTime != null) {
         try {
-          final timeParts = _selectedTime!.split(' ');
-          final hourMin = timeParts[0].split(':');
-          final hour = int.parse(hourMin[0]);
-          final minute = int.parse(hourMin[1]);
-          final isPM = timeParts.length > 1 && timeParts[1].toUpperCase() == 'PM';
-          final adjustedHour = isPM && hour != 12 ? hour + 12 : (hour == 12 && !isPM ? 0 : hour);
-          
+          final selectedTime = DateFormat('HH:mm:ss').parse(_selectedStartTime!);
           final appointmentDateTime = DateTime(
             _appointmentDate!.year,
             _appointmentDate!.month,
             _appointmentDate!.day,
-            adjustedHour,
-            minute,
+            selectedTime.hour,
+            selectedTime.minute,
           );
           formattedAppointmentDate = appointmentDateTime.toIso8601String();
         } catch (e) {
@@ -1295,11 +1317,15 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
   }
 
   Widget _buildAppointmentDatePicker(BuildContext context) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final firstAllowedMonth = DateTime(now.year, now.month);
     // Filter available slots for the chosen month and year
     final List<Map<String, String>> chosenMonthSlots = _availableSlots.where((slot) {
       try {
         final date = DateFormat('yyyy-MM-dd').parse(slot['date']!);
-        return date.year == _viewingDate.year && date.month == _viewingDate.month;
+        return !date.isBefore(todayStart) &&
+            date.year == _viewingDate.year && date.month == _viewingDate.month;
       } catch (e) {
         return false;
       }
@@ -1310,7 +1336,9 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     final daysInMonth = DateTime(_viewingDate.year, _viewingDate.month + 1, 0).day;
     final offset = firstDay.weekday % 7; // 0 = Sunday, 1 = Monday...
 
-    final currentYear = DateTime.now().year;
+    final currentYear = now.year;
+    final isAtFirstAllowedMonth = _viewingDate.year == firstAllowedMonth.year &&
+        _viewingDate.month == firstAllowedMonth.month;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1327,8 +1355,8 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: const Icon(Icons.chevron_left, color: kGold),
-                onPressed: () {
+                icon: Icon(Icons.chevron_left, color: isAtFirstAllowedMonth ? context.mutedTextColor : kGold),
+                onPressed: isAtFirstAllowedMonth ? null : () {
                   setState(() {
                     _viewingDate = DateTime(_viewingDate.year, _viewingDate.month - 1);
                   });
@@ -1349,8 +1377,8 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
-                      items: List.generate(12, (index) {
-                        final monthNum = index + 1;
+                      items: List.generate(_viewingDate.year == currentYear ? 13 - now.month : 12, (index) {
+                        final monthNum = (_viewingDate.year == currentYear ? now.month : 1) + index;
                         final monthName = DateFormat('MMMM').format(DateTime(2025, monthNum));
                         return DropdownMenuItem<int>(
                           value: monthNum,
@@ -1382,7 +1410,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                         fontSize: 14,
                       ),
                       items: List.generate(10, (index) {
-                        final yearVal = currentYear - 2 + index;
+                        final yearVal = currentYear + index;
                         return DropdownMenuItem<int>(
                           value: yearVal,
                           child: Text(
@@ -1469,6 +1497,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   ? () => setState(() {
                         _appointmentDate = currentDate;
                         _selectedTime = null;
+                        _selectedStartTime = null;
                         _selectedAvailabilityId = null;
                         _appointmentError = null;
                       })
@@ -1514,7 +1543,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
           const SizedBox(height: 12),
           Center(
             child: Text(
-              'No interview dates scheduled for ${DateFormat('MMMM yyyy').format(_viewingDate)}.',
+              'No open interview times for ${DateFormat('MMMM yyyy').format(_viewingDate)}.',
               style: TextStyle(color: context.mutedTextColor, fontStyle: FontStyle.italic, fontSize: 12),
               textAlign: TextAlign.center,
             ),
@@ -1543,6 +1572,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                   runSpacing: 10,
                   children: daySlots.map((slotMap) {
                     final time = slotMap['time']!;
+                    final startTime = slotMap['start_time']!;
                     final availId = slotMap['availability_id'];
                     final isSelected = _selectedTime == time;
                     return ChoiceChip(
@@ -1558,6 +1588,7 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
                       onSelected: (selected) {
                         setState(() {
                           _selectedTime = selected ? time : null;
+                          _selectedStartTime = selected ? startTime : null;
                           _selectedAvailabilityId = selected ? availId : null;
                           _appointmentError = null;
                         });

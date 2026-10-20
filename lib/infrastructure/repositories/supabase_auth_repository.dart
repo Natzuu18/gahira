@@ -77,13 +77,15 @@ class SupabaseAuthRepository implements AuthRepository {
 
       final userData = await _client
           .from('users')
-          .select('*, role:role_id(role)')
+          .select('*, role:role_id(role), pin_hash')
           .eq('userId', authUser.id)
           .maybeSingle();
 
       if (userData == null) {
         return const Left(
-          ServerFailure('Account found but profile data is missing. Please contact support.'),
+          ServerFailure(
+            'Account found but profile data is missing. Please contact support.',
+          ),
         );
       }
 
@@ -91,19 +93,23 @@ class SupabaseAuthRepository implements AuthRepository {
       if (userData['status'] == 'pending') {
         await _client.auth.signOut();
         return const Left(
-          AuthFailure('Your application is still pending. Please wait for admin to response.'),
+          AuthFailure(
+            'Your application is still pending. Please wait for admin to response.',
+          ),
         );
       }
 
       if (userData['status'] == 'rejected') {
         await _client.auth.signOut();
         return const Left(
-          AuthFailure('Your application was rejected. Please contact support for more information.'),
+          AuthFailure(
+            'Your application was rejected. Please contact support for more information.',
+          ),
         );
       }
 
       final updatedUserData = Map<String, dynamic>.from(userData);
-      
+
       // Check if password change is required (first login after approval)
       if (userData['status'] == 'approved') {
         updatedUserData['role_id'] = 'change_password_required';
@@ -116,7 +122,9 @@ class SupabaseAuthRepository implements AuthRepository {
         }
       }
 
-      print('Fetched User: ${authUser.email}, Status: ${userData['status']}, Role Assigned: ${updatedUserData['role_id']}');
+      print(
+        'Fetched User: ${authUser.email}, Status: ${userData['status']}, Role Assigned: ${updatedUserData['role_id']}',
+      );
 
       return Right(UserModel.fromJson(updatedUserData));
     } catch (e) {
@@ -166,7 +174,7 @@ class SupabaseAuthRepository implements AuthRepository {
         return Left(
           ServerFailure(
             'Application submitted but profile setup failed: ${insertError.toString()}. '
-                'Please contact support.',
+            'Please contact support.',
           ),
         );
       }
@@ -245,7 +253,9 @@ class SupabaseAuthRepository implements AuthRepository {
         updatedUserData['role_id'] = roleName;
       }
 
-      print('Current User: ${user.email}, Role ID: ${userData['role_id']}, Role Name: $roleName');
+      print(
+        'Current User: ${user.email}, Role ID: ${userData['role_id']}, Role Name: $roleName',
+      );
 
       return Right(UserModel.fromJson(updatedUserData));
     } catch (e) {

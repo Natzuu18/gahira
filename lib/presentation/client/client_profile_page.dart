@@ -260,12 +260,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                    (route) => false,
-                  );
-                },
+                onPressed: () => logoutAndNavigateToLogin(context),
                 icon: const Icon(Icons.logout_rounded),
                 label: const Text('Log Out'),
                 style: ElevatedButton.styleFrom(

@@ -39,6 +39,7 @@ CREATE TABLE public.applications (
   response_at timestamp with time zone,
   status character varying NOT NULL DEFAULT 'pending'::character varying,
   appointment_date date,
+  appointment_time time without time zone,
   appointment_status character varying DEFAULT 'scheduled'::character varying,
   appointment_remarks text,
   availability_id uuid,
@@ -48,6 +49,11 @@ CREATE TABLE public.applications (
   CONSTRAINT applications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(userId),
   CONSTRAINT applications_availability_id_fkey FOREIGN KEY (availability_id) REFERENCES public.appointment_availability(availability_id)
 );
+CREATE UNIQUE INDEX applications_one_active_booking_per_time_idx
+  ON public.applications (appointment_date, appointment_time)
+  WHERE appointment_date IS NOT NULL
+    AND appointment_time IS NOT NULL
+    AND status <> 'rejected';
 CREATE TABLE public.phone_otp_verifications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   phone text NOT NULL,

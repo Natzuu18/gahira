@@ -147,6 +147,8 @@ class MaterialDetails extends Equatable {
   final String? sourceType; // Associated Tunnel, Ball Mill, etc.
   final String? source; // Details of the source
   final int? numberOfSacks;
+  final double? weight; // material_weight in kg
+  final double? actualWeight; // actual_weight in kg verified by operator
   final String? notes;
   final String? documentUrl;
   final List<String> photoUrls;
@@ -159,6 +161,8 @@ class MaterialDetails extends Equatable {
     this.sourceType,
     this.source,
     this.numberOfSacks,
+    this.weight,
+    this.actualWeight,
     this.notes,
     this.documentUrl,
     this.photoUrls = const [],
@@ -171,6 +175,8 @@ class MaterialDetails extends Equatable {
     String? sourceType,
     String? source,
     int? numberOfSacks,
+    double? weight,
+    double? actualWeight,
     String? notes,
     String? documentUrl,
     List<String>? photoUrls,
@@ -182,6 +188,8 @@ class MaterialDetails extends Equatable {
       sourceType: sourceType ?? this.sourceType,
       source: source ?? this.source,
       numberOfSacks: numberOfSacks ?? this.numberOfSacks,
+      weight: weight ?? this.weight,
+      actualWeight: actualWeight ?? this.actualWeight,
       notes: notes ?? this.notes,
       documentUrl: documentUrl ?? this.documentUrl,
       photoUrls: photoUrls ?? this.photoUrls,
@@ -196,6 +204,8 @@ class MaterialDetails extends Equatable {
     sourceType,
     source,
     numberOfSacks,
+    weight,
+    actualWeight,
     notes,
     documentUrl,
     photoUrls,

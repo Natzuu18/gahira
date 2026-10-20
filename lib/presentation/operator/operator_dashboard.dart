@@ -396,7 +396,7 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 3),
           child: Text(
-            'Ref $reference  •  $sacks ${sacks == 1 ? 'sack' : 'sacks'}  •  ${request.materialDetails.sourceType ?? 'Material service'}',
+            'Ref $reference  •  $sacks ${sacks == 1 ? 'sack' : 'sacks'}${request.materialDetails.weight != null ? ' (${request.materialDetails.weight} kg)' : ''}  •  ${request.materialDetails.sourceType ?? 'Material service'}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: context.mutedTextColor, fontSize: 11),

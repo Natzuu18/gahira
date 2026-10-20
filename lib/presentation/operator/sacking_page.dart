@@ -63,8 +63,29 @@ class _SackingPageState extends State<SackingPage> {
     final requestRes = await _requestRepo.getServiceRequests();
 
     if (mounted) {
+      final machines = machinesRes.getOrElse(() => []);
+      final availableMachines = machines.where(_machineHasAvailableDrum).toList();
+      final selectedMachine = availableMachines.cast<Map<String, dynamic>?>().firstWhere(
+        (machine) => machine?['machine_id']?.toString() == _selectedMachineId,
+        orElse: () => null,
+      );
+      final machineToSelect = selectedMachine ??
+          (availableMachines.isNotEmpty ? availableMachines.first : null);
+      final availableDrums = machineToSelect == null
+          ? <dynamic>[]
+          : _availableDrums(machineToSelect);
+      final selectedDrumStillAvailable = availableDrums.any(
+        (drum) => drum['drum_id']?.toString() == _selectedDrumId,
+      );
+
       setState(() {
-        _machines = machinesRes.getOrElse(() => []);
+        _machines = machines;
+        _selectedMachineId = machineToSelect?['machine_id']?.toString();
+        if (!selectedDrumStillAvailable) {
+          _selectedDrumId = availableDrums.isNotEmpty
+              ? availableDrums.first['drum_id']?.toString()
+              : null;
+        }
         _existingBatches = batchesRes.getOrElse(() => []);
 
         requestRes.fold((_) => null, (list) {
@@ -76,6 +97,21 @@ class _SackingPageState extends State<SackingPage> {
         _isLoading = false;
       });
     }
+  }
+
+  List<dynamic> _availableDrums(Map<String, dynamic> machine) {
+    final drums = machine['drums'];
+    if (drums is! List) return <dynamic>[];
+    return drums.where((drum) {
+      if (drum is! Map) return false;
+      return (drum['status']?.toString().toLowerCase() ?? 'available') ==
+          'available';
+    }).toList();
+  }
+
+  bool _machineHasAvailableDrum(Map<String, dynamic> machine) {
+    final status = machine['status']?.toString().toLowerCase() ?? 'available';
+    return status == 'available' && _availableDrums(machine).isNotEmpty;
   }
 
   ServiceRequestEntity get _effectiveRequest =>
@@ -113,7 +149,13 @@ class _SackingPageState extends State<SackingPage> {
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
         title: Text(
-          'BATCH SACKING / MILLING',
+          _effectiveRequest.processingDetails.currentStage ==
+                  ProcessingStage.washingSeparation
+              ? 'WASHING / SEPARATION'
+              : _effectiveRequest.processingDetails.currentStage ==
+                    ProcessingStage.refining
+              ? 'REFINING'
+              : 'BATCH SACKING / MILLING',
           style: TextStyle(
             color: kGold,
             fontWeight: FontWeight.bold,
@@ -127,6 +169,12 @@ class _SackingPageState extends State<SackingPage> {
           : _effectiveRequest.processingDetails.currentStage ==
                 ProcessingStage.unloading
           ? _buildUnloadingUI()
+          : _effectiveRequest.processingDetails.currentStage ==
+                ProcessingStage.washingSeparation
+          ? _buildWashingUI()
+          : _effectiveRequest.processingDetails.currentStage ==
+                ProcessingStage.refining
+          ? _buildRefiningUI()
           : Column(
               children: [
                 if (_existingBatches.any(
@@ -308,7 +356,7 @@ class _SackingPageState extends State<SackingPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Choose Machine',
+            'Choose Machine (available machines are preselected)',
             style: TextStyle(
               color: kGold,
               fontSize: 12,
@@ -318,6 +366,14 @@ class _SackingPageState extends State<SackingPage> {
           const SizedBox(height: 8),
           _buildMachineSelector(),
 
+          if (_machines.where(_machineHasAvailableDrum).isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'No available machine with an available drum. Ask the admin to check machine and drum availability.',
+                style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+              ),
+            ),
           if (_selectedMachineId != null) ...[
             const SizedBox(height: 20),
             Text(
@@ -395,7 +451,8 @@ class _SackingPageState extends State<SackingPage> {
       spacing: 8,
       runSpacing: 8,
       children: _machines.map((m) {
-        final isSelected = _selectedMachineId == m['machine_id'];
+        if (!_machineHasAvailableDrum(m)) return const SizedBox.shrink();
+        final isSelected = _selectedMachineId == m['machine_id']?.toString();
         final status = m['status']?.toString().toLowerCase();
         final inUse = status == 'in_use';
         final isEmergency = status == 'emergency_stop';
@@ -417,8 +474,14 @@ class _SackingPageState extends State<SackingPage> {
               ? null
               : (val) {
                   setState(() {
-                    _selectedMachineId = val ? m['machine_id'] : null;
+                    _selectedMachineId = val ? m['machine_id']?.toString() : null;
                     _selectedDrumId = null;
+                    if (val) {
+                      final drums = _availableDrums(m);
+                      _selectedDrumId = drums.isNotEmpty
+                          ? drums.first['drum_id']?.toString()
+                          : null;
+                    }
                   });
                 },
           selectedColor: kGold,
@@ -438,15 +501,22 @@ class _SackingPageState extends State<SackingPage> {
 
   Widget _buildDrumSelector() {
     final machine = _machines.firstWhere(
-      (m) => m['machine_id'] == _selectedMachineId,
+      (m) => m['machine_id']?.toString() == _selectedMachineId,
     );
-    final List<dynamic> drums = machine['drums'] ?? [];
+    final List<dynamic> drums = _availableDrums(machine);
+
+    if (drums.isEmpty) {
+      return Text(
+        'No available drums for this machine.',
+        style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+      );
+    }
 
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: drums.map((d) {
-        final isSelected = _selectedDrumId == d['drum_id'];
+        final isSelected = _selectedDrumId == d['drum_id']?.toString();
         final status = d['status']?.toString().toLowerCase();
         final inUse = status == 'in_use';
         final isEmergency = status == 'emergency_stop';
@@ -467,7 +537,7 @@ class _SackingPageState extends State<SackingPage> {
           onSelected: (inUse || isEmergency)
               ? null
               : (val) {
-                  setState(() => _selectedDrumId = val ? d['drum_id'] : null);
+                  setState(() => _selectedDrumId = val ? d['drum_id']?.toString() : null);
                 },
           selectedColor: kGold,
           backgroundColor: bgColor,
@@ -997,6 +1067,98 @@ class _SackingPageState extends State<SackingPage> {
     );
   }
 
+  Widget _buildWashingUI() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.water_drop_outlined, color: Colors.blue, size: 68),
+            const SizedBox(height: 20),
+            Text(
+              'WASHING & SEPARATION',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.textColor,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'The service is now in the washing and separation stage.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.mutedTextColor),
+            ),
+            const SizedBox(height: 36),
+            ElevatedButton(
+              onPressed: _isSaving ? null : _handleProceedToRefining,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 54),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'WASHING COMPLETE — PROCEED TO REFINING',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRefiningUI() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.auto_awesome_outlined, color: kGold, size: 68),
+            const SizedBox(height: 20),
+            Text(
+              'REFINING',
+              style: TextStyle(
+                color: context.textColor,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'The service is in the refining stage. Complete processing when refining is finished.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.mutedTextColor),
+            ),
+            const SizedBox(height: 36),
+            ElevatedButton(
+              onPressed: _isSaving ? null : _handleCompleteRefining,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 54),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'COMPLETE PROCESSING',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDurationSummary(DateTime start, DateTime end) {
     final duration = end.difference(start);
     final m = duration.inMinutes;
@@ -1114,12 +1276,12 @@ class _SackingPageState extends State<SackingPage> {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     if (operatorId == null) return;
 
-    setState(() => _isLoading = true);
+    setState(() => _isSaving = true);
     final result = await _service.updateProcessingStatus(
-      requestId: widget.request.id,
+      requestId: _effectiveRequest.id,
       operatorId: operatorId,
       newStatus: ServiceRequestStatus.processing,
-      currentStatus: widget.request.status.toString().split('.').last,
+      currentStatus: _effectiveRequest.status.toString().split('.').last,
       newStage: ProcessingStage.washingSeparation,
     );
 
@@ -1127,8 +1289,64 @@ class _SackingPageState extends State<SackingPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(l.message)));
-      setState(() => _isLoading = false);
-    }, (_) => Navigator.pop(context, true));
+      setState(() => _isSaving = false);
+    }, (_) {
+      setState(() => _isSaving = false);
+      _loadData();
+    });
+  }
+
+  Future<void> _advanceStage(ProcessingStage stage) async {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null || _isSaving) return;
+
+    setState(() => _isSaving = true);
+    final result = await _service.updateProcessingStatus(
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
+      newStatus: ServiceRequestStatus.processing,
+      currentStatus: _effectiveRequest.status.toString().split('.').last,
+      newStage: stage,
+    );
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failure.message)),
+        );
+        setState(() => _isSaving = false);
+      },
+      (_) {
+        setState(() => _isSaving = false);
+        _loadData();
+      },
+    );
+  }
+
+  Future<void> _handleProceedToRefining() =>
+      _advanceStage(ProcessingStage.refining);
+
+  Future<void> _handleCompleteRefining() async {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null || _isSaving) return;
+
+    setState(() => _isSaving = true);
+    final result = await _service.updateProcessingStatus(
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
+      newStatus: ServiceRequestStatus.processingCompleted,
+      currentStatus: _effectiveRequest.status.toString().split('.').last,
+      newStage: ProcessingStage.completed,
+      remarks: 'Processing completed after refining.',
+    );
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failure.message)),
+        );
+        setState(() => _isSaving = false);
+      },
+      (_) => Navigator.pop(context, true),
+    );
   }
 
   void _handleStartBatch() async {
@@ -1143,10 +1361,10 @@ class _SackingPageState extends State<SackingPage> {
 
     // Safety check: ensure drum is still available
     final machine = _machines.firstWhere(
-      (m) => m['machine_id'] == _selectedMachineId,
+      (m) => m['machine_id']?.toString() == _selectedMachineId,
     );
     final drum = (machine['drums'] as List).firstWhere(
-      (d) => d['drum_id'] == _selectedDrumId,
+      (d) => d['drum_id']?.toString() == _selectedDrumId,
     );
     if (drum['status']?.toString().toLowerCase() == 'in_use') {
       ScaffoldMessenger.of(context).showSnackBar(

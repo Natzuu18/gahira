@@ -77,6 +77,119 @@ class SupabaseServiceRequestRepository {
     }
   }
 
+  Future<Either<Failure, List<ServiceRequestModel>>>
+  getAssignedServiceRequestsForOperator(String operatorId) async {
+    try {
+      final response = await _client
+          .from('service_requests')
+          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))')
+          .eq('ongoing_services.operator_id', operatorId)
+          .inFilter('status', ['verified', 'accepted', 'queued', 'scheduled']);
+      return Right(_parseServiceRequestList(response));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> assignAvailableOperatorToService({
+    required String requestId,
+    required String operatorId,
+  }) async {
+    try {
+      final operator = await _client
+          .from('users')
+          .select('status, role:role_id!inner(role)')
+          .eq('userId', operatorId)
+          .maybeSingle();
+      final role = (operator?['role'] as Map?)?['role']?.toString().toLowerCase();
+      final operatorStatus = operator?['status']?.toString().toLowerCase();
+      if (operator == null ||
+          role != 'operator' ||
+          (operatorStatus != 'active' && operatorStatus != 'approved')) {
+        return Left(ServerFailure('This operator is not active and available.'));
+      }
+
+      final request = await _client
+          .from('service_requests')
+          .select('status, ongoing_services(operator_id)')
+          .eq('service_request_id', requestId)
+          .maybeSingle();
+      final requestStatus = request?['status']?.toString();
+      const assignableStatuses = {'verified', 'accepted', 'queued', 'scheduled', 'assigned'};
+      if (request == null || !assignableStatuses.contains(requestStatus)) {
+        return Left(ServerFailure('This service is no longer available for assignment.'));
+      }
+
+      final rawAssignments = request['ongoing_services'];
+      final currentAssignments = rawAssignments is List
+          ? rawAssignments
+          : rawAssignments is Map
+              ? [rawAssignments]
+              : const [];
+      if (currentAssignments.isNotEmpty) {
+        return Left(ServerFailure('This service already has an assigned operator.'));
+      }
+
+      final assignedServiceRows = await _client
+          .from('ongoing_services')
+          .select('service_request_id')
+          .eq('operator_id', operatorId)
+          .neq('service_request_id', requestId);
+      final assignedRequestIds = (assignedServiceRows as List)
+          .map((row) => row['service_request_id'].toString())
+          .toList();
+      if (assignedRequestIds.isNotEmpty) {
+        final busyServices = await _client
+            .from('service_requests')
+            .select('service_request_id')
+            .inFilter('service_request_id', assignedRequestIds)
+            .inFilter('status', [
+              'verified',
+              'accepted',
+              'queued',
+              'scheduled',
+              'assigned',
+              'processing',
+              'emergencyStop',
+            ])
+            .limit(1);
+        if ((busyServices as List).isNotEmpty) {
+          return Left(ServerFailure(
+            'This operator is already assigned to another active service.',
+          ));
+        }
+      }
+
+      await _client.from('ongoing_services').insert({
+        'service_request_id': requestId,
+        'operator_id': operatorId,
+        'current_stage': 'rebagging',
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> assignVerifyingOperatorToService({
+    required String requestId,
+    required String operatorId,
+  }) async {
+    try {
+      await _client.from('ongoing_services').upsert(
+        {
+          'service_request_id': requestId,
+          'operator_id': operatorId,
+          'current_stage': 'rebagging',
+        },
+        onConflict: 'service_request_id',
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
   List<ServiceRequestModel> _parseServiceRequestList(dynamic response) {
     return (response as List).map((json) {
       try {
@@ -167,11 +280,30 @@ class SupabaseServiceRequestRepository {
     required String operatorId,
   }) async {
     try {
-      await _client.from('ongoing_services').insert({
-        'service_request_id': requestId,
-        'operator_id': operatorId,
-        'current_stage': 'rebagging',
-      });
+      final existing = await _client
+          .from('ongoing_services')
+          .select('operator_id')
+          .eq('service_request_id', requestId)
+          .maybeSingle();
+      if (existing != null) {
+        if (existing['operator_id']?.toString() != operatorId) {
+          return Left(ServerFailure('This service is assigned to another operator.'));
+        }
+        await _client
+            .from('ongoing_services')
+            .update({
+              'current_stage': 'rebagging',
+              'started_at': DateTime.now().toIso8601String(),
+              'last_stage_updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('service_request_id', requestId);
+      } else {
+        await _client.from('ongoing_services').insert({
+          'service_request_id': requestId,
+          'operator_id': operatorId,
+          'current_stage': 'rebagging',
+        });
+      }
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
@@ -410,6 +542,40 @@ class SupabaseServiceRequestRepository {
     try {
       await _client.from('participant_payments').insert(payment);
       return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> submitGroupServicePayment({
+    required String requestId,
+    required double amount,
+    required String receiptUrl,
+  }) async {
+    try {
+      await _client.rpc(
+        'submit_group_service_payment',
+        params: {
+          'target_service_request_id': requestId,
+          'payment_amount': amount,
+          'target_receipt_url': receiptUrl,
+        },
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>>
+  getParticipantPaymentHistory(String userId) async {
+    try {
+      final response = await _client
+          .from('participant_payments')
+          .select('payment_id, service_request_id, user_id, amount, receipt_url, payment_date')
+          .eq('user_id', userId)
+          .order('payment_date', ascending: false);
+      return Right(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }

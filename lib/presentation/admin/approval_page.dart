@@ -44,6 +44,7 @@ class PendingAccount {
 
   // Appointment info
   final DateTime? appointmentDate;
+  final String? appointmentTime;
   final String? availabilityId;
   final String? startTime;
   final String? endTime;
@@ -61,6 +62,7 @@ class PendingAccount {
     required this.requestedAt,
     this.documents = const [],
     this.appointmentDate,
+    this.appointmentTime,
     this.availabilityId,
     this.startTime,
     this.endTime,
@@ -133,6 +135,7 @@ class ApprovalService {
             requestedAt: DateTime.parse(app['created_at'] as String),
             documents: documents,
             appointmentDate: availability != null ? DateTime.parse(availability['date'] as String) : null,
+            appointmentTime: app['appointment_time'] as String?,
             availabilityId: app['availability_id'] as String?,
             startTime: availability?['start_time'],
             endTime: availability?['end_time'],
@@ -708,7 +711,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
              ),
              _buildInfoRow(
                Icons.access_time_rounded, 
-               'Time: ${_formatDisplayTime(account.startTime)} - ${_formatDisplayTime(account.endTime)}',
+               'Time: ${_formatAppointmentTime(account)}',
              ),
              _buildInfoRow(
                Icons.location_on_outlined, 
@@ -815,6 +818,21 @@ class _ApprovalPageState extends State<ApprovalPage> {
       return DateFormat('hh:mm a').format(dt);
     } catch (e) {
       return timeStr;
+    }
+  }
+
+  String _formatAppointmentTime(PendingAccount account) {
+    final chosenTime = account.appointmentTime;
+    if (chosenTime == null || chosenTime.isEmpty) {
+      // Older applications may not have a stored time; use their availability window.
+      return '${_formatDisplayTime(account.startTime)} - ${_formatDisplayTime(account.endTime)}';
+    }
+    try {
+      final start = DateFormat('HH:mm:ss').parse(chosenTime);
+      final end = start.add(const Duration(hours: 1));
+      return '${DateFormat('hh:mm a').format(start)} - ${DateFormat('hh:mm a').format(end)}';
+    } catch (_) {
+      return chosenTime;
     }
   }
 

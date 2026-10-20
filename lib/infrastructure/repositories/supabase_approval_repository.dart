@@ -70,6 +70,7 @@ class SupabaseApprovalRepository {
             temp_pass,
             document_id,
             appointment_date,
+            appointment_time,
             appointment_status,
             appointment_remarks,
             availability_id,

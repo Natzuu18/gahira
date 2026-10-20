@@ -55,7 +55,7 @@ enum AdminMenu {
   // Others
   notification,
   reports,
-  activityLogs
+  activityLogs,
 }
 
 class AdminDrawer extends StatelessWidget {
@@ -99,8 +99,10 @@ class AdminDrawer extends StatelessWidget {
                           border: Border.all(color: kGold, width: 1.6),
                           color: context.surfaceColor,
                         ),
-                        child:
-                        Icon(Icons.person, color: kGold.withOpacity(0.9)),
+                        child: Icon(
+                          Icons.person,
+                          color: kGold.withOpacity(0.9),
+                        ),
                       ),
                       const ThemeToggleButton(),
                     ],
@@ -151,7 +153,8 @@ class AdminDrawer extends StatelessWidget {
                         AdminMenu.minerList,
                         AdminMenu.registrationRequests,
                         AdminMenu.addMiner,
-                        AdminMenu.availability // Moving this back here per previous prompt
+                        AdminMenu
+                            .availability, // Moving this back here per previous prompt
                       ],
                       children: [
                         _buildSubItem(
@@ -269,7 +272,7 @@ class AdminDrawer extends StatelessWidget {
                         AdminMenu.goldTransactions,
                         AdminMenu.bills,
                         AdminMenu.expenses,
-                        AdminMenu.payments
+                        AdminMenu.payments,
                       ],
                       children: [
                         _buildSubItem(
@@ -335,17 +338,15 @@ class AdminDrawer extends StatelessWidget {
               child: Divider(color: kGold.withOpacity(0.15)),
             ),
             ListTile(
-              leading: Icon(Icons.logout_rounded, color: kGold.withOpacity(0.7)),
+              leading: Icon(
+                Icons.logout_rounded,
+                color: kGold.withOpacity(0.7),
+              ),
               title: Text(
                 'Log out',
                 style: TextStyle(color: context.textColor.withOpacity(0.85)),
               ),
-              onTap: () {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                      (route) => false,
-                );
-              },
+              onTap: () => logoutAndNavigateToLogin(context),
             ),
             const SizedBox(height: 12),
           ],
@@ -365,10 +366,7 @@ class AdminDrawer extends StatelessWidget {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
-        leading: Icon(
-          icon,
-          color: isSelected ? kGold : kGold.withOpacity(0.7),
-        ),
+        leading: Icon(icon, color: isSelected ? kGold : kGold.withOpacity(0.7)),
         title: Text(
           label,
           style: TextStyle(
@@ -384,12 +382,12 @@ class AdminDrawer extends StatelessWidget {
   }
 
   Widget _buildItem(
-      BuildContext context, {
-        required IconData icon,
-        required String label,
-        required AdminMenu menu,
-        required Widget page,
-      }) {
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required AdminMenu menu,
+    required Widget page,
+  }) {
     final bool selected = currentMenu == menu;
     return ListTile(
       dense: true,
@@ -408,27 +406,31 @@ class AdminDrawer extends StatelessWidget {
       onTap: () {
         Navigator.of(context).pop(); // close drawer first
         if (!selected) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => page),
-          );
+          Navigator.of(
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => page));
         }
       },
     );
   }
 
   Widget _buildSubItem(
-      BuildContext context, {
-        required IconData icon,
-        required String label,
-        required AdminMenu menu,
-        required Widget page,
-      }) {
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required AdminMenu menu,
+    required Widget page,
+  }) {
     final bool selected = currentMenu == menu;
     return ListTile(
       dense: true,
       contentPadding: const EdgeInsets.only(left: 48),
       visualDensity: VisualDensity.compact,
-      leading: Icon(icon, color: selected ? kGold : kGold.withOpacity(0.6), size: 20),
+      leading: Icon(
+        icon,
+        color: selected ? kGold : kGold.withOpacity(0.6),
+        size: 20,
+      ),
       title: Text(
         label,
         style: TextStyle(
@@ -442,9 +444,9 @@ class AdminDrawer extends StatelessWidget {
       onTap: () {
         Navigator.of(context).pop(); // close drawer first
         if (!selected) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => page),
-          );
+          Navigator.of(
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => page));
         }
       },
     );
@@ -463,7 +465,11 @@ class _PlaceholderPage extends StatelessWidget {
         backgroundColor: context.surfaceColor,
         title: Text(
           title.toUpperCase(),
-          style: const TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2),
+          style: const TextStyle(
+            color: kGold,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+          ),
         ),
         centerTitle: true,
         iconTheme: const IconThemeData(color: kGold),
@@ -476,7 +482,11 @@ class _PlaceholderPage extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Under Development',
-              style: TextStyle(color: context.textColor, fontSize: 22, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: context.textColor,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -484,7 +494,8 @@ class _PlaceholderPage extends StatelessWidget {
               style: TextStyle(color: context.mutedTextColor, fontSize: 16),
             ),
           ],
-        )      ),
+        ),
+      ),
     );
   }
 }

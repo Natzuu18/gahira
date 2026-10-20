@@ -150,12 +150,7 @@ class MinerDrawer extends StatelessWidget {
                 'Log out',
                 style: TextStyle(color: context.textColor.withOpacity(0.85)),
               ),
-              onTap: () {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                  (route) => false,
-                );
-              },
+              onTap: () => logoutAndNavigateToLogin(context),
             ),
             const SizedBox(height: 12),
           ],

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 import '../../domain/entities/user_entity.dart';
 import '../../infrastructure/repositories/supabase_user_repository.dart';
+import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../../infrastructure/supabase/supabase_config.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/adminDrawer.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/pin_dialog.dart';
 import 'approval_page.dart';
 import 'availability_page.dart';
 import 'add_miner_page.dart';
@@ -21,6 +24,7 @@ class MinerClientListPage extends StatefulWidget {
 class _MinerClientListPageState extends State<MinerClientListPage> with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _repository = SupabaseUserRepository();
+  final _serviceRequestRepository = SupabaseServiceRequestRepository();
   late TabController _tabController;
   
   final TextEditingController _searchController = TextEditingController();
@@ -29,6 +33,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
   String _selectedMonthFilter = 'All'; // 'All' or 'January 2025'
 
   List<UserEntity> _users = [];
+  final Set<String> _unavailableDocumentIds = {};
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -268,6 +273,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
 
   // --- SLIDING SHEET: VIEW USER DETAILS ---
   void _showUserDetails(UserEntity user) {
+    _unavailableDocumentIds.clear();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -385,61 +391,34 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
 
                           return Column(
                             children: documents.map((doc) {
-                              final isPdf = doc['type'] == 'pdf';
+                              final unavailable = _isDirectoryDocumentUnavailable(doc);
+                              final type = unavailable ? 'empty' : (doc['type'] ?? 'other');
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: context.bgColor,
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(10),
                                   border: Border.all(color: context.textColor.withOpacity(0.08)),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: BoxDecoration(
-                                        color: kGold.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Icon(
-                                        isPdf ? Icons.picture_as_pdf_outlined : Icons.insert_drive_file_outlined,
-                                        color: kGold,
-                                        size: 20,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            doc['label'] ?? 'Attached Document',
-                                            style: TextStyle(
-                                              color: context.textColor,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Tap to view / download',
-                                            style: TextStyle(color: context.mutedTextColor, fontSize: 11),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.download_rounded, color: kGold, size: 20),
-                                      tooltip: 'Download / View Document',
-                                      onPressed: () => _openDocumentUrl(doc['url']!),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.open_in_new, color: kGold, size: 18),
-                                      tooltip: 'Open in Browser',
-                                      onPressed: () => _openDocumentUrl(doc['url']!),
-                                    ),
-                                  ],
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  leading: _buildDirectoryDocumentThumb(doc, size: 52),
+                                  title: Text(
+                                    doc['label'] ?? 'Attached Document',
+                                    style: TextStyle(color: context.textColor, fontWeight: FontWeight.w600, fontSize: 13),
+                                  ),
+                                  subtitle: Text(
+                                    type == 'empty'
+                                        ? 'Empty'
+                                        : (type == 'image'
+                                        ? 'Image · Tap to view'
+                                        : (type == 'pdf' ? 'PDF · Opens in browser' : 'Document · Opens in browser')),
+                                    style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+                                  ),
+                                  trailing: type == 'empty'
+                                      ? Icon(Icons.remove_circle_outline, color: context.mutedTextColor, size: 18)
+                                      : Icon(Icons.open_in_new, color: context.textColor.withOpacity(0.5), size: 18),
+                                  onTap: unavailable ? null : () => _openDirectoryDocument(doc),
                                 ),
                               );
                             }).toList(),
@@ -477,6 +456,17 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
 
   Future<List<Map<String, String>>> _fetchUserApplicationDocuments(String userId) async {
     final List<Map<String, String>> docs = [];
+    String typeForDocument(String path) {
+      final lowerPath = Uri.parse(path).path.toLowerCase();
+      if (lowerPath.endsWith('.png') ||
+          lowerPath.endsWith('.jpg') ||
+          lowerPath.endsWith('.jpeg')) {
+        return 'image';
+      }
+      if (lowerPath.endsWith('.pdf')) return 'pdf';
+      return 'other';
+    }
+
     try {
       final appResponse = await SupabaseConfig.client
           .from('applications')
@@ -487,15 +477,12 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
         final docId = app['document_id']?.toString();
         if (docId != null && docId.isNotEmpty) {
           final url = SupabaseConfig.client.storage.from('userFiles').getPublicUrl(docId);
-          final lower = docId.toLowerCase();
+          final type = typeForDocument(docId);
           String label = 'Application Document';
-          String type = 'other';
-          if (lower.contains('.png') || lower.contains('.jpg') || lower.contains('.jpeg') || lower.contains('id') || lower.contains('doc_')) {
+          if (type == 'image') {
             label = 'Valid ID / Document';
-            type = 'image';
-          } else if (lower.contains('.pdf')) {
+          } else if (type == 'pdf') {
             label = 'Application Document (PDF)';
-            type = 'pdf';
           }
           docs.add({
             'id': docId,
@@ -512,18 +499,44 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
           .eq('user_id', userId);
 
       for (final pd in (personalResponse as List)) {
-        final docId = pd['document_id']?.toString();
+        final docId = pd['document_id']?.toString().trim();
         if (docId != null && docId.isNotEmpty) {
           final url = SupabaseConfig.client.storage.from('userFiles').getPublicUrl(docId);
-          if (!docs.any((d) => d['id'] == docId)) {
+          var objectMissing = false;
+          try {
+            final response = await http
+                .head(Uri.parse(url))
+                .timeout(const Duration(seconds: 8));
+            objectMissing = response.statusCode >= 400 && response.statusCode < 500;
+          } catch (_) {
+            // Keep the document available if its status cannot be checked.
+          }
+          if (objectMissing) {
+            _unavailableDocumentIds.add(docId);
+            final existingIndex = docs.indexWhere((doc) => doc['id'] == docId);
+            if (existingIndex >= 0) {
+              docs[existingIndex]['label'] = 'Personal Detail Document';
+              docs[existingIndex]['type'] = 'empty';
+            }
+          }
+          if (!objectMissing && !docs.any((d) => d['id'] == docId)) {
             docs.add({
               'id': docId,
               'label': 'Personal Detail Document',
               'url': url,
-              'type': docId.toLowerCase().contains('.pdf') ? 'pdf' : 'image',
+              'type': typeForDocument(docId),
             });
           }
         }
+      }
+
+      if (!docs.any((doc) => doc['label'] == 'Personal Detail Document')) {
+        docs.add({
+          'id': '',
+          'label': 'Personal Detail Document',
+          'url': '',
+          'type': 'empty',
+        });
       }
     } catch (e) {
       debugPrint('Error fetching miner documents: $e');
@@ -531,17 +544,154 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
     return docs;
   }
 
-  void _openDocumentUrl(String urlString) async {
-    final Uri url = Uri.parse(urlString);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open/download document in browser.')),
-        );
+  Widget _buildDirectoryDocumentThumb(
+    Map<String, String> doc, {
+    double size = 52,
+  }) {
+    if (_isDirectoryDocumentUnavailable(doc)) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: context.textColor.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: context.textColor.withOpacity(0.12)),
+        ),
+        child: Icon(Icons.folder_off_outlined, color: context.mutedTextColor, size: size * 0.45),
+      );
+    }
+
+    if (doc['type'] == 'image') {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(7),
+        child: Image.network(
+          doc['url']!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, progress) => progress == null
+              ? child
+              : Container(
+                  width: size,
+                  height: size,
+                  color: context.textColor.withOpacity(0.06),
+                  alignment: Alignment.center,
+                  child: const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: kGold),
+                  ),
+                ),
+          errorBuilder: (context, error, stack) => Container(
+            width: size,
+            height: size,
+            color: context.textColor.withOpacity(0.06),
+            alignment: Alignment.center,
+            child: _markDirectoryDocumentUnavailable(doc),
+          ),
+        ),
+      );
+    }
+
+    final icon = doc['type'] == 'pdf'
+        ? Icons.picture_as_pdf_outlined
+        : Icons.insert_drive_file_outlined;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: kGold.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: kGold.withOpacity(0.3)),
+      ),
+      child: Icon(icon, color: kGold, size: size * 0.45),
+    );
+  }
+
+  bool _isDirectoryDocumentUnavailable(Map<String, String> doc) =>
+      doc['type'] == 'empty' ||
+      _unavailableDocumentIds.contains(doc['id']);
+
+  Widget _markDirectoryDocumentUnavailable(
+    Map<String, String> doc, {
+    Color color = Colors.white70,
+  }) {
+    final id = doc['id'];
+    if (id != null && id.isNotEmpty && _unavailableDocumentIds.add(id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.folder_off_outlined, color: color, size: 28),
+        const SizedBox(height: 4),
+        Text('Empty', style: TextStyle(color: color, fontSize: 11)),
+      ],
+    );
+  }
+
+  Future<void> _openDirectoryDocument(Map<String, String> doc) async {
+    if (_isDirectoryDocumentUnavailable(doc)) return;
+    final url = Uri.parse(doc['url']!);
+    if (doc['label'] == 'Personal Detail Document') {
+      try {
+        final response = await http
+            .head(url)
+            .timeout(const Duration(seconds: 8));
+        if (response.statusCode >= 400 && response.statusCode < 500) {
+          _unavailableDocumentIds.add(doc['id']!);
+          if (mounted) setState(() {});
+          return;
+        }
+      } catch (_) {
+        // If availability cannot be checked, leave normal viewing available.
       }
     }
+    if (doc['type'] != 'image') {
+      if (await canLaunchUrl(url) &&
+          await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open document in browser.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+            title: Text(
+              doc['label'] ?? 'Uploaded Document',
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+            ),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4,
+              child: Image.network(
+                doc['url']!,
+                errorBuilder: (_, __, ___) => _markDirectoryDocumentUnavailable(
+                  doc,
+                  color: Colors.white70,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildDetailRow(String label, String value) {
@@ -723,6 +873,32 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
   }
 
   // --- ACTIONS: DELETE & STATUS TOGGLE ---
+  Future<bool> _verifyAdminPin(String action) async {
+    final adminId = SupabaseConfig.client.auth.currentUser?.id;
+    if (adminId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to verify your session. Please sign in again.')),
+      );
+      return false;
+    }
+
+    final verified = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PinDialog(
+        title: 'Authorize $action',
+        onConfirm: (pin) async {
+          final result = await _serviceRequestRepository.verifyUserPin(adminId, pin);
+          return result.fold(
+            (failure) => failure.message,
+            (isValid) => isValid ? null : 'Incorrect PIN. Please try again.',
+          );
+        },
+      ),
+    );
+    return verified == true;
+  }
+
   Future<void> _deleteUser(UserEntity user) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -741,7 +917,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && await _verifyAdminPin('Delete User')) {
       final result = await _repository.deleteUser(user.userId);
       result.fold(
         (failure) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message))),
@@ -754,9 +930,9 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
   }
 
   Future<void> _toggleUserStatus(UserEntity user) async {
-    final bool currentlyActive = user.status == 'active';
-    final String newStatus = currentlyActive ? 'inactive' : 'active';
-    final String actionText = currentlyActive ? 'Deactivate' : 'Activate';
+    if (user.status.toLowerCase() != 'active') return;
+    const newStatus = 'inactive';
+    const actionText = 'Deactivate';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -768,13 +944,13 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(actionText, style: TextStyle(color: currentlyActive ? Colors.redAccent : Colors.green)),
+            child: Text(actionText, style: const TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && await _verifyAdminPin('$actionText User')) {
       final result = await _repository.updateUser(UserEntity(
         userId: user.userId,
         fname: user.fname,
@@ -795,6 +971,38 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
         },
       );
     }
+  }
+
+  Future<void> _reactivateUser(UserEntity user) async {
+    if (user.status.toLowerCase() != 'inactive') return;
+    if (!await _verifyAdminPin('Reactivate User')) return;
+
+    final result = await _repository.updateUser(
+      UserEntity(
+        userId: user.userId,
+        fname: user.fname,
+        mname: user.mname,
+        lname: user.lname,
+        address: user.address,
+        email: user.email,
+        contactNum: user.contactNum,
+        roleId: user.roleId,
+        status: 'active',
+      ),
+    );
+
+    if (!mounted) return;
+    result.fold(
+      (failure) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure.message)),
+      ),
+      (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${user.fname} ${user.lname} is active again')),
+        );
+        _fetchUsers();
+      },
+    );
   }
 
   // --- SLIDING SHEET: INACTIVE USERS ---
@@ -854,11 +1062,11 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                           subtitle: Text(user.email, style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
                           trailing: IconButton(
                             icon: const Icon(Icons.person_add_alt_1_outlined, color: Colors.green),
+                            tooltip: 'Reactivate user (PIN required)',
                             onPressed: () {
                               Navigator.pop(context);
-                              _toggleUserStatus(user);
+                              _reactivateUser(user);
                             },
-                            tooltip: 'Reactivate',
                           ),
                         );
                       },
@@ -875,7 +1083,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
 
   // --- MAIN SLIDING SHEET: 3-DOTS OPTIONS MENU ---
   void _showUserOptions(UserEntity user) {
-    final bool isActive = user.status == 'active' || user.status == 'approved';
+    final bool isActive = user.status.toLowerCase() == 'active';
 
     showModalBottomSheet(
       context: context,
@@ -978,15 +1186,16 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                       },
                     ),
                     const Divider(height: 16, indent: 16, endIndent: 16),
-                    _buildOptionItem(
-                      icon: isActive ? Icons.block_flipped : Icons.check_circle_outline,
-                      iconColor: isActive ? Colors.orange : Colors.green,
-                      label: isActive ? 'Deactivate User Account' : 'Reactivate User Account',
-                      onTap: () {
-                        Navigator.pop(context);
-                        _toggleUserStatus(user);
-                      },
-                    ),
+                    if (isActive)
+                      _buildOptionItem(
+                        icon: Icons.block_flipped,
+                        iconColor: Colors.orange,
+                        label: 'Deactivate User Account',
+                        onTap: () {
+                          Navigator.pop(context);
+                          _toggleUserStatus(user);
+                        },
+                      ),
                     _buildOptionItem(
                       icon: Icons.delete_forever_rounded,
                       iconColor: Colors.redAccent,
@@ -1344,7 +1553,9 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                       if (snapshot.hasError) {
                         return Center(child: Text('Error loading financial records: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)));
                       }
-                      final records = snapshot.data ?? [];
+                      final records = (snapshot.data ?? [])
+                          .where(_isFullyPaidBillingRecord)
+                          .toList();
                       if (records.isEmpty) {
                         return Center(
                           child: Column(
@@ -1353,12 +1564,12 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                               Icon(Icons.receipt_long_outlined, color: context.mutedTextColor, size: 48),
                               const SizedBox(height: 12),
                               Text(
-                                'No Billing Records Found',
+                                'No Paid Billing Records',
                                 style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'This miner has no billing or financial records.',
+                                'Unpaid bills are hidden from this view.',
                                 style: TextStyle(color: context.mutedTextColor, fontSize: 13),
                               ),
                             ],
@@ -1430,18 +1641,34 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
           .select()
           .eq('user_id', userId)
           .order('last_payment_at', ascending: false);
-      if ((response as List).isNotEmpty) {
-        return List<Map<String, dynamic>>.from(response);
+      final financialRecords = List<Map<String, dynamic>>.from(response);
+      if (financialRecords.isNotEmpty) {
+        return financialRecords.where(_isFullyPaidBillingRecord).toList();
       }
       final reqResponse = await SupabaseConfig.client
           .from('service_requests')
           .select()
           .eq('user_id', userId)
           .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(reqResponse);
+      return List<Map<String, dynamic>>.from(reqResponse)
+          .where(_isFullyPaidBillingRecord)
+          .toList();
     } catch (_) {
       return [];
     }
+  }
+
+  bool _isFullyPaidBillingRecord(Map<String, dynamic> record) {
+    final status = (record['status'] ?? '').toString().trim().toLowerCase();
+    if (status == 'paid' || status == 'fully paid') return true;
+
+    final dueValue = record['total_due'] ??
+        record['total_bill'] ??
+        record['share_amount'];
+    final paidValue = record['amount_paid'] ?? record['payment_amount'];
+    final due = num.tryParse(dueValue?.toString() ?? '');
+    final paid = num.tryParse(paidValue?.toString() ?? '');
+    return due != null && paid != null && due > 0 && paid >= due;
   }
 
   Widget _buildDirectoryContent() {

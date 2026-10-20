@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import './core/auth/remember_me_session.dart';
 import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_main_layout.dart';
 import './presentation/client/miner_main_layout.dart';
@@ -7,13 +8,16 @@ import './presentation/operator/operator_dashboard.dart';
 import './presentation/shared_widgets/themeToggleButton.dart';
 import './presentation/landing/landing_page.dart';
 import './presentation/landing/change_password_page.dart';
+import './presentation/landing/remembered_session_page.dart';
 import './presentation/landing/set_pin_page.dart';
 
 import './infrastructure/supabase/supabase_config.dart';
 import './infrastructure/repositories/supabase_auth_repository.dart';
 import './application/services/auth_service.dart';
 import './application/dtos/login_request_dto.dart';
+import './application/dtos/user_dto.dart';
 import './core/error/failures.dart';
+import './domain/entities/user_entity.dart';
 
 // Gahira Ball Mill Management System - Login Page
 // Simple, clean design in gold & black (with light mode support).
@@ -35,20 +39,199 @@ class GahiraApp extends StatelessWidget {
       valueListenable: themeModeNotifier,
       builder: (context, mode, _) {
         return MaterialApp(
+          navigatorKey: appNavigatorKey,
           title: 'Gahira Ball Mill Management System',
           debugShowCheckedModeBanner: false,
           themeMode: mode,
           theme: buildAppTheme(Brightness.light),
           darkTheme: buildAppTheme(Brightness.dark),
-          home: const LandingPage(),
+          home: const StartupSessionGate(),
         );
       },
     );
   }
 }
 
+final appNavigatorKey = GlobalKey<NavigatorState>();
+
+class StartupSessionGate extends StatefulWidget {
+  const StartupSessionGate({super.key});
+
+  @override
+  State<StartupSessionGate> createState() => _StartupSessionGateState();
+}
+
+class _StartupSessionGateState extends State<StartupSessionGate> {
+  late Future<Widget> _startupPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _startupPage = _resolveStartupPage();
+  }
+
+  Future<Widget> _resolveStartupPage() async {
+    final auth = SupabaseConfig.client.auth;
+    final session = auth.currentSession;
+    final expiresAt = await RememberMeSession.expiresAt;
+
+    if (session == null) {
+      if (expiresAt != null) {
+        await RememberMeSession.clear();
+        return const LoginPage(sessionExpired: true);
+      }
+      return const LandingPage();
+    }
+
+    if (expiresAt == null) {
+      await auth.signOut();
+      return const LandingPage();
+    }
+
+    if (!expiresAt.isAfter(DateTime.now())) {
+      await RememberMeSession.signOut();
+      return const LoginPage(sessionExpired: true);
+    }
+
+    final result = await SupabaseAuthRepository().getCurrentUser();
+    final user = result.fold(
+      (failure) => throw StateError(failure.message),
+      (user) => user,
+    );
+
+    if (user == null || user.pinHash == null) {
+      await RememberMeSession.signOut();
+      return const LoginPage(sessionExpired: true);
+    }
+
+    return _rememberedSessionPage(
+      user: user,
+      expiresAt: expiresAt,
+      initiallyUnlocked: false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Widget>(
+      future: _startupPage,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) return snapshot.data!;
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: context.bgColor,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.wifi_off_rounded,
+                      color: Colors.orangeAccent,
+                      size: 40,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Unable to restore your account: ${snapshot.error}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: context.textColor),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () {
+                        setState(() => _startupPage = _resolveStartupPage());
+                      },
+                      child: const Text(
+                        'Retry',
+                        style: TextStyle(color: kGold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        return Scaffold(
+          backgroundColor: context.bgColor,
+          body: const Center(child: CircularProgressIndicator(color: kGold)),
+        );
+      },
+    );
+  }
+}
+
+Widget _rememberedSessionPage({
+  required UserEntity user,
+  required DateTime expiresAt,
+  required bool initiallyUnlocked,
+}) {
+  return RememberedSessionPage(
+    user: user,
+    expiresAt: expiresAt,
+    dashboard: _dashboardFor(user.roleId, '${user.fname} ${user.lname}'),
+    initiallyUnlocked: initiallyUnlocked,
+    onChangeUser: _replaceWithLogin,
+    onSessionExpired: () => _replaceWithLogin(sessionExpired: true),
+  );
+}
+
+Future<void> _replaceWithLogin({bool sessionExpired = false}) async {
+  final navigator = appNavigatorKey.currentState;
+  if (navigator == null) {
+    throw StateError('Unable to open the login page.');
+  }
+  await navigator.pushAndRemoveUntil<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => LoginPage(sessionExpired: sessionExpired),
+    ),
+    (_) => false,
+  );
+}
+
+Future<void> logoutAndNavigateToLogin(BuildContext context) async {
+  try {
+    await RememberMeSession.signOut();
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not sign out: $error')));
+    }
+    return;
+  }
+
+  if (!context.mounted) return;
+  Navigator.of(context).pushAndRemoveUntil<void>(
+    MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+    (_) => false,
+  );
+}
+
+Widget _dashboardFor(String role, String name) {
+  final normalizedRole = role.toLowerCase();
+  if (normalizedRole == 'admin') {
+    return AdminMainLayout(adminName: name);
+  }
+  if (normalizedRole == 'operator') {
+    return OperatorDashboardPage(operatorName: name);
+  }
+  if (normalizedRole == 'client' || normalizedRole == 'miner') {
+    return MinerMainLayout(minerName: name);
+  }
+  return Scaffold(
+    backgroundColor: appNavigatorKey.currentContext?.bgColor,
+    body: Center(
+      child: Text('The $role dashboard is currently under development.'),
+    ),
+  );
+}
+
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.sessionExpired = false});
+
+  final bool sessionExpired;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -61,6 +244,7 @@ class _LoginPageState extends State<LoginPage>
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _rememberMe = false;
 
   late final AnimationController _spinController;
 
@@ -106,8 +290,8 @@ class _LoginPageState extends State<LoginPage>
       if (!mounted) return;
       _setLoading(false);
 
-      result.fold(
-        (failure) {
+      await result.fold<Future<void>>(
+        (failure) async {
           String message = failure.message;
           IconData icon = Icons.error_outline;
           Color color = Colors.redAccent;
@@ -148,24 +332,32 @@ class _LoginPageState extends State<LoginPage>
             ),
           );
         },
-        (userDto) {
+        (userDto) async {
           debugPrint(
             'Login successful: ${userDto.fname} ${userDto.lname} - Role: ${userDto.roleId}',
           );
-          _goToDashboard(
+          await _goToDashboard(
             userDto.roleId,
             '${userDto.fname} ${userDto.lname}',
             pinSet: userDto.pinHash != null,
+            user: userDto,
           );
         },
       );
     }
   }
 
-  void _goToDashboard(String role, String name, {bool pinSet = true}) {
+  Future<void> _goToDashboard(
+    String role,
+    String name, {
+    bool pinSet = true,
+    required UserDto user,
+  }) async {
     final String normalizedRole = role.toLowerCase();
 
     if (normalizedRole == 'change_password_required') {
+      await RememberMeSession.clear();
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const ChangePasswordPage()),
       );
@@ -173,90 +365,51 @@ class _LoginPageState extends State<LoginPage>
     }
 
     if (!pinSet) {
+      await RememberMeSession.clear();
+      if (!mounted) return;
       Navigator.of(
         context,
       ).pushReplacement(MaterialPageRoute(builder: (_) => const SetPinPage()));
       return;
     }
 
-    if (normalizedRole == 'admin') {
+    final dashboard = _dashboardFor(role, name);
+    if (_rememberMe) {
+      late final DateTime expiresAt;
+      try {
+        expiresAt = await RememberMeSession.rememberForSevenDays();
+      } catch (error) {
+        Object message = error;
+        try {
+          await SupabaseConfig.client.auth.signOut();
+        } catch (signOutError) {
+          message = '$error. Could not safely end the session: $signOutError';
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not enable Remember me: $message'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => AdminMainLayout(adminName: name)),
-      );
-    } else if (normalizedRole == 'operator') {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => OperatorDashboardPage(operatorName: name),
-        ),
-      );
-    } else if (normalizedRole == 'client' || normalizedRole == 'miner') {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => MinerMainLayout(minerName: name),
-        ),
-      );
-    } else {
-      // Placeholder for other roles
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => Scaffold(
-            backgroundColor: context.bgColor,
-            appBar: AppBar(
-              backgroundColor: context.surfaceColor,
-              title: Text(
-                '${role.toUpperCase()} DASHBOARD',
-                style: const TextStyle(
-                  color: kGold,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
-              centerTitle: true,
-              iconTheme: const IconThemeData(color: kGold),
-            ),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.construction_rounded,
-                    color: kGold,
-                    size: 64,
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Welcome, $name!',
-                    style: TextStyle(
-                      color: context.textColor,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'The $role dashboard is currently under development.',
-                    style: TextStyle(
-                      color: context.mutedTextColor,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kGold,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('LOG OUT'),
-                  ),
-                ],
-              ),
-            ),
+        MaterialPageRoute<void>(
+          builder: (_) => _rememberedSessionPage(
+            user: user.toEntity(),
+            expiresAt: expiresAt,
+            initiallyUnlocked: true,
           ),
         ),
       );
+    } else {
+      await RememberMeSession.clear();
+      if (!mounted) return;
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute<void>(builder: (_) => dashboard));
     }
   }
 
@@ -281,6 +434,24 @@ class _LoginPageState extends State<LoginPage>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (widget.sessionExpired) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.orange.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: const Text(
+                              'Your 7-day remembered session has expired. Please log in again.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.orangeAccent),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
                         // Logo / mark
                         Center(
                           child: _buildLogoMark(
@@ -355,6 +526,24 @@ class _LoginPageState extends State<LoginPage>
                           ),
                         ),
 
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          activeColor: kGold,
+                          value: _rememberMe,
+                          onChanged: _isLoading
+                              ? null
+                              : (value) {
+                                  setState(() => _rememberMe = value ?? false);
+                                },
+                          title: Text(
+                            'Remember me',
+                            style: TextStyle(
+                              color: context.textColor,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         Align(
                           alignment: Alignment.centerRight,

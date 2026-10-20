@@ -140,6 +140,9 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
         'appointment_date': data.appointmentDate != null
             ? DateFormat('yyyy-MM-dd').format(data.appointmentDate!)
             : null,
+        'appointment_time': data.appointmentDate != null
+            ? DateFormat('HH:mm:ss').format(data.appointmentDate!)
+            : null,
         'created_at': DateTime.now().toIso8601String(),
       });
 
@@ -183,6 +186,13 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
         }
         return Left(AuthFailure(message));
       } else if (e is PostgrestException) {
+        if (e.code == '23505') {
+          return const Left(
+            ServerFailure(
+              'That appointment time was just booked. Please choose another time.',
+            ),
+          );
+        }
         return Left(ServerFailure('Database error: ${e.message}'));
       } else {
         if (e.toString().contains('SocketException')) {
@@ -331,7 +341,31 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
           .eq('status', 'open')
           .order('date', ascending: true);
 
-      return Right(List<Map<String, dynamic>>.from(response));
+      final slots = List<Map<String, dynamic>>.from(response);
+      try {
+        final bookings = await _client
+            .from('applications')
+            .select('appointment_date, appointment_time')
+            .not('appointment_time', 'is', null)
+            .neq('status', 'rejected');
+        final bookedByDate = <String, Set<String>>{};
+        for (final booking in bookings) {
+          final date = booking['appointment_date']?.toString();
+          final time = booking['appointment_time']?.toString();
+          if (date == null || time == null) continue;
+          bookedByDate.putIfAbsent(date, () => <String>{}).add(time);
+        }
+
+        for (final slot in slots) {
+          slot['booked_appointment_times'] =
+              bookedByDate[slot['date']?.toString()]?.toList() ?? <String>[];
+        }
+      } catch (_) {
+        // The unique database index still prevents double booking if row-level
+        // security does not allow the public registration form to read bookings.
+      }
+
+      return Right(slots);
     } catch (e) {
       return Left(ServerFailure('Failed to fetch availability: ${e.toString()}'));
     }

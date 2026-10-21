@@ -12,6 +12,7 @@ import '../../domain/entities/service_request_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../infrastructure/supabase/supabase_config.dart';
 import '../../infrastructure/models/user_model.dart';
+import 'sacking_page.dart';
 
 enum _ServiceRequestFilter { all, queued, scheduledToday }
 
@@ -58,6 +59,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
           .getServiceRequestsVerifiedByOperator(operatorId);
       final ongoingResult = await _repository
           .getOngoingServiceRequestsForOperator(operatorId);
+      final assignedResult = await _repository
+          .getAssignedServiceRequestsForOperator(operatorId);
       final usersResult = await _userRepository.getAllUsers();
 
       if (!mounted) return;
@@ -66,6 +69,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       List<ServiceRequestEntity> pendingRequests = [];
       List<ServiceRequestEntity> verifiedRequests = [];
       List<ServiceRequestEntity> ongoingRequests = [];
+      List<ServiceRequestEntity> assignedRequests = [];
       pendingResult.fold(
         (l) => errorMessage = 'Pending requests: ${l.message}',
         (list) {
@@ -83,7 +87,20 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             '${errorMessage == null ? '' : '$errorMessage. '}Ongoing services: ${l.message}',
         (list) => ongoingRequests = list,
       );
-      _requests = [...pendingRequests, ...verifiedRequests, ...ongoingRequests];
+      assignedResult.fold(
+        (l) => errorMessage =
+            '${errorMessage == null ? '' : '$errorMessage. '}Assigned services: ${l.message}',
+        (list) => assignedRequests = list,
+      );
+      _requests = {
+        for (final request in [
+          ...pendingRequests,
+          ...verifiedRequests,
+          ...ongoingRequests,
+          ...assignedRequests,
+        ])
+          request.id: request,
+      }.values.toList();
 
       usersResult.fold(
         (l) => errorMessage = (errorMessage ?? '') + ' Users: ${l.message}',
@@ -134,6 +151,21 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   @override
   Widget build(BuildContext context) {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    final assignedRequests = _requests
+        .where(
+          (request) =>
+              operatorId != null &&
+              request.processingDetails.assignedOperatorIds.contains(
+                operatorId,
+              ) &&
+              {
+                ServiceRequestStatus.verified,
+                ServiceRequestStatus.accepted,
+                ServiceRequestStatus.queued,
+                ServiceRequestStatus.scheduled,
+              }.contains(request.status),
+        )
+        .toList();
     final pendingRequests = _requests
         .where(
           (r) => r.status == ServiceRequestStatus.pendingOperatorVerification,
@@ -147,6 +179,11 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
               r.status == ServiceRequestStatus.scheduled,
         )
         .toList();
+    for (final request in assignedRequests) {
+      if (!serviceRequestItems.any((item) => item.id == request.id)) {
+        serviceRequestItems.add(request);
+      }
+    }
     final ongoingRequests = _requests
         .where(
           (r) =>
@@ -216,6 +253,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 100),
                   children: [
+                    if (assignedRequests.isNotEmpty) ...[
+                      _buildAssignedServicesNotice(assignedRequests),
+                      const SizedBox(height: 16),
+                    ],
                     _buildSectionTitle('SERVICE DESK'),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -671,12 +712,69 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     );
   }
 
+  Widget _buildAssignedServicesNotice(
+    List<ServiceRequestEntity> assignedRequests,
+  ) {
+    return Material(
+      color: Colors.teal.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showServiceListSheet(
+          title: 'Assigned to you',
+          subtitle: 'Services assigned by admin',
+          icon: Icons.assignment_ind_outlined,
+          color: Colors.teal,
+          requests: assignedRequests,
+          isPending: false,
+          emptyMessage: 'No services have been assigned to you.',
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.assignment_ind_outlined, color: Colors.teal),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'ASSIGNED TO YOU',
+                      style: TextStyle(
+                        color: Colors.teal,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Admin assigned ${assignedRequests.length} service${assignedRequests.length == 1 ? '' : 's'} to you. Tap to review.',
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.teal),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildRequestCard(
     ServiceRequestEntity request, {
     required bool isPending,
   }) {
     final bool isGroup = request.participatingMinerIds.length > 1;
     final String timeStr = DateFormat('hh:mm a').format(request.createdAt);
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    final isAssignedToCurrentOperator = operatorId != null &&
+        request.processingDetails.assignedOperatorIds.contains(operatorId);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -749,7 +847,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    '${request.materialDetails.numberOfSacks ?? 0} Sacks • ${request.materialDetails.condition} • ${request.materialDetails.state}',
+                    '${request.materialDetails.numberOfSacks ?? 0} Sacks • ${request.materialDetails.weight != null ? '${request.materialDetails.weight} kg • ' : ''}${request.materialDetails.condition} • ${request.materialDetails.state}',
                     style: TextStyle(
                       color: context.mutedTextColor,
                       fontSize: 12,
@@ -757,6 +855,36 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   ),
                 ],
               ),
+              if (isAssignedToCurrentOperator) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.assignment_ind_outlined,
+                          color: Colors.teal, size: 14),
+                      SizedBox(width: 6),
+                      Text(
+                        'ASSIGNED TO YOU BY ADMIN',
+                        style: TextStyle(
+                          color: Colors.teal,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (!isPending) ...[
                 const SizedBox(height: 12),
                 _buildStatusBadge(request.status),
@@ -801,6 +929,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   }
 
   void _showRequestDetails(ServiceRequestEntity request) {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    final isAssignedToMe = operatorId != null &&
+        request.processingDetails.assignedOperatorIds.contains(operatorId);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -875,6 +1006,16 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   'Sacks',
                   '${request.materialDetails.numberOfSacks ?? 0}',
                 ),
+                if (request.materialDetails.weight != null)
+                  _buildDetailRow(
+                    'Est. Weight',
+                    '${request.materialDetails.weight} kg',
+                  ),
+                if (request.materialDetails.actualWeight != null)
+                  _buildDetailRow(
+                    'Actual Weight',
+                    '${request.materialDetails.actualWeight} kg',
+                  ),
                 _buildDetailRow(
                   'Source Type',
                   request.materialDetails.sourceType ?? 'N/A',
@@ -951,7 +1092,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   request.status == ServiceRequestStatus.accepted ||
                   request.status == ServiceRequestStatus.scheduled ||
                   request.status == ServiceRequestStatus.assigned ||
-                  request.status == ServiceRequestStatus.processing) ...[
+                  request.status == ServiceRequestStatus.processing ||
+                  request.status == ServiceRequestStatus.emergencyStop) ...[
                 const SizedBox(height: 40),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -994,22 +1136,24 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      // TODO: Navigate to processing/workflow view for this request
-                    },
+                    onPressed: isAssignedToMe
+                        ? () async {
+                            Navigator.pop(context);
+                            await _openAssignedService(request);
+                          }
+                        : null,
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'SEE PROGRESS',
+                          'START / OPEN SERVICE',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
                           ),
                         ),
                         SizedBox(width: 8),
-                        Icon(Icons.insights_rounded, size: 20),
+                        Icon(Icons.play_arrow_rounded, size: 20),
                       ],
                     ),
                   ),
@@ -1055,6 +1199,35 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _openAssignedService(ServiceRequestEntity request) async {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) return;
+
+    if (request.status != ServiceRequestStatus.processing &&
+        request.status != ServiceRequestStatus.emergencyStop) {
+      final result = await _service.claimAndStartService(
+        requestId: request.id,
+        operatorId: operatorId,
+        currentStatus: request.status.toString().split('.').last,
+      );
+      final failure = result.fold<String?>((error) => error.message, (_) => null);
+      if (failure != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not start service: $failure')),
+          );
+        }
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => SackingPage(request: request)),
+    );
+    if (mounted) await _loadRequests();
   }
 
   void _showFullScreenPhoto(String photoUrl) {
@@ -1110,6 +1283,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
         (request.materialDetails.state ?? 'Dry').trim().toLowerCase();
     final sackController = TextEditingController(
       text: originalSacks.toString(),
+    );
+    final originalWeight = request.materialDetails.weight ?? request.materialDetails.actualWeight;
+    final weightController = TextEditingController(
+      text: originalWeight != null ? originalWeight.toString() : '',
     );
     final estNumController = TextEditingController(text: '3');
     final remarksController = TextEditingController();
@@ -1174,7 +1351,47 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: kGold.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: kGold.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: kGold, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Miner Declared Material',
+                              style: TextStyle(
+                                color: kGold,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Declared: ${request.materialDetails.numberOfSacks ?? 0} Sacks'
+                              '${request.materialDetails.weight != null ? ' • ${request.materialDetails.weight} kg (Est.)' : ''}'
+                              ' • ${request.materialDetails.condition ?? "Rocky"} • ${request.materialDetails.state ?? "Dry"}',
+                              style: TextStyle(
+                                color: context.textColor,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
 
                 Row(
                   children: [
@@ -1186,6 +1403,26 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         style: TextStyle(color: context.textColor),
                         decoration: InputDecoration(
                           labelText: 'Actual Sacks',
+                          filled: true,
+                          fillColor: context.surfaceColor,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: weightController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (_) => setModalState(() {}),
+                        style: TextStyle(color: context.textColor),
+                        decoration: InputDecoration(
+                          labelText: 'Actual Weight (kg)',
+                          hintText: request.materialDetails.weight != null
+                              ? 'Est: ${request.materialDetails.weight} kg'
+                              : 'Optional',
                           filled: true,
                           fillColor: context.surfaceColor,
                           border: OutlineInputBorder(
@@ -1458,6 +1695,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     ),
                     onPressed: () => _confirmWithPin(request, {
                       'sacks': int.tryParse(sackController.text) ?? 0,
+                      'actualWeight': double.tryParse(weightController.text),
                       'condition': currentCondition,
                       'state': currentState == 'Others'
                           ? otherState
@@ -1501,6 +1739,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             requestId: request.id,
             operatorId: operatorId,
             actualSacks: data['sacks'],
+            actualWeight: data['actualWeight'],
             condition: data['condition'],
             state: data['state'],
             source: data['source'],
@@ -1961,6 +2200,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                                   condition: condition,
                                   state: state == 'Others' ? otherState : state,
                                   sacks: sacks ?? 0,
+                                  weight: weight,
                                   source: source,
                                   estTime: estProcessingTime,
                                   notes: notes,
@@ -2001,6 +2241,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     required String condition,
     required String state,
     required int sacks,
+    double? weight,
     required String source,
     required String estTime,
     required String notes,
@@ -2031,6 +2272,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 const SizedBox(height: 16),
                 _buildReviewRow('Source', source),
                 _buildReviewRow('Sacks', sacks.toString()),
+                if (weight != null && weight > 0)
+                  _buildReviewRow('Weight', '$weight kg'),
                 _buildReviewRow('Condition', condition),
                 const SizedBox(height: 16),
                 const Text(
@@ -2077,6 +2320,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   condition: condition,
                   state: state,
                   sacks: sacks,
+                  weight: weight,
                   source: source,
                   estTime: estTime,
                   notes: notes,
@@ -2100,6 +2344,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     required String condition,
     required String state,
     required int sacks,
+    double? weight,
     required String source,
     required String estTime,
     required String notes,
@@ -2121,6 +2366,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             materialCondition: condition,
             materialState: state,
             numberOfSacks: sacks,
+            materialWeight: weight != null && weight > 0 ? weight : null,
             source: source,
             notes: notes,
             processingRequirements: notes,

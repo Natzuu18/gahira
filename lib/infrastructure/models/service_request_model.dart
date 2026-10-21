@@ -105,6 +105,11 @@ class ServiceRequestModel extends ServiceRequestEntity {
       }
     }
 
+    final double? materialWeight =
+        (json['material_weight'] as num?)?.toDouble();
+    final double? actualWeight =
+        (json['actual_weight'] as num?)?.toDouble();
+
     return ServiceRequestModel(
       id: json['service_request_id']?.toString() ?? '',
       creatorId: json['user_id']?.toString() ?? '',
@@ -119,6 +124,8 @@ class ServiceRequestModel extends ServiceRequestEntity {
         sourceType: json['material_source_type']?.toString(),
         source: finalSource,
         numberOfSacks: finalSacks,
+        weight: materialWeight,
+        actualWeight: actualWeight,
         notes: json['material_notes']?.toString(),
         documentUrl: null,
         photoUrls:
@@ -216,6 +223,8 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'service_type': 'Milling',
       'request_date': createdAt.toIso8601String().split('T')[0],
       'quantity': materialDetails.numberOfSacks ?? 0,
+      'material_weight': materialDetails.weight,
+      'actual_weight': materialDetails.actualWeight,
       'status': status.name,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),

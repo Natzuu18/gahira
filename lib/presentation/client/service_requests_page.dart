@@ -673,6 +673,18 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 'Quantity',
                 '${request.materialDetails.numberOfSacks} Sacks',
               ),
+            if (request.materialDetails.weight != null)
+              _buildDetailRow(
+                Icons.scale_rounded,
+                'Est. Weight',
+                '${request.materialDetails.weight} kg',
+              ),
+            if (request.materialDetails.actualWeight != null)
+              _buildDetailRow(
+                Icons.scale_rounded,
+                'Actual Weight',
+                '${request.materialDetails.actualWeight} kg',
+              ),
             _buildSectionHeader('Processing & Timeline'),
             if (request.processingDetails.estimatedTime != null)
               _buildDetailRow(
@@ -1011,6 +1023,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     }
 
     int? mSacks = existingRequest?.materialDetails.numberOfSacks;
+    double? mWeight = existingRequest?.materialDetails.weight;
     String notes = existingRequest?.materialDetails.notes ?? '';
     List<PlatformFile> selectedPhotos = [];
     List<String> existingPhotoUrls = existingRequest != null
@@ -1496,6 +1509,18 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                               ],
                             ),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildValidatedInput(
+                              label: 'Est. Weight (kg)',
+                              hint: 'Optional',
+                              initialValue: mWeight?.toString(),
+                              keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              onChanged: (v) => mWeight = double.tryParse(v),
+                            ),
+                          ),
                         ],
                       ),
                       _buildValidatedInput(
@@ -1719,6 +1744,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                         : state,
                                     sourceType: sourceType,
                                     sacks: mSacks,
+                                    weight: mWeight,
                                     source: sourceDetails,
                                     notes: notes,
                                     miners: [currentUserId, ...participating],
@@ -1765,6 +1791,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     required String state,
     required String sourceType,
     int? sacks,
+    double? weight,
     required String source,
     required String notes,
     required List<String> miners,
@@ -1817,6 +1844,12 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       Icons.shopping_bag_outlined,
                       'Sacks',
                       sacks.toString(),
+                    ),
+                  if (weight != null)
+                    _buildDetailRow(
+                      Icons.scale_rounded,
+                      'Est. Weight',
+                      '$weight kg',
                     ),
                   _buildDetailRow(
                     Icons.people_rounded,
@@ -1888,6 +1921,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                           state: state,
                           sourceType: sourceType,
                           sacks: sacks,
+                          weight: weight,
                           source: source,
                           notes: notes,
                           miners: miners,
@@ -1923,6 +1957,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     required String state,
     required String sourceType,
     int? sacks,
+    double? weight,
     required String source,
     required String notes,
     required List<String> miners,
@@ -1963,6 +1998,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               materialState: state,
               materialSourceType: sourceType,
               numberOfSacks: sacks,
+              materialWeight: weight,
               source: source,
               notes: notes,
               pin: pin,
@@ -1978,6 +2014,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               materialState: state,
               materialSourceType: sourceType,
               numberOfSacks: sacks,
+              materialWeight: weight,
               source: source,
               notes: notes,
               processingRequirements: notes,

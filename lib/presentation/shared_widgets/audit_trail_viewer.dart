@@ -54,6 +54,16 @@ class _AuditTrailViewerState extends State<AuditTrailViewer> {
                 : 'System';
             final role = user != null ? user['role_id'] : '';
             final date = DateTime.parse(trail['created_at']);
+            final remarks = trail['remarks']?.toString() ?? '';
+            final wasScheduledWithoutOperator =
+                trail['action'] == 'SCHEDULE_AND_ASSIGN' &&
+                remarks.startsWith('Assigned to 0 operators');
+            final actionLabel = wasScheduledWithoutOperator
+                ? 'SCHEDULE SERVICE'
+                : trail['action'].toString().replaceAll('_', ' ');
+            final displayRemarks = wasScheduledWithoutOperator
+                ? 'Scheduled and added to the scheduled mill queue. Operator assignment is pending.'
+                : remarks;
 
             return IntrinsicHeight(
               child: Row(
@@ -88,7 +98,7 @@ class _AuditTrailViewerState extends State<AuditTrailViewer> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                trail['action'].toString().replaceAll('_', ' '),
+                                actionLabel,
                                 style: TextStyle(
                                   color: context.textColor,
                                   fontWeight: FontWeight.bold,
@@ -112,12 +122,11 @@ class _AuditTrailViewerState extends State<AuditTrailViewer> {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          if (trail['remarks'] != null &&
-                              trail['remarks'].toString().isNotEmpty)
+                          if (displayRemarks.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
-                                trail['remarks'],
+                                displayRemarks,
                                 style: TextStyle(
                                   color: context.mutedTextColor,
                                   fontSize: 12,

@@ -178,6 +178,9 @@ class _ClientServicePageState extends State<ClientServicePage> {
             ),
             const Divider(),
             _buildInfoRow('Miner Reqs', request.processingDetails.requirements),
+            _buildInfoRow('Declared Sacks', '${request.materialDetails.numberOfSacks ?? 0}'),
+            if (request.materialDetails.weight != null)
+              _buildInfoRow('Est. Weight', '${request.materialDetails.weight} kg'),
             const SizedBox(height: 10),
             ElevatedButton(
               onPressed: () => _showVerificationDialog(request),
@@ -224,6 +227,21 @@ class _ClientServicePageState extends State<ClientServicePage> {
                       color: kGold,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: kGold.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: kGold.withValues(alpha: 0.2)),
+                    ),
+                    child: Text(
+                      'Miner declared: ${request.materialDetails.numberOfSacks ?? 0} Sacks'
+                      '${request.materialDetails.weight != null ? ' • ${request.materialDetails.weight} kg (Est.)' : ''}'
+                      ' • ${request.materialDetails.condition ?? "N/A"} • ${request.materialDetails.state ?? "N/A"}',
+                      style: TextStyle(color: context.textColor, fontSize: 12),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -308,6 +326,7 @@ class _ClientServicePageState extends State<ClientServicePage> {
             requestId: request.id,
             operatorId: SupabaseConfig.client.auth.currentUser?.id ?? '',
             actualSacks: request.materialDetails.numberOfSacks ?? 0,
+            actualWeight: request.materialDetails.weight,
             condition: request.materialDetails.condition ?? 'Rocky',
             state: request.materialDetails.state ?? 'Dry',
             source: request.materialDetails.source ?? '',

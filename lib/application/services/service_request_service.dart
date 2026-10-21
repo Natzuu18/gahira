@@ -19,6 +19,7 @@ class ServiceRequestService {
     String? materialState,
     String? materialSourceType,
     int? numberOfSacks,
+    double? materialWeight,
     String? source,
     String? notes,
     String? documentUrl,
@@ -47,6 +48,7 @@ class ServiceRequestService {
         state: materialState,
         sourceType: materialSourceType,
         numberOfSacks: numberOfSacks,
+        weight: materialWeight,
         source: source,
         notes: notes,
         documentUrl: documentUrl,
@@ -113,6 +115,7 @@ class ServiceRequestService {
     String? materialState,
     String? materialSourceType,
     int? numberOfSacks,
+    double? materialWeight,
     String? source,
     String? notes,
     List<String> photoUrls = const [],
@@ -134,6 +137,7 @@ class ServiceRequestService {
         state: materialState,
         sourceType: materialSourceType,
         numberOfSacks: numberOfSacks,
+        weight: materialWeight,
         source: source,
         notes: notes,
         photoUrls: photoUrls,
@@ -168,6 +172,7 @@ class ServiceRequestService {
     required String requestId,
     required String operatorId,
     required int actualSacks,
+    double? actualWeight,
     required String condition,
     required String state,
     required String source,
@@ -195,6 +200,7 @@ class ServiceRequestService {
         'updated_at': DateTime.now().toIso8601String(),
         'approved_by': operatorId,
         'approved_at': DateTime.now().toIso8601String(),
+        if (actualWeight != null) 'actual_weight': actualWeight,
       },
     );
 
@@ -292,12 +298,13 @@ class ServiceRequestService {
     );
   }
 
-  Future<Either<Failure, void>> ownerScheduleAndAssign({
+  Future<Either<Failure, void>> ownerScheduleService({
     required String requestId,
     required String ownerId,
     required DateTime scheduledDate,
-    required List<String> assignedOperatorIds,
     required String currentStatus,
+    String? verifyingOperatorId,
+    String? verifyingOperatorName,
   }) async {
     final result = await _repository.updateRequestStatus(
       requestId: requestId,
@@ -322,17 +329,68 @@ class ServiceRequestService {
         return queueResult.fold(
           (l) => Left(l),
           (_) async {
+            if (verifyingOperatorId != null) {
+              final assignmentResult = await _repository
+                  .assignVerifyingOperatorToService(
+                    requestId: requestId,
+                    operatorId: verifyingOperatorId,
+                  );
+              return assignmentResult.fold(
+                (failure) => Left(failure),
+                (_) async {
+                  await _repository.logAuditTrail(
+                    requestId: requestId,
+                    userId: ownerId,
+                    action: 'SCHEDULE_SERVICE',
+                    previousStatus: currentStatus,
+                    newStatus: _enumName(ServiceRequestStatus.scheduled),
+                    remarks:
+                        'Scheduled for ${scheduledDate.toIso8601String().split('T').first} and added to the scheduled mill queue. Assigned to verifying operator ${verifyingOperatorName ?? verifyingOperatorId}.',
+                  );
+                  return const Right(null);
+                },
+              );
+            }
+
             await _repository.logAuditTrail(
               requestId: requestId,
               userId: ownerId,
-              action: 'SCHEDULE_AND_ASSIGN',
+              action: 'SCHEDULE_SERVICE',
               previousStatus: currentStatus,
               newStatus: _enumName(ServiceRequestStatus.scheduled),
-              remarks: 'Assigned to ${assignedOperatorIds.length} operators and added to mill queue',
+              remarks:
+                  'Scheduled for ${scheduledDate.toIso8601String().split('T').first} and added to the scheduled mill queue. Operator assignment is pending.',
             );
             return const Right(null);
           },
         );
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> assignOperatorToQueuedService({
+    required String requestId,
+    required String adminId,
+    required String operatorId,
+    required String operatorName,
+    required String currentStatus,
+  }) async {
+    final result = await _repository.assignAvailableOperatorToService(
+      requestId: requestId,
+      operatorId: operatorId,
+    );
+    return result.fold(
+      (failure) => Left(failure),
+      (_) async {
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: adminId,
+          action: 'ASSIGN_OPERATOR',
+          previousStatus: currentStatus,
+          newStatus: currentStatus,
+          remarks: '$operatorName was assigned to this service.',
+        );
+        return const Right(null);
       },
     );
   }
@@ -390,22 +448,24 @@ class ServiceRequestService {
     required String operatorId,
     required String currentStatus,
   }) async {
-    final statusResult = await _repository.updateRequestStatus(
+    final ongoingResult = await _repository.claimServiceRequest(
       requestId: requestId,
-      status: _enumName(ServiceRequestStatus.processing),
-      userId: operatorId,
-      additionalData: {'current_processing_stage': _enumName(ProcessingStage.rebagging)},
+      operatorId: operatorId,
     );
 
-    return statusResult.fold(
+    return ongoingResult.fold(
       (l) => Left(l),
       (_) async {
-        final ongoingResult = await _repository.claimServiceRequest(
+        final statusResult = await _repository.updateRequestStatus(
           requestId: requestId,
-          operatorId: operatorId,
+          status: _enumName(ServiceRequestStatus.processing),
+          userId: operatorId,
+          additionalData: {
+            'current_processing_stage': _enumName(ProcessingStage.rebagging),
+          },
         );
 
-        return ongoingResult.fold(
+        return statusResult.fold(
           (l) => Left(l),
           (_) async {
             await _repository.updateMillQueueStatus(requestId: requestId, status: 'in_progress');
@@ -540,11 +600,81 @@ class ServiceRequestService {
     );
   }
 
+  Future<Either<Failure, void>> recordMinerPayment({
+    required String requestId,
+    required String minerId,
+    required double paymentAmount,
+    required double totalPaid,
+    required double remainingBalance,
+    required String receiptUrl,
+    required DateTime paymentDate,
+    required String currentStatus,
+  }) async {
+    final paymentResult = await _repository.recordParticipantPayment({
+      'service_request_id': requestId,
+      'user_id': minerId,
+      'amount': paymentAmount,
+      'receipt_url': receiptUrl,
+      'recorded_by': minerId,
+      'payment_date': paymentDate.toIso8601String(),
+    });
+
+    return paymentResult.fold(
+      (failure) => Left(failure),
+      (_) async {
+        final newStatus = remainingBalance <= 0
+            ? ServiceRequestStatus.completed
+            : ServiceRequestStatus.partiallyPaid;
+        final updateResult = await _repository.updateRequestStatus(
+          requestId: requestId,
+          status: _enumName(newStatus),
+          userId: minerId,
+          additionalData: {
+            'payment_amount': totalPaid,
+            'remaining_balance': remainingBalance,
+            'payment_receipt_url': receiptUrl,
+            'payment_date': paymentDate.toIso8601String(),
+            if (newStatus == ServiceRequestStatus.completed)
+              'billing_id': 'BILL-${DateTime.now().millisecondsSinceEpoch}',
+          },
+        );
+        return updateResult.fold(
+          (failure) => Left(failure),
+          (_) async {
+            await _repository.logAuditTrail(
+              requestId: requestId,
+              userId: minerId,
+              action: 'MINER_PAYMENT',
+              previousStatus: currentStatus,
+              newStatus: _enumName(newStatus),
+              remarks:
+                  'Miner paid $paymentAmount. Total paid: $totalPaid. Remaining: $remainingBalance',
+            );
+            return const Right(null);
+          },
+        );
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> recordGroupMinerPayment({
+    required String requestId,
+    required double paymentAmount,
+    required String receiptUrl,
+  }) {
+    return _repository.submitGroupServicePayment(
+      requestId: requestId,
+      amount: paymentAmount,
+      receiptUrl: receiptUrl,
+    );
+  }
+
   Future<Either<Failure, void>> recordIndividualPayment({
     required String requestId,
     required String ownerId,
     required String participantId,
     required double paymentAmount,
+    required double totalPaid,
     required double remainingBalance,
     String? receiptUrl,
     required String currentStatus,
@@ -564,23 +694,28 @@ class ServiceRequestService {
         // 2. Update the participant's financial record status/amount
         final status = remainingBalance <= 0 ? 'paid' : 'partial';
         
-        await _repository.updateParticipantFinancial(
-           requestId: requestId,
-           userId: participantId,
-           amountPaid: paymentAmount, 
-           status: status,
+        final financialResult = await _repository.updateParticipantFinancial(
+          requestId: requestId,
+          userId: participantId,
+          amountPaid: totalPaid,
+          status: status,
         );
 
-        await _repository.logAuditTrail(
-          requestId: requestId,
-          userId: ownerId,
-          action: 'PARTICIPANT_PAYMENT',
-          previousStatus: currentStatus,
-          newStatus: currentStatus,
-          remarks: 'Recorded payment of $paymentAmount for participant $participantId',
+        return financialResult.fold(
+          (failure) => Left(failure),
+          (_) async {
+            await _repository.logAuditTrail(
+              requestId: requestId,
+              userId: ownerId,
+              action: 'PARTICIPANT_PAYMENT',
+              previousStatus: currentStatus,
+              newStatus: currentStatus,
+              remarks:
+                  'Recorded payment of $paymentAmount for participant $participantId',
+            );
+            return const Right(null);
+          },
         );
-        
-        return const Right(null);
       },
     );
   }

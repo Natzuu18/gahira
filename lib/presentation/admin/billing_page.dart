@@ -1018,7 +1018,6 @@ class _BillingPageState extends State<BillingPage> {
     double? goldValue,
     bool deductFromGold = false,
   }) {
-    final bool isGroup = request.participatingMinerIds.length > 1;
     double processingFee = (request.materialDetails.numberOfSacks ?? 0) * 150.0;
 
     // Dynamic expenses list
@@ -1165,35 +1164,20 @@ class _BillingPageState extends State<BillingPage> {
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      if (isGroup) {
-                        _showIndividualExpensesStep(
-                          request,
-                          isGoldBought: isGoldBought,
-                          goldWeight: goldWeight,
-                          buyingPrice: buyingPrice,
-                          goldValue: goldValue,
-                          deductFromGold: deductFromGold,
-                          processingFee: processingFee,
-                          otherExpenses: otherExpenses,
-                          totalBill: totalBill,
-                          extraExpenses: extraExpenses,
-                        );
-                      } else {
-                        _showBillingSummary(
-                          request,
-                          isGoldBought: isGoldBought,
-                          goldWeight: goldWeight,
-                          buyingPrice: buyingPrice,
-                          goldValue: goldValue,
-                          deductFromGold: deductFromGold,
-                          processingFee: processingFee,
-                          otherExpenses: otherExpenses,
-                          totalBill: totalBill,
-                          individualExpenses: {},
-                          individualExpenseReasons: {},
-                          extraExpenses: extraExpenses,
-                        );
-                      }
+                      _showBillingSummary(
+                        request,
+                        isGoldBought: isGoldBought,
+                        goldWeight: goldWeight,
+                        buyingPrice: buyingPrice,
+                        goldValue: goldValue,
+                        deductFromGold: deductFromGold,
+                        processingFee: processingFee,
+                        otherExpenses: otherExpenses,
+                        totalBill: totalBill,
+                        individualExpenses: {},
+                        individualExpenseReasons: {},
+                        extraExpenses: extraExpenses,
+                      );
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kGold,
@@ -1203,11 +1187,9 @@ class _BillingPageState extends State<BillingPage> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(
-                      isGroup
-                          ? 'Next: Individual Expenses'
-                          : 'Settlement Summary',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    child: const Text(
+                      'Settlement Summary',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -1405,14 +1387,19 @@ class _BillingPageState extends State<BillingPage> {
     required Map<String, String> individualExpenseReasons,
     required List<Map<String, dynamic>> extraExpenses,
   }) {
-    double baseShare =
-        totalBill /
-        (request.participatingMinerIds.isEmpty
-            ? 1
-            : request.participatingMinerIds.length);
-    List<ParticipantFinancial> breakdown = request.participatingMinerIds.map((
-      id,
-    ) {
+    final participantCount = request.participatingMinerIds.isEmpty
+        ? 1
+        : request.participatingMinerIds.length;
+    final totalBillCents = (totalBill * 100).round();
+    final shareCents = totalBillCents ~/ participantCount;
+    final extraCents = totalBillCents % participantCount;
+    List<ParticipantFinancial> breakdown = request.participatingMinerIds
+        .asMap()
+        .entries
+        .map((entry) {
+      final id = entry.value;
+      final baseShare =
+          (shareCents + (entry.key < extraCents ? 1 : 0)) / 100.0;
       double totalDue = baseShare + (individualExpenses[id] ?? 0);
       return ParticipantFinancial(
         userId: id,
@@ -1630,7 +1617,7 @@ class _BillingPageState extends State<BillingPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Choose Payment Method',
+              'Record Group Payments',
               style: TextStyle(
                 color: kGold,
                 fontSize: 18,
@@ -1639,20 +1626,10 @@ class _BillingPageState extends State<BillingPage> {
             ),
             const SizedBox(height: 32),
             _buildWorkflowOption(
-              icon: Icons.groups_rounded,
-              title: 'Payment for All Participants',
-              subtitle: 'Upload a single receipt for the entire group.',
-              onTap: () {
-                Navigator.pop(context);
-                _showPaymentStep(request);
-              },
-            ),
-            const SizedBox(height: 16),
-            _buildWorkflowOption(
               icon: Icons.person_search_rounded,
-              title: 'Manual Payment (per participant)',
+              title: 'Record Payment for a Participant',
               subtitle:
-                  'Select and record payments for each member individually.',
+                  'Choose the member who paid. Only their balance will update.',
               onTap: () {
                 Navigator.pop(context);
                 _showParticipantListStep(request);
@@ -1897,6 +1874,7 @@ class _BillingPageState extends State<BillingPage> {
                         ownerId: currentUserId,
                         participantId: p.userId,
                         paymentAmount: amountPaidInput,
+                        totalPaid: p.amountPaid + amountPaidInput,
                         remainingBalance: totalDue - amountPaidInput,
                         receiptUrl: receiptUrl,
                         currentStatus: request.status.name,

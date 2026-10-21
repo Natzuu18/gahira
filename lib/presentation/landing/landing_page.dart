@@ -33,7 +33,7 @@ class _LandingPageState extends State<LandingPage> {
         builder: (_) => Scaffold(
           backgroundColor: context.bgColor,
           appBar: AppBar(
-            title: const Text('Apply to Gahira'),
+            title: const Text('Apply to EGReS'),
             leading: IconButton(
               tooltip: 'Back to home',
               icon: const Icon(Icons.arrow_back_rounded),
@@ -76,15 +76,14 @@ class _LandingPageState extends State<LandingPage> {
                 color: kGold.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: const Icon(
-                Icons.settings_input_component_rounded,
-                color: kGold,
-                size: 19,
+              child: Image.asset(
+                'assets/img/EGReS.png',
+                fit: BoxFit.contain,
               ),
             ),
             const SizedBox(width: 10),
             const Text(
-              'GAHIRA',
+              'EGReS',
               style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1.5),
             ),
           ],
@@ -203,7 +202,7 @@ class _LandingPageState extends State<LandingPage> {
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 790),
                       child: Text(
-                        'Gahira Ball Mill\nManagement System',
+                        'EMELIO GOLD REFINERY\nSERVICE MANAGEMENT SYSTEM',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: isWide ? 54 : 38,
@@ -312,7 +311,7 @@ class _LandingPageState extends State<LandingPage> {
             eyebrow: 'ONE CONNECTED WORKSPACE',
             title: 'The work, from request to settlement.',
             description:
-                'Gahira organizes the steps around ball mill service so each person can see what needs attention and what happens next.',
+                'EGReS organizes refinery services so each person can see what needs attention and what happens next.',
           ),
           const SizedBox(height: 34),
           LayoutBuilder(
@@ -481,7 +480,7 @@ class _LandingPageState extends State<LandingPage> {
             eyebrow: 'BUILT FOR THE PEOPLE DOING THE WORK',
             title: 'One operation. Role-specific views.',
             description:
-                'Gahira gives each account access to the tasks and records relevant to their work.',
+                'EGReS gives each account access to the tasks and records relevant to their work.',
           ),
           const SizedBox(height: 28),
           Wrap(
@@ -570,7 +569,7 @@ class _LandingPageState extends State<LandingPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Ready to use Gahira?',
+                      'Ready to use EGReS?',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 25,
@@ -638,14 +637,15 @@ class _LandingPageState extends State<LandingPage> {
           constraints: const BoxConstraints(maxWidth: 1120),
           child: Row(
             children: [
-              const Icon(
-                Icons.settings_input_component_rounded,
-                color: kGold,
-                size: 18,
+              Image.asset(
+                'assets/img/EGReS.png',
+                width: 20,
+                height: 20,
+                fit: BoxFit.contain,
               ),
               const SizedBox(width: 9),
               const Text(
-                'GAHIRA',
+                'EGReS',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 12,

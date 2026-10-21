@@ -45,8 +45,9 @@ class SupabaseReportRepository {
         (from, to) => client
             .from('milling_batches')
             .select(
-              'batch_id, machine_id, created_at, input_sacks, output_sacks',
+              'batch_id, machine_id, created_at, input_sacks, output_sacks, status',
             )
+            .eq('status', 'completed')
             .gte('created_at', start.toIso8601String())
             .lt('created_at', endExclusive.toIso8601String())
             .order('created_at')

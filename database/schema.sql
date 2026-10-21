@@ -197,7 +197,10 @@ CREATE TABLE public.service_requests (
   miner_sacks_processed integer DEFAULT 0,
   unloading_started_at timestamp with time zone,
   unloading_completed_at timestamp with time zone,
+  washing_started_at timestamp with time zone,
+  washing_completed_at timestamp with time zone,
   emergency_reason text,
+  emergency_evidence_url text,
   emergency_stopped_at timestamp with time zone,
   gold_weight_grams numeric,
   gold_buying_price numeric,
@@ -279,21 +282,28 @@ CREATE TABLE public.ongoing_services (
 CREATE TABLE public.milling_batches (
   batch_id uuid NOT NULL DEFAULT gen_random_uuid(),
   service_request_id uuid NOT NULL,
+  batch_kind text NOT NULL DEFAULT 'legacy'::text CHECK (batch_kind = ANY (ARRAY['sacking'::text, 'milling'::text, 'legacy'::text])),
+  sacking_batch_id uuid,
   operator_id uuid NOT NULL,
-  machine_id uuid NOT NULL,
-  drum_id uuid NOT NULL,
+  machine_id uuid,
+  drum_id uuid,
   input_sacks integer NOT NULL,
   output_sacks integer NOT NULL,
-  status character varying NOT NULL DEFAULT 'milling'::character varying CHECK (status::text = ANY (ARRAY['milling'::text, 'completed'::text])),
+  status character varying NOT NULL DEFAULT 'milling'::character varying CHECK (status::text = ANY (ARRAY['ready_to_mill'::text, 'milling'::text, 'completed'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  milling_started_at timestamp with time zone,
   completed_at timestamp with time zone,
   estimated_duration_minutes integer DEFAULT 30,
   CONSTRAINT milling_batches_pkey PRIMARY KEY (batch_id),
   CONSTRAINT fk_mb_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
+  CONSTRAINT fk_mb_sacking_batch FOREIGN KEY (sacking_batch_id) REFERENCES public.milling_batches(batch_id),
   CONSTRAINT fk_mb_operator FOREIGN KEY (operator_id) REFERENCES public.users(userId),
   CONSTRAINT fk_mb_machine FOREIGN KEY (machine_id) REFERENCES public.machines(machine_id),
   CONSTRAINT fk_mb_drum FOREIGN KEY (drum_id) REFERENCES public.drums(drum_id)
 );
+CREATE INDEX milling_batches_sacking_batch_id_idx
+  ON public.milling_batches (sacking_batch_id)
+  WHERE sacking_batch_id IS NOT NULL;
 CREATE TABLE public.service_participant_financials (
   participant_financial_id uuid NOT NULL DEFAULT gen_random_uuid(),
   service_request_id uuid NOT NULL,

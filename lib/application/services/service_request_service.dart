@@ -485,6 +485,31 @@ class ServiceRequestService {
     );
   }
 
+  Future<Either<Failure, void>> claimQueuedService({
+    required String requestId,
+    required String operatorId,
+  }) async {
+    final result = await _repository.assignAvailableOperatorToService(
+      requestId: requestId,
+      operatorId: operatorId,
+    );
+
+    return result.fold(
+      (failure) => Left(failure),
+      (_) async {
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: operatorId,
+          action: 'CLAIM_SERVICE',
+          previousStatus: _enumName(ServiceRequestStatus.queued),
+          newStatus: _enumName(ServiceRequestStatus.queued),
+          remarks: 'Service claimed by operator and added to their ongoing services; processing has not started.',
+        );
+        return const Right(null);
+      },
+    );
+  }
+
   Future<Either<Failure, void>> submitFinancialHandling({
     required String requestId,
     required String ownerId,
@@ -720,58 +745,89 @@ class ServiceRequestService {
     );
   }
 
+  Future<Either<Failure, void>> recordSackingBatch({
+    required String requestId,
+    required String operatorId,
+    required int inputSacks,
+    required int outputSacks,
+  }) async {
+    final batchResult = await _repository.createSackingBatch(
+      requestId: requestId,
+      operatorId: operatorId,
+      inputSacks: inputSacks,
+      outputSacks: outputSacks,
+    );
+
+    return batchResult.fold(
+      (l) => Left(l),
+      (_) async {
+        final batchesRes = await _repository.getMillingBatches(requestId);
+        int totalOutputSacks = 0;
+        batchesRes.fold((_) => null, (list) {
+          for (var b in list) {
+            if (b['batch_kind'] != 'milling') {
+              totalOutputSacks += (b['output_sacks'] as num?)?.toInt() ?? 0;
+            }
+          }
+        });
+
+        final updateResult = await _repository.updateRequestStatus(
+          requestId: requestId,
+          status: _enumName(ServiceRequestStatus.processing),
+          userId: operatorId,
+          additionalData: {
+            'sacked_quantity': totalOutputSacks,
+            'current_processing_stage': _enumName(ProcessingStage.rebagging),
+          },
+        );
+        final updateFailure = updateResult.fold<String?>(
+          (failure) => failure.message,
+          (_) => null,
+        );
+        if (updateFailure != null) return Left(ServerFailure(updateFailure));
+
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: operatorId,
+          action: 'COMPLETE_SACKING_BATCH',
+          previousStatus: _enumName(ServiceRequestStatus.processing),
+          newStatus: _enumName(ServiceRequestStatus.processing),
+          remarks: 'Sacked $inputSacks miner sacks into $outputSacks resacked sacks',
+        );
+
+        return const Right(null);
+      },
+    );
+  }
+
   Future<Either<Failure, void>> startBatchMilling({
     required String requestId,
     required String operatorId,
     required String machineId,
     required String drumId,
     required int inputSacks,
-    required int outputSacks,
     required int estimatedDurationMinutes,
   }) async {
-    // 1. Create the batch record
-    final batchResult = await _repository.createMillingBatch(
+    final result = await _repository.startMillingBatch(
       requestId: requestId,
       operatorId: operatorId,
       machineId: machineId,
       drumId: drumId,
       inputSacks: inputSacks,
-      outputSacks: outputSacks,
       estimatedDurationMinutes: estimatedDurationMinutes,
     );
 
-    return batchResult.fold(
-      (l) => Left(l),
+    return result.fold(
+      (failure) => Left(failure),
       (_) async {
-        // 2. Update the main request with current total sacked quantity
-        final batchesRes = await _repository.getMillingBatches(requestId);
-        int totalOutputSacks = 0;
-        batchesRes.fold((_) => null, (list) {
-          for (var b in list) {
-            totalOutputSacks += (b['output_sacks'] as int? ?? 0);
-          }
-        });
-
-        await _repository.updateRequestStatus(
-          requestId: requestId,
-          status: _enumName(ServiceRequestStatus.processing),
-          userId: operatorId,
-          additionalData: {
-            'sacked_quantity': totalOutputSacks,
-            'current_processing_stage': _enumName(ProcessingStage.millingCrushing),
-          },
-        );
-
-        // 3. Log Audit
         await _repository.logAuditTrail(
           requestId: requestId,
           userId: operatorId,
-          action: 'START_BATCH',
+          action: 'START_MILLING_BATCH',
           previousStatus: _enumName(ServiceRequestStatus.processing),
           newStatus: _enumName(ServiceRequestStatus.processing),
-          remarks: 'Started batch milling with $inputSacks sacks (Resacked to $outputSacks)',
+          remarks: 'Started milling with $inputSacks resacked sacks',
         );
-        
         return const Right(null);
       },
     );
@@ -843,6 +899,7 @@ class ServiceRequestService {
     String? requestId,
     required String operatorId,
     required String reason,
+    String? evidenceUrl,
     String? machineId,
     String? drumId,
     bool stopEntireMachine = false,
@@ -851,6 +908,7 @@ class ServiceRequestService {
       requestId: requestId,
       operatorId: operatorId,
       reason: reason,
+      evidenceUrl: evidenceUrl,
       machineId: machineId,
       drumId: drumId,
       stopEntireMachine: stopEntireMachine,

@@ -85,7 +85,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
           child: _buildLogoMark(),
         ),
         title: const Text(
-          'GAHIRA',
+          'EGReS',
           style: TextStyle(
             color: kGold,
             fontWeight: FontWeight.bold,
@@ -649,20 +649,11 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
     );
   }
 
-  Widget _buildLogoMark() {
-    return Container(
+  Widget _buildLogoMark() {    return Image.asset(
+      'assets/img/EGReS.png',
       width: 34,
       height: 34,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: kGold, width: 1.6),
-        color: context.bgColor,
-      ),
-      child: const Icon(
-        Icons.settings_input_component_rounded,
-        color: kGold,
-        size: 16,
-      ),
+      fit: BoxFit.contain,
     );
   }
 }

@@ -106,7 +106,13 @@ class _OperatorMainLayoutState extends State<OperatorMainLayout> {
     return Scaffold(
       body: IndexedStack(index: _pageIndex, children: pages),
       bottomNavigationBar: _buildNavigationBar(),
-      floatingActionButton: const OperatorEmergencyStopFab(),
+      floatingActionButton: AnimatedSlide(
+        offset: _pageIndex == 1 ? const Offset(0, -1.35) : Offset.zero,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeInOut,
+        child: const OperatorEmergencyStopFab(),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

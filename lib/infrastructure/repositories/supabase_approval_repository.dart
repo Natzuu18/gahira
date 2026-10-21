@@ -174,7 +174,7 @@ class SupabaseApprovalRepository {
       final roleMap = userResponse['role'] as Map<String, dynamic>?;
       final roleName = roleMap?['role']?.toString().toUpperCase() ?? 'ACCOUNT';
 
-      final smsMessage = 'Gahira System: Hello $fname! Your $roleName application has been APPROVED. You can now log in using Email: $email | Password: $tempPassword. Thank you!';
+      final smsMessage = 'EGReS System: Hello $fname! Your $roleName application has been APPROVED. You can now log in using Email: $email | Password: $tempPassword. Thank you!';
 
       final smsResponse = await http.post(
         Uri.parse(EnvConfig.philsmsEndpoint),
@@ -295,7 +295,7 @@ class SupabaseApprovalRepository {
         final roleMap = userResponse['role'] as Map<String, dynamic>?;
         final roleName = roleMap?['role']?.toString().toUpperCase() ?? 'ACCOUNT';
 
-        final smsMessage = 'Gahira System: Hello $fname! Your $roleName application was DECLINED. Reason: $reason. For inquiries, please contact support.';
+        final smsMessage = 'EGReS System: Hello $fname! Your $roleName application was DECLINED. Reason: $reason. For inquiries, please contact support.';
 
         final smsResponse = await http.post(
           Uri.parse(EnvConfig.philsmsEndpoint),

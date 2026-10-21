@@ -13,8 +13,10 @@ import 'payments_history_page.dart';
 import 'availability_page.dart';
 import '../../domain/entities/availability_entity.dart';
 import '../../domain/entities/service_request_entity.dart';
+import '../../domain/entities/user_entity.dart';
 import '../../infrastructure/repositories/supabase_availability_repository.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
+import '../../infrastructure/repositories/supabase_user_repository.dart';
 
 // Gahira Ball Mill Management System - Admin Dashboard
 class AdminDashboardPage extends StatefulWidget {
@@ -33,10 +35,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _serviceRepository = SupabaseServiceRequestRepository();
   final _availabilityRepository = SupabaseAvailabilityRepository();
+  final _userRepository = SupabaseUserRepository();
   late final AnimationController _todayPulseController;
 
   List<ServiceRequestEntity> _serviceRequests = [];
   List<AvailabilityEntity> _todayAvailabilities = [];
+  List<UserEntity> _operators = [];
   List<PendingAccount> _pendingApplications = [];
   bool _isLoadingOverview = true;
   _DashboardPeriod _period = _DashboardPeriod.week;
@@ -62,6 +66,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     final applicationResult = await ApprovalService().fetchPendingAccounts();
     final availabilityResult = await _availabilityRepository
         .getAvailabilities();
+    final operatorResult = await _userRepository.getOperators();
     if (!mounted) return;
 
     setState(() {
@@ -70,6 +75,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         (_) => [],
         (availability) => availability,
       );
+      _operators = operatorResult.fold((_) => [], (operators) => operators);
       _pendingApplications = applicationResult.fold(
         (_) => [],
         (accounts) => accounts,
@@ -158,7 +164,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           (availability) =>
               availability.date.year == now.year &&
               availability.date.month == now.month &&
-              availability.date.day == now.day,
+              availability.date.day == now.day &&
+              !{'cancelled', 'canceled'}.contains(
+                availability.status.trim().toLowerCase(),
+              ),
         )
         .toList();
   }
@@ -212,6 +221,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                         ),
                         const SizedBox(height: 20),
                         _buildServiceOverview(),
+                        const SizedBox(height: 24),
+                        _buildOperatorOverview(),
                         const SizedBox(height: 24),
                         _buildPendingApplications(),
                         const SizedBox(height: 24),
@@ -537,6 +548,138 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOperatorOverview() {
+    final totalOperators = _operators.length;
+    final activeOperators = _operators
+        .where((operator) => operator.status.trim().toLowerCase() == 'active')
+        .length;
+    final otherOperators = totalOperators - activeOperators;
+    const activeColor = Color(0xFF35B978);
+    const otherColor = Color(0xFF758195);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kGold.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'OPERATOR OVERVIEW',
+            style: TextStyle(
+              color: context.textColor,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'Active operators out of all operator accounts',
+            style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              SizedBox(
+                width: 154,
+                height: 154,
+                child: CustomPaint(
+                  painter: _OperatorStatusPiePainter(
+                    active: activeOperators,
+                    total: totalOperators,
+                    activeColor: activeColor,
+                    otherColor: otherColor,
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        color: context.surfaceColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '$totalOperators',
+                            style: TextStyle(
+                              color: context.textColor,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'total operators',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: context.mutedTextColor,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildOperatorCount(
+                      'Active operators',
+                      activeOperators,
+                      activeColor,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildOperatorCount(
+                      'Other operator accounts',
+                      otherOperators,
+                      otherColor,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperatorCount(String label, int count, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$count',
+          style: TextStyle(
+            color: context.textColor,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1062,22 +1205,60 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     );
   }
 
-  Widget _buildLogoMark() {
-    return Container(
+  Widget _buildLogoMark() {    return Image.asset(
+      'assets/img/EGReS.png',
       width: 34,
       height: 34,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: kGold, width: 1.6),
-        color: context.bgColor,
-      ),
-      child: const Icon(
-        Icons.settings_input_component_rounded,
-        color: kGold,
-        size: 16,
-      ),
+      fit: BoxFit.contain,
     );
   }
+}
+
+class _OperatorStatusPiePainter extends CustomPainter {
+  const _OperatorStatusPiePainter({
+    required this.active,
+    required this.total,
+    required this.activeColor,
+    required this.otherColor,
+  });
+
+  final int active;
+  final int total;
+  final Color activeColor;
+  final Color otherColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (total == 0) return;
+
+    final center = (Offset.zero & size).center;
+    final radius = math.min(size.width, size.height) / 2;
+    final activeSweep = active / total * math.pi * 2;
+    final remainingSweep = math.pi * 2 - activeSweep;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      activeSweep,
+      true,
+      Paint()..color = activeColor,
+    );
+    if (remainingSweep > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2 + activeSweep,
+        remainingSweep,
+        true,
+        Paint()..color = otherColor,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _OperatorStatusPiePainter oldDelegate) =>
+      oldDelegate.active != active ||
+      oldDelegate.total != total ||
+      oldDelegate.activeColor != activeColor ||
+      oldDelegate.otherColor != otherColor;
 }
 
 class _ServiceStatusPiePainter extends CustomPainter {

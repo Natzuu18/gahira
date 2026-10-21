@@ -160,6 +160,43 @@ class _EmergencyMonitorPageState extends State<EmergencyMonitorPage> {
                   child: Text(sr.emergencyReason ?? 'No reason provided.', 
                     style: TextStyle(color: context.textColor, fontSize: 13, height: 1.5)),
                 ),
+                if (sr.emergencyEvidenceUrl != null &&
+                    sr.emergencyEvidenceUrl!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'PHOTO EVIDENCE:',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => Dialog(
+                        child: InteractiveViewer(
+                          child: Image.network(sr.emergencyEvidenceUrl!),
+                        ),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        sr.emergencyEvidenceUrl!,
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const SizedBox(
+                          height: 100,
+                          child: Center(child: Text('Could not load photo evidence.')),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 if (!isResolved)
                   SizedBox(

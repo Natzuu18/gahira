@@ -42,10 +42,12 @@ class ServiceRequestEntity extends Equatable {
   final String? assistedByOperatorId;
   final String? approvedBy;
   final DateTime? approvedAt;
+  final DateTime? queueAddedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? billingId;
   final String? emergencyReason;
+  final String? emergencyEvidenceUrl;
   final DateTime? emergencyStoppedAt;
   final DateTime? emergencyResolvedAt;
   final String? creatorName; // Optional display name
@@ -63,10 +65,12 @@ class ServiceRequestEntity extends Equatable {
     this.assistedByOperatorId,
     this.approvedBy,
     this.approvedAt,
+    this.queueAddedAt,
     required this.createdAt,
     required this.updatedAt,
     this.billingId,
     this.emergencyReason,
+    this.emergencyEvidenceUrl,
     this.emergencyStoppedAt,
     this.emergencyResolvedAt,
     this.creatorName,
@@ -85,10 +89,12 @@ class ServiceRequestEntity extends Equatable {
     String? assistedByOperatorId,
     String? approvedBy,
     DateTime? approvedAt,
+    DateTime? queueAddedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
     String? billingId,
     String? emergencyReason,
+    String? emergencyEvidenceUrl,
     DateTime? emergencyStoppedAt,
     DateTime? emergencyResolvedAt,
     String? creatorName,
@@ -107,10 +113,12 @@ class ServiceRequestEntity extends Equatable {
       assistedByOperatorId: assistedByOperatorId ?? this.assistedByOperatorId,
       approvedBy: approvedBy ?? this.approvedBy,
       approvedAt: approvedAt ?? this.approvedAt,
+      queueAddedAt: queueAddedAt ?? this.queueAddedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       billingId: billingId ?? this.billingId,
       emergencyReason: emergencyReason ?? this.emergencyReason,
+      emergencyEvidenceUrl: emergencyEvidenceUrl ?? this.emergencyEvidenceUrl,
       emergencyStoppedAt: emergencyStoppedAt ?? this.emergencyStoppedAt,
       emergencyResolvedAt: emergencyResolvedAt ?? this.emergencyResolvedAt,
       creatorName: creatorName ?? this.creatorName,
@@ -131,10 +139,12 @@ class ServiceRequestEntity extends Equatable {
     assistedByOperatorId,
     approvedBy,
     approvedAt,
+    queueAddedAt,
     createdAt,
     updatedAt,
     billingId,
     emergencyReason,
+    emergencyEvidenceUrl,
     emergencyStoppedAt,
     emergencyResolvedAt,
     creatorName,
@@ -265,6 +275,8 @@ class ProcessingDetails extends Equatable {
   minerSacksProcessed; // Tracks cumulative miner sacks processed in batches
   final DateTime? unloadingStartedAt;
   final DateTime? unloadingCompletedAt;
+  final DateTime? washingStartedAt;
+  final DateTime? washingCompletedAt;
   final String? estimatedTime; // Set by Operator
   final DateTime? scheduledDate; // Set by Owner
   final List<String> assignedOperatorIds;
@@ -277,6 +289,8 @@ class ProcessingDetails extends Equatable {
     this.minerSacksProcessed = 0,
     this.unloadingStartedAt,
     this.unloadingCompletedAt,
+    this.washingStartedAt,
+    this.washingCompletedAt,
     this.estimatedTime,
     this.scheduledDate,
     required this.assignedOperatorIds,
@@ -290,6 +304,8 @@ class ProcessingDetails extends Equatable {
     int? minerSacksProcessed,
     DateTime? unloadingStartedAt,
     DateTime? unloadingCompletedAt,
+    DateTime? washingStartedAt,
+    DateTime? washingCompletedAt,
     String? estimatedTime,
     DateTime? scheduledDate,
     List<String>? assignedOperatorIds,
@@ -302,6 +318,8 @@ class ProcessingDetails extends Equatable {
       minerSacksProcessed: minerSacksProcessed ?? this.minerSacksProcessed,
       unloadingStartedAt: unloadingStartedAt ?? this.unloadingStartedAt,
       unloadingCompletedAt: unloadingCompletedAt ?? this.unloadingCompletedAt,
+      washingStartedAt: washingStartedAt ?? this.washingStartedAt,
+      washingCompletedAt: washingCompletedAt ?? this.washingCompletedAt,
       estimatedTime: estimatedTime ?? this.estimatedTime,
       scheduledDate: scheduledDate ?? this.scheduledDate,
       assignedOperatorIds: assignedOperatorIds ?? this.assignedOperatorIds,
@@ -317,6 +335,8 @@ class ProcessingDetails extends Equatable {
     minerSacksProcessed,
     unloadingStartedAt,
     unloadingCompletedAt,
+    washingStartedAt,
+    washingCompletedAt,
     estimatedTime,
     scheduledDate,
     assignedOperatorIds,

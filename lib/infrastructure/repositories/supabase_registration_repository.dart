@@ -242,7 +242,7 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
         body: jsonEncode({
           'recipient': phone,
           'sender_id': EnvConfig.philsmsSenderId,
-          'message': 'Gahira: $pin is your confirmation code. Valid for 5 mins.',
+          'message': 'EGReS: $pin is your confirmation code. Valid for 5 mins.',
         }),
       );
 

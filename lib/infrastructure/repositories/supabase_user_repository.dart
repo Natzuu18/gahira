@@ -66,7 +66,7 @@ class SupabaseUserRepository implements UserRepository {
             data['role_id'] = data['role'] != null ? data['role']['role'] : '';
             return MapEntry(roleName, UserModel.fromJson(data));
           })
-          .where((entry) => entry.key == 'miner' || entry.key == 'operator' || entry.key == 'client')
+          .where((entry) => entry.key == 'miner')
           .map((entry) => entry.value)
           .toList();
 
@@ -186,7 +186,7 @@ class SupabaseUserRepository implements UserRepository {
 
       // Send SMS via PhilSMS directly
       final roleTitle = role == UserRole.operator ? 'OPERATOR' : 'MINER';
-      final smsMessage = 'Gahira System: Hello $firstName! An admin has created your $roleTitle account. You can now log in using Email: $email | Password: $tempPassword. Thank you!';
+      final smsMessage = 'EGReS System: Hello $firstName! An admin has created your $roleTitle account. You can now log in using Email: $email | Password: $tempPassword. Thank you!';
 
       final smsResponse = await http.post(
         Uri.parse(EnvConfig.philsmsEndpoint),

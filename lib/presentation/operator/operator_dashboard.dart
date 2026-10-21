@@ -69,7 +69,7 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
           child: _buildLogoMark(context),
         ),
         title: const Text(
-          'GAHIRA',
+          'EGReS',
           style: TextStyle(
             color: kGold,
             fontWeight: FontWeight.bold,
@@ -492,20 +492,11 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
     );
   }
 
-  Widget _buildLogoMark(BuildContext context) {
-    return Container(
+  Widget _buildLogoMark(BuildContext context) {    return Image.asset(
+      'assets/img/EGReS.png',
       width: 34,
       height: 34,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: kGold, width: 1.6),
-        color: context.bgColor,
-      ),
-      child: const Icon(
-        Icons.settings_input_component_rounded,
-        color: kGold,
-        size: 16,
-      ),
+      fit: BoxFit.contain,
     );
   }
 }

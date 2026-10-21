@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../shared_widgets/appColor.dart';
@@ -23,39 +24,91 @@ class _MonitoringPageState extends State<MonitoringPage> {
   ServiceRequestEntity? _currentRequest;
   List<Map<String, dynamic>> _batches = [];
   bool _isLoading = true;
+  bool _isRefreshing = false;
+  bool _refreshQueued = false;
   Timer? _refreshTimer;
+  RealtimeChannel? _realtimeChannel;
 
   @override
   void initState() {
     super.initState();
+    _subscribeToRealtime();
     _loadData();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (mounted) _loadData(showLoading: false);
     });
+  }
+
+  void _subscribeToRealtime() {
+    final client = Supabase.instance.client;
+    _realtimeChannel = client
+        .channel('miner-process-${widget.request.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'service_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'service_request_id',
+            value: widget.request.id,
+          ),
+          callback: (_) => _loadData(showLoading: false),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'milling_batches',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'service_request_id',
+            value: widget.request.id,
+          ),
+          callback: (_) => _loadData(showLoading: false),
+        )
+        .subscribe();
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    final channel = _realtimeChannel;
+    if (channel != null) {
+      unawaited(Supabase.instance.client.removeChannel(channel));
+    }
     super.dispose();
   }
 
   Future<void> _loadData({bool showLoading = true}) async {
-    if (showLoading) setState(() => _isLoading = true);
-    
-    final batchesRes = await _requestRepo.getMillingBatches(widget.request.id);
-    final requestRes = await _requestRepo.getServiceRequests();
-    
-    if (mounted) {
-      setState(() {
-        _batches = batchesRes.getOrElse(() => []);
-        requestRes.fold((_) => null, (list) {
-          try {
-            _currentRequest = list.firstWhere((r) => r.id == widget.request.id);
-          } catch (_) {}
+    if (_isRefreshing) {
+      _refreshQueued = true;
+      return;
+    }
+    _isRefreshing = true;
+    if (showLoading && mounted) setState(() => _isLoading = true);
+
+    try {
+      final batchesRes = await _requestRepo.getMillingBatches(widget.request.id);
+      final requestRes = await _requestRepo.getServiceRequests();
+
+      if (mounted) {
+        setState(() {
+          _batches = batchesRes.getOrElse(() => []);
+          requestRes.fold((_) => null, (list) {
+            try {
+              _currentRequest = list.firstWhere(
+                (request) => request.id == widget.request.id,
+              );
+            } catch (_) {}
+          });
+          _isLoading = false;
         });
-        _isLoading = false;
-      });
+      }
+    } finally {
+      _isRefreshing = false;
+      if (_refreshQueued && mounted) {
+        _refreshQueued = false;
+        unawaited(_loadData(showLoading: false));
+      }
     }
   }
 
@@ -244,7 +297,11 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
   Widget _buildBatchMonitoringCard(Map<String, dynamic> batch) {
     final isMilling = batch['status'] == 'milling';
-    final createdAt = DateTime.parse(batch['created_at']).toLocal();
+    final isReadyToMill = batch['status'] == 'ready_to_mill';
+    final isMillingRun = batch['batch_kind'] == 'milling';
+    final createdAt = DateTime.parse(
+      batch['milling_started_at']?.toString() ?? batch['created_at'].toString(),
+    ).toLocal();
     final durationMinutes = batch['estimated_duration_minutes'] as int? ?? 30;
 
     return Container(
@@ -253,12 +310,24 @@ class _MonitoringPageState extends State<MonitoringPage> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isMilling ? kGold.withOpacity(0.3) : context.textColor.withOpacity(0.05)),
+        border: Border.all(
+          color: isMilling || isReadyToMill
+              ? kGold.withOpacity(0.3)
+              : context.textColor.withOpacity(0.05),
+        ),
       ),
       child: Row(
         children: [
           if (isMilling)
-            MillingTimerCircle(startTime: createdAt, durationMinutes: durationMinutes)
+            MillingTimerCircle(
+              startTime: createdAt,
+              durationMinutes: durationMinutes,
+              isPaused: _effectiveRequest.status ==
+                  ServiceRequestStatus.emergencyStop,
+              pausedAt: _effectiveRequest.emergencyStoppedAt,
+            )
+          else if (isReadyToMill)
+            const Icon(Icons.inventory_2_outlined, color: kGold, size: 40)
           else
             const Icon(Icons.check_circle, color: Colors.green, size: 40),
           const SizedBox(width: 16),
@@ -266,12 +335,30 @@ class _MonitoringPageState extends State<MonitoringPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${batch['machines']?['machine_name']} - ${batch['drums']?['drum_name']}', 
-                  style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold, fontSize: 13)),
-                Text('${batch['input_sacks']} In → ${batch['output_sacks']} Out', 
-                  style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
+                Text(
+                  isMillingRun
+                      ? 'Milling batch: ${batch['machines']?['machine_name'] ?? 'Machine'} - ${batch['drums']?['drum_name'] ?? 'Drum'}'
+                      : isReadyToMill
+                      ? 'Sacking batch ready to mill'
+                      : '${batch['machines']?['machine_name'] ?? 'Machine'} - ${batch['drums']?['drum_name'] ?? 'Drum'}',
+                  style: TextStyle(
+                    color: context.textColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  isMillingRun
+                      ? 'Milling ${batch['input_sacks']} resacked sacks'
+                      : isReadyToMill
+                      ? '${batch['input_sacks']} miner sacks sacked | ${batch['output_sacks']} resacked sacks'
+                      : '${batch['input_sacks']} In | ${batch['output_sacks']} Out',
+                  style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+                ),
                 if (isMilling)
                   Text('Processing...', style: TextStyle(color: kGold.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold))
+                else if (isReadyToMill)
+                  Text('Waiting for milling', style: TextStyle(color: kGold.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold))
                 else
                   Text('Completed', style: TextStyle(color: Colors.green.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)),
               ],

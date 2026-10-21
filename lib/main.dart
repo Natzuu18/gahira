@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import './core/navigation/app_scaffold_messenger.dart';
 import './core/auth/remember_me_session.dart';
 import './presentation/shared_widgets/appColor.dart';
 import './presentation/admin/admin_main_layout.dart';
@@ -40,7 +41,8 @@ class GahiraApp extends StatelessWidget {
       builder: (context, mode, _) {
         return MaterialApp(
           navigatorKey: appNavigatorKey,
-          title: 'Gahira Ball Mill Management System',
+          scaffoldMessengerKey: appScaffoldMessengerKey,
+          title: 'EGReS - EMELIO GOLD REFINERY SERVICE MANAGEMENT SYSTEM',
           debugShowCheckedModeBanner: false,
           themeMode: mode,
           theme: buildAppTheme(Brightness.light),
@@ -462,7 +464,7 @@ class _LoginPageState extends State<LoginPage>
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          'GAHIRA',
+                          'EGReS',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: kGold,
@@ -696,19 +698,11 @@ class _LoginPageState extends State<LoginPage>
     required double size,
     required double iconSize,
   }) {
-    return Container(
+    return Image.asset(
+      'assets/img/EGReS.png',
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: kGold, width: 2),
-        color: context.surfaceColor,
-      ),
-      child: Icon(
-        Icons.settings_input_component_rounded,
-        color: kGold,
-        size: iconSize,
-      ),
+      fit: BoxFit.contain,
     );
   }
 

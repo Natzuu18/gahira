@@ -1,11 +1,11 @@
 {
-    "name": "gahira",
-    "short_name": "gahira",
+    "name": "EGReS",
+    "short_name": "EGReS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "EMELIO GOLD REFINERY SERVICE MANAGEMENT SYSTEM",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

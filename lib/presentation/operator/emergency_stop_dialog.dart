@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../application/services/service_request_service.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
-import '../../infrastructure/repositories/supabase_equipment_repository.dart';
 import '../shared_widgets/appColor.dart';
 
 class EmergencyStopDialog extends StatefulWidget {
@@ -15,7 +14,6 @@ class EmergencyStopDialog extends StatefulWidget {
 
 class _EmergencyStopDialogState extends State<EmergencyStopDialog> {
   final _requestRepo = SupabaseServiceRequestRepository();
-  final _equipRepo = SupabaseEquipmentRepository();
   late final ServiceRequestService _service;
 
   List<Map<String, dynamic>> _machines = [];
@@ -35,13 +33,69 @@ class _EmergencyStopDialogState extends State<EmergencyStopDialog> {
   }
 
   Future<void> _loadEquipment() async {
-    final result = await _equipRepo.getMachines();
-    if (mounted) {
-      setState(() {
-        _machines = result.getOrElse(() => []);
-        _isLoading = false;
-      });
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
     }
+
+    try {
+      // Limit the selector to equipment on services this operator currently
+      // handles. Never populate it from the full equipment inventory.
+      final rows = await Supabase.instance.client
+          .from('ongoing_services')
+          .select(
+            'machine_id, drum_id, machines:machine_id(machine_id, machine_name), '
+            'drums:drum_id(drum_id, drum_name), '
+            'service_requests!inner(service_request_id, status)',
+          )
+          .eq('operator_id', operatorId)
+          .eq('service_requests.status', 'processing');
+
+      final machinesById = <String, Map<String, dynamic>>{};
+      for (final row in rows) {
+        final machineValue = row['machines'];
+        final drumValue = row['drums'];
+        final machine = _asMap(machineValue);
+        final drum = _asMap(drumValue);
+        final machineId = row['machine_id']?.toString();
+        if (machineId == null) continue;
+        final entry = machinesById.putIfAbsent(machineId, () => {
+          'machine_id': machineId,
+          'machine_name': machine['machine_name']?.toString() ?? 'Machine',
+          'drums': <Map<String, dynamic>>[],
+        });
+        final drumId = row['drum_id']?.toString();
+        final drums = entry['drums'] as List<Map<String, dynamic>>;
+        if (drumId != null && !drums.any((item) => item['drum_id'] == drumId)) {
+          drums.add({
+            'drum_id': drumId,
+            'drum_name': drum['drum_name']?.toString() ?? 'Drum',
+          });
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _machines = machinesById.values.toList();
+          _isLoading = false;
+          _selectedMachineId = _machines.isEmpty
+              ? null
+              : _machines.first['machine_id'].toString();
+        });
+      }
+    } catch (error) {
+      debugPrint('Could not load operator emergency-stop equipment: $error');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is List && value.isNotEmpty && value.first is Map) {
+      return Map<String, dynamic>.from(value.first as Map);
+    }
+    return const {};
   }
 
   Future<void> _handleSubmit() async {
@@ -128,10 +182,15 @@ class _EmergencyStopDialogState extends State<EmergencyStopDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Choose the scope of the emergency stop.',
+                    'Stop one selected drum or the entire machine and all of its drums. Active services using the stopped equipment will be halted.',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 14),
+                  if (_machines.isEmpty)
+                    const Text(
+                      'No equipment is assigned to your active services.',
+                      style: TextStyle(color: Colors.red, fontSize: 12),
+                    ),
 
                   Row(
                     children: [
@@ -197,7 +256,7 @@ class _EmergencyStopDialogState extends State<EmergencyStopDialog> {
                           ),
                         )
                         .toList(),
-                    onChanged: (val) => setState(() {
+                    onChanged: _machines.isEmpty ? null : (val) => setState(() {
                       _selectedMachineId = val;
                       _selectedDrumId = null;
                     }),
@@ -288,7 +347,7 @@ class _EmergencyStopDialogState extends State<EmergencyStopDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _isSubmitting ? null : _handleSubmit,
+          onPressed: _isSubmitting || _machines.isEmpty ? null : _handleSubmit,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.red,
             foregroundColor: Colors.white,

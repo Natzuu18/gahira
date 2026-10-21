@@ -630,6 +630,51 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           children: [
             const Divider(height: 32),
+            if (request.emergencyStoppedAt != null) ...[
+              _buildSectionHeader('Emergency Stop'),
+              if (request.emergencyReason != null &&
+                  request.emergencyReason!.isNotEmpty)
+                _buildDetailRow(
+                  Icons.warning_amber_rounded,
+                  'Reason',
+                  request.emergencyReason!,
+                ),
+              if (request.emergencyStoppedAt != null)
+                _buildDetailRow(
+                  Icons.access_time_rounded,
+                  'Stopped At',
+                  DateFormat(
+                    'MMM dd, yyyy - hh:mm a',
+                  ).format(request.emergencyStoppedAt!.toLocal()),
+                ),
+              if (request.emergencyEvidenceUrl != null &&
+                  request.emergencyEvidenceUrl!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (context) => Dialog(
+                      child: InteractiveViewer(
+                        child: Image.network(request.emergencyEvidenceUrl!),
+                      ),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      request.emergencyEvidenceUrl!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const SizedBox(
+                        height: 100,
+                        child: Center(child: Text('Could not load photo evidence.')),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
             _buildSectionHeader('Material Summary'),
             if (request.materialDetails.condition != null &&
                 request.materialDetails.condition!.isNotEmpty)

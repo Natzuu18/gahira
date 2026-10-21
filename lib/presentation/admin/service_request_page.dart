@@ -76,20 +76,11 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
     return user != null ? '${user.fname} ${user.lname}' : 'Unknown';
   }
 
-  Widget _buildLogoMark() {
-    return Container(
+  Widget _buildLogoMark() {    return Image.asset(
+      'assets/img/EGReS.png',
       width: 34,
       height: 34,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: kGold, width: 1.6),
-        color: context.bgColor,
-      ),
-      child: const Icon(
-        Icons.settings_input_component_rounded,
-        color: kGold,
-        size: 16,
-      ),
+      fit: BoxFit.contain,
     );
   }
 
@@ -131,11 +122,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                         final req = _filteredRequests[index];
                         return _buildRequestCard(
                           req,
-                          index:
-                              (_filterStatus == 'Verified' ||
-                                  _filterStatus == 'Queued')
-                              ? index + 1
-                              : null,
+                          index: _filterStatus == 'Queued' ? index + 1 : null,
                         );
                       },
                     ),
@@ -357,16 +344,6 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
 
     final bool showOriginal =
         _showOriginalDataIds.contains(request.id) || latestVerification == null;
-    final bool canAssignOperator =
-        request.processingDetails.assignedOperatorIds.isEmpty &&
-        {
-          ServiceRequestStatus.verified,
-          ServiceRequestStatus.accepted,
-          ServiceRequestStatus.queued,
-          ServiceRequestStatus.scheduled,
-          ServiceRequestStatus.assigned,
-        }.contains(request.status);
-
     final displaySacks = showOriginal
         ? (request.materialDetails.numberOfSacks ?? 0)
         : latestVerification.actualSacks;
@@ -657,25 +634,6 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
           if (latestVerification?.notes != null && !showOriginal)
             _buildDetailRow('Operator Notes', latestVerification!.notes!),
 
-          if (canAssignOperator) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => _showAssignOperatorDialog(request),
-                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                label: const Text('Assign Available Operator'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: kGold,
-                  side: const BorderSide(color: kGold),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-
           if (request.status == ServiceRequestStatus.verified ||
               request.status == ServiceRequestStatus.accepted) ...[
             const SizedBox(height: 16),
@@ -957,143 +915,6 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
           );
         },
       ),
-    );
-  }
-
-  List<UserEntity> _availableOperatorsFor(ServiceRequestEntity request) {
-    const busyStatuses = {
-      ServiceRequestStatus.verified,
-      ServiceRequestStatus.accepted,
-      ServiceRequestStatus.queued,
-      ServiceRequestStatus.scheduled,
-      ServiceRequestStatus.assigned,
-      ServiceRequestStatus.processing,
-      ServiceRequestStatus.emergencyStop,
-    };
-
-    return _allUsers.where((user) {
-      final isOperator = user.roleId.trim().toLowerCase() == 'operator';
-      final isActive = {'active', 'approved'}.contains(
-        user.status.trim().toLowerCase(),
-      );
-      if (!isOperator || !isActive) return false;
-
-      final isBusyOnAnotherService = _requests.any(
-        (otherRequest) =>
-            otherRequest.id != request.id &&
-            busyStatuses.contains(otherRequest.status) &&
-            otherRequest.processingDetails.assignedOperatorIds.contains(
-              user.userId,
-            ),
-      );
-      return !isBusyOnAnotherService;
-    }).toList();
-  }
-
-  Future<void> _showAssignOperatorDialog(ServiceRequestEntity request) async {
-    final availableOperators = _availableOperatorsFor(request);
-    if (availableOperators.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('There are no available operators to assign.')),
-      );
-      return;
-    }
-
-    String? selectedOperatorId;
-    final selectedId = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: context.surfaceColor,
-          title: const Text('Assign Operator', style: TextStyle(color: kGold)),
-          content: SizedBox(
-            width: 420,
-            height: 360,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Choose an active operator who is not assigned to another queued or processing service.',
-                  style: TextStyle(color: context.mutedTextColor, fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: availableOperators.length,
-                    itemBuilder: (context, index) {
-                      final operator = availableOperators[index];
-                      return RadioListTile<String>(
-                        value: operator.userId,
-                        groupValue: selectedOperatorId,
-                        activeColor: kGold,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          '${operator.fname} ${operator.lname}',
-                          style: TextStyle(color: context.textColor),
-                        ),
-                        subtitle: Text(
-                          operator.status,
-                          style: TextStyle(color: context.mutedTextColor),
-                        ),
-                        onChanged: (value) =>
-                            setDialogState(() => selectedOperatorId = value),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: selectedOperatorId == null
-                  ? null
-                  : () => Navigator.pop(dialogContext, selectedOperatorId),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kGold,
-                foregroundColor: kBlack,
-              ),
-              child: const Text('Assign'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (selectedId == null || !mounted) return;
-
-    final operator = availableOperators.firstWhere(
-      (candidate) => candidate.userId == selectedId,
-    );
-    final adminId = SupabaseConfig.client.auth.currentUser?.id;
-    if (adminId == null) return;
-
-    final result = await _service.assignOperatorToQueuedService(
-      requestId: request.id,
-      adminId: adminId,
-      operatorId: operator.userId,
-      operatorName: '${operator.fname} ${operator.lname}',
-      currentStatus: request.status.name,
-    );
-    if (!mounted) return;
-    result.fold(
-      (failure) => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(failure.message), backgroundColor: Colors.red),
-      ),
-      (_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${operator.fname} ${operator.lname} was assigned. The service will appear in their operator workspace.',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-        _loadData();
-      },
     );
   }
 

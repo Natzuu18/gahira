@@ -381,7 +381,7 @@ class _RememberedSessionPageState extends State<RememberedSessionPage>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'GAHIRA',
+                              'EGReS',
                               style: TextStyle(
                                 color: context.mutedTextColor,
                                 fontSize: 12,

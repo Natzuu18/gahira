@@ -101,7 +101,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         (userEntity) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Account setup complete! Welcome to Gahira.'),
+              content: Text('Account setup complete! Welcome to EGReS.'),
               backgroundColor: Colors.green,
             ),
           );

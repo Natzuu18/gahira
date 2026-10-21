@@ -9,14 +9,20 @@ import '../models/service_request_model.dart';
 import '../supabase/supabase_config.dart';
 
 class SupabaseServiceRequestRepository {
-  final SupabaseClient _client = SupabaseConfig.client;
+  final SupabaseClient _client;
 
-  Future<Either<Failure, List<ServiceRequestModel>>> getServiceRequests() async {
+  SupabaseServiceRequestRepository({SupabaseClient? client})
+    : _client = client ?? SupabaseConfig.client;
+
+  Future<Either<Failure, List<ServiceRequestModel>>>
+  getServiceRequests() async {
     try {
       final response = await _client
           .from('service_requests')
-          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))');
-      
+          .select(
+            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+          );
+
       print('--- FETCHING SERVICE REQUESTS ---');
       // Removed big RAW DATA print to prevent hangs
 
@@ -42,7 +48,9 @@ class SupabaseServiceRequestRepository {
     try {
       final response = await _client
           .from('service_requests')
-          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))')
+          .select(
+            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+          )
           .eq('status', 'pendingOperatorVerification');
       return Right(_parseServiceRequestList(response));
     } catch (e) {
@@ -55,7 +63,9 @@ class SupabaseServiceRequestRepository {
     try {
       final response = await _client
           .from('service_requests')
-          .select('*, users:user_id(*), operator_verified_services!inner(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))')
+          .select(
+            '*, users:user_id(*), operator_verified_services!inner(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+          )
           .eq('operator_verified_services.operator_id', operatorId);
       return Right(_parseServiceRequestList(response));
     } catch (e) {
@@ -68,7 +78,9 @@ class SupabaseServiceRequestRepository {
     try {
       final response = await _client
           .from('service_requests')
-          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))')
+          .select(
+            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
+          )
           .eq('ongoing_services.operator_id', operatorId)
           .inFilter('status', ['processing', 'emergencyStop']);
       return Right(_parseServiceRequestList(response));
@@ -82,7 +94,9 @@ class SupabaseServiceRequestRepository {
     try {
       final response = await _client
           .from('service_requests')
-          .select('*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))')
+          .select(
+            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
+          )
           .eq('ongoing_services.operator_id', operatorId)
           .inFilter('status', ['verified', 'accepted', 'queued', 'scheduled']);
       return Right(_parseServiceRequestList(response));
@@ -101,12 +115,16 @@ class SupabaseServiceRequestRepository {
           .select('status, role:role_id!inner(role)')
           .eq('userId', operatorId)
           .maybeSingle();
-      final role = (operator?['role'] as Map?)?['role']?.toString().toLowerCase();
+      final role = (operator?['role'] as Map?)?['role']
+          ?.toString()
+          .toLowerCase();
       final operatorStatus = operator?['status']?.toString().toLowerCase();
       if (operator == null ||
           role != 'operator' ||
           (operatorStatus != 'active' && operatorStatus != 'approved')) {
-        return Left(ServerFailure('This operator is not active and available.'));
+        return Left(
+          ServerFailure('This operator is not active and available.'),
+        );
       }
 
       final request = await _client
@@ -115,19 +133,29 @@ class SupabaseServiceRequestRepository {
           .eq('service_request_id', requestId)
           .maybeSingle();
       final requestStatus = request?['status']?.toString();
-      const assignableStatuses = {'verified', 'accepted', 'queued', 'scheduled', 'assigned'};
+      const assignableStatuses = {
+        'verified',
+        'accepted',
+        'queued',
+        'scheduled',
+        'assigned',
+      };
       if (request == null || !assignableStatuses.contains(requestStatus)) {
-        return Left(ServerFailure('This service is no longer available for assignment.'));
+        return Left(
+          ServerFailure('This service is no longer available for assignment.'),
+        );
       }
 
       final rawAssignments = request['ongoing_services'];
       final currentAssignments = rawAssignments is List
           ? rawAssignments
           : rawAssignments is Map
-              ? [rawAssignments]
-              : const [];
+          ? [rawAssignments]
+          : const [];
       if (currentAssignments.isNotEmpty) {
-        return Left(ServerFailure('This service already has an assigned operator.'));
+        return Left(
+          ServerFailure('This service already has an assigned operator.'),
+        );
       }
 
       final assignedServiceRows = await _client
@@ -154,9 +182,11 @@ class SupabaseServiceRequestRepository {
             ])
             .limit(1);
         if ((busyServices as List).isNotEmpty) {
-          return Left(ServerFailure(
-            'This operator is already assigned to another active service.',
-          ));
+          return Left(
+            ServerFailure(
+              'This operator is already assigned to another active service.',
+            ),
+          );
         }
       }
 
@@ -176,14 +206,11 @@ class SupabaseServiceRequestRepository {
     required String operatorId,
   }) async {
     try {
-      await _client.from('ongoing_services').upsert(
-        {
-          'service_request_id': requestId,
-          'operator_id': operatorId,
-          'current_stage': 'rebagging',
-        },
-        onConflict: 'service_request_id',
-      );
+      await _client.from('ongoing_services').upsert({
+        'service_request_id': requestId,
+        'operator_id': operatorId,
+        'current_stage': 'rebagging',
+      }, onConflict: 'service_request_id');
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
@@ -202,17 +229,19 @@ class SupabaseServiceRequestRepository {
     }).toList();
   }
 
-  Future<Either<Failure, ServiceRequestModel>> createServiceRequest(ServiceRequestModel model) async {
+  Future<Either<Failure, ServiceRequestModel>> createServiceRequest(
+    ServiceRequestModel model,
+  ) async {
     try {
       final data = model.toJson();
-      
+
       // Insert the main request
       final response = await _client
           .from('service_requests')
           .insert(data)
           .select()
           .single();
-      
+
       final created = ServiceRequestModel.fromJson(response);
 
       // Create Audit Trail entry for creation
@@ -246,7 +275,10 @@ class SupabaseServiceRequestRepository {
         ...?additionalData,
       };
 
-      await _client.from('service_requests').update(updates).eq('service_request_id', requestId);
+      await _client
+          .from('service_requests')
+          .update(updates)
+          .eq('service_request_id', requestId);
       return const Right(null);
     } catch (e) {
       print('Status Update Error: $e');
@@ -287,7 +319,9 @@ class SupabaseServiceRequestRepository {
           .maybeSingle();
       if (existing != null) {
         if (existing['operator_id']?.toString() != operatorId) {
-          return Left(ServerFailure('This service is assigned to another operator.'));
+          return Left(
+            ServerFailure('This service is assigned to another operator.'),
+          );
         }
         await _client
             .from('ongoing_services')
@@ -311,7 +345,9 @@ class SupabaseServiceRequestRepository {
   }
 
   // --- BATCH SACK PROCESSING ---
-  Future<Either<Failure, List<Map<String, dynamic>>>> getMillingBatches(String requestId) async {
+  Future<Either<Failure, List<Map<String, dynamic>>>> getMillingBatches(
+    String requestId,
+  ) async {
     try {
       final response = await _client
           .from('milling_batches')
@@ -324,30 +360,153 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, void>> createMillingBatch({
+  Future<Either<Failure, void>> releaseEquipmentForServiceRequest(
+    String requestId,
+  ) async {
+    try {
+      final batches = await _client
+          .from('milling_batches')
+          .select('machine_id, drum_id')
+          .eq('service_request_id', requestId);
+
+      final equipmentByDrum = <String, String>{};
+      for (final batch in batches as List) {
+        final drumId = batch['drum_id']?.toString();
+        final machineId = batch['machine_id']?.toString();
+        if (drumId != null && machineId != null) {
+          equipmentByDrum[drumId] = machineId;
+        }
+      }
+
+      final affectedMachines = <String>{};
+      for (final entry in equipmentByDrum.entries) {
+        final activeBatches = await _client
+            .from('milling_batches')
+            .select('batch_id')
+            .eq('drum_id', entry.key)
+            .eq('status', 'milling')
+            .limit(1);
+        if ((activeBatches as List).isNotEmpty) continue;
+
+        final drum = await _client
+            .from('drums')
+            .select('status')
+            .eq('drum_id', entry.key)
+            .maybeSingle();
+        if (drum?['status']?.toString() == 'in_use') {
+          await _client
+              .from('drums')
+              .update({'status': 'available'})
+              .eq('drum_id', entry.key);
+          affectedMachines.add(entry.value);
+        }
+      }
+
+      for (final machineId in affectedMachines) {
+        final inUseDrums = await _client
+            .from('drums')
+            .select('drum_id')
+            .eq('machine_id', machineId)
+            .eq('status', 'in_use')
+            .limit(1);
+        if ((inUseDrums as List).isNotEmpty) continue;
+
+        final machine = await _client
+            .from('machines')
+            .select('status')
+            .eq('machine_id', machineId)
+            .maybeSingle();
+        if (machine?['status']?.toString() == 'in_use') {
+          await _client
+              .from('machines')
+              .update({'status': 'available'})
+              .eq('machine_id', machineId);
+        }
+      }
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> createSackingBatch({
+    required String requestId,
+    required String operatorId,
+    required int inputSacks,
+    required int outputSacks,
+  }) async {
+    try {
+      await _client.from('milling_batches').insert({
+        'service_request_id': requestId,
+        'operator_id': operatorId,
+        'input_sacks': inputSacks,
+        'output_sacks': outputSacks,
+        'status': 'ready_to_mill',
+        'batch_kind': 'sacking',
+      });
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> startMillingBatch({
     required String requestId,
     required String operatorId,
     required String machineId,
     required String drumId,
     required int inputSacks,
-    required int outputSacks,
     required int estimatedDurationMinutes,
   }) async {
     try {
-      // 1. Insert milling batch
+      final requestBatches = await _client
+          .from('milling_batches')
+          .select('batch_kind, input_sacks, output_sacks')
+          .eq('service_request_id', requestId);
+      final batches = requestBatches as List;
+      final preparedSacks = batches
+          .where((batch) => batch['batch_kind'] == 'sacking')
+          .fold<int>(
+            0,
+            (total, batch) =>
+                total + ((batch['output_sacks'] as num?)?.toInt() ?? 0),
+          );
+      final alreadyAllocated = batches
+          .where((batch) => batch['batch_kind'] == 'milling')
+          .fold<int>(
+            0,
+            (total, batch) =>
+                total + ((batch['input_sacks'] as num?)?.toInt() ?? 0),
+          );
+      final availableSacks = preparedSacks - alreadyAllocated;
+      if (inputSacks <= 0 || inputSacks > availableSacks) {
+        return Left(
+          ServerFailure(
+            'Only $availableSacks resacked sacks remain available to mill.',
+          ),
+        );
+      }
+
       await _client.from('milling_batches').insert({
         'service_request_id': requestId,
         'operator_id': operatorId,
         'machine_id': machineId,
         'drum_id': drumId,
         'input_sacks': inputSacks,
-        'output_sacks': outputSacks,
+        'output_sacks': inputSacks,
+        'batch_kind': 'milling',
         'estimated_duration_minutes': estimatedDurationMinutes,
+        'milling_started_at': DateTime.now().toUtc().toIso8601String(),
         'status': 'milling',
       });
 
-      // 2. Mark the specific drum as 'in_use'
-      await _client.from('drums').update({'status': 'in_use'}).eq('drum_id', drumId);
+      // Mark the selected drum and its machine as in use.
+      await _client
+          .from('drums')
+          .update({'status': 'in_use'})
+          .eq('drum_id', drumId);
 
       // 3. Check if all drums in this machine are now in use
       final freeDrums = await _client
@@ -355,10 +514,13 @@ class SupabaseServiceRequestRepository {
           .select('drum_id')
           .eq('machine_id', machineId)
           .eq('status', 'available');
-      
+
       if ((freeDrums as List).isEmpty) {
         // Machine is fully occupied
-        await _client.from('machines').update({'status': 'in_use'}).eq('machine_id', machineId);
+        await _client
+            .from('machines')
+            .update({'status': 'in_use'})
+            .eq('machine_id', machineId);
       }
 
       return const Right(null);
@@ -374,13 +536,25 @@ class SupabaseServiceRequestRepository {
   }) async {
     try {
       // 1. Complete batch status
-      await _client.from('milling_batches').update({'status': 'completed', 'completed_at': DateTime.now().toIso8601String()}).eq('batch_id', batchId);
+      await _client
+          .from('milling_batches')
+          .update({
+            'status': 'completed',
+            'completed_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('batch_id', batchId);
 
       // 2. Revert the specific drum back to 'available'
-      await _client.from('drums').update({'status': 'available'}).eq('drum_id', drumId);
+      await _client
+          .from('drums')
+          .update({'status': 'available'})
+          .eq('drum_id', drumId);
 
       // 3. Since at least this drum is now available, the machine is available for use
-      await _client.from('machines').update({'status': 'available'}).eq('machine_id', machineId);
+      await _client
+          .from('machines')
+          .update({'status': 'available'})
+          .eq('machine_id', machineId);
 
       return const Right(null);
     } catch (e) {
@@ -388,9 +562,15 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, void>> updateMillingBatchDuration(String batchId, int newDuration) async {
+  Future<Either<Failure, void>> updateMillingBatchDuration(
+    String batchId,
+    int newDuration,
+  ) async {
     try {
-      await _client.from('milling_batches').update({'estimated_duration_minutes': newDuration}).eq('batch_id', batchId);
+      await _client
+          .from('milling_batches')
+          .update({'estimated_duration_minutes': newDuration})
+          .eq('batch_id', batchId);
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
@@ -401,25 +581,37 @@ class SupabaseServiceRequestRepository {
     String? requestId,
     required String operatorId,
     required String reason,
+    String? evidenceUrl,
     String? machineId,
     String? drumId,
     bool stopEntireMachine = false,
   }) async {
     try {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
 
       if (stopEntireMachine && machineId != null) {
         // --- MACHINE-WIDE STOP ---
-        
+
         // 1. Mark Machine as emergency stop
-        await _client.from('machines').update({'status': 'emergency_stop'}).eq('machine_id', machineId);
+        await _client
+            .from('machines')
+            .update({'status': 'emergency_stop'})
+            .eq('machine_id', machineId);
 
         // 2. Mark ALL Drums of this machine as emergency stop
-        await _client.from('drums').update({'status': 'emergency_stop'}).eq('machine_id', machineId);
+        await _client
+            .from('drums')
+            .update({'status': 'emergency_stop'})
+            .eq('machine_id', machineId);
 
         // 3. Find all active service requests currently using ANY drum on this machine
-        final drumsResponse = await _client.from('drums').select('drum_id').eq('machine_id', machineId);
-        final drumIds = (drumsResponse as List).map((d) => d['drum_id'].toString()).toList();
+        final drumsResponse = await _client
+            .from('drums')
+            .select('drum_id')
+            .eq('machine_id', machineId);
+        final drumIds = (drumsResponse as List)
+            .map((d) => d['drum_id'].toString())
+            .toList();
 
         if (drumIds.isNotEmpty) {
           final activeBatches = await _client
@@ -427,17 +619,24 @@ class SupabaseServiceRequestRepository {
               .select('service_request_id')
               .filter('drum_id', 'in', drumIds)
               .eq('status', 'milling');
-          
-          final requestIds = (activeBatches as List).map((b) => b['service_request_id'].toString()).toSet().toList();
+
+          final requestIds = (activeBatches as List)
+              .map((b) => b['service_request_id'].toString())
+              .toSet()
+              .toList();
 
           // 4. Update all these service requests to emergencyStop
           if (requestIds.isNotEmpty) {
-            await _client.from('service_requests').update({
-              'status': 'emergencyStop',
-              'emergency_reason': 'MACHINE FAILURE: $reason',
-              'emergency_stopped_at': now,
-              'updated_at': now,
-            }).filter('service_request_id', 'in', requestIds);
+            await _client
+                .from('service_requests')
+                .update({
+                  'status': 'emergencyStop',
+                  'emergency_reason': 'MACHINE FAILURE: $reason',
+                  'emergency_evidence_url': evidenceUrl,
+                  'emergency_stopped_at': now,
+                  'updated_at': now,
+                })
+                .filter('service_request_id', 'in', requestIds);
 
             for (final rid in requestIds) {
               await logAuditTrail(
@@ -453,9 +652,12 @@ class SupabaseServiceRequestRepository {
         }
       } else if (drumId != null) {
         // --- SPECIFIC DRUM STOP ---
-        
+
         // 1. Mark the specific drum
-        await _client.from('drums').update({'status': 'emergency_stop'}).eq('drum_id', drumId);
+        await _client
+            .from('drums')
+            .update({'status': 'emergency_stop'})
+            .eq('drum_id', drumId);
 
         // 2. Find the active service request using this drum
         final activeBatchResponse = await _client
@@ -463,19 +665,23 @@ class SupabaseServiceRequestRepository {
             .select('service_request_id')
             .eq('drum_id', drumId)
             .eq('status', 'milling');
-        
+
         final List batches = activeBatchResponse as List;
-        
+
         if (batches.isNotEmpty) {
           final rid = batches.first['service_request_id'].toString();
-          
+
           // 3. Update the specific service request
-          await _client.from('service_requests').update({
-            'status': 'emergencyStop',
-            'emergency_reason': 'DRUM FAILURE: $reason',
-            'emergency_stopped_at': now,
-            'updated_at': now,
-          }).eq('service_request_id', rid);
+          await _client
+              .from('service_requests')
+              .update({
+                'status': 'emergencyStop',
+                'emergency_reason': 'DRUM FAILURE: $reason',
+                'emergency_evidence_url': evidenceUrl,
+                'emergency_stopped_at': now,
+                'updated_at': now,
+              })
+              .eq('service_request_id', rid);
 
           // 4. Log Audit
           await logAuditTrail(
@@ -495,20 +701,58 @@ class SupabaseServiceRequestRepository {
     }
   }
 
+  Future<Either<Failure, String>> uploadEmergencyEvidence({
+    required String requestId,
+    required PlatformFile photo,
+  }) async {
+    try {
+      final bytes = photo.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        return Left(ServerFailure('Could not read the selected photo.'));
+      }
+      final extension = photo.extension?.toLowerCase() ?? 'jpg';
+      final safeExtension = RegExp(r'^[a-z0-9]{1,8}$').hasMatch(extension)
+          ? extension
+          : 'jpg';
+      final path =
+          'emergency/$requestId/${DateTime.now().toUtc().microsecondsSinceEpoch}.$safeExtension';
+      final contentType = safeExtension == 'jpg' || safeExtension == 'jpeg'
+          ? 'image/jpeg'
+          : 'image/$safeExtension';
+      final storage = _client.storage.from('serviceRequests');
+      await storage.uploadBinary(
+        path,
+        bytes,
+        fileOptions: FileOptions(
+          cacheControl: '3600',
+          upsert: false,
+          contentType: contentType,
+        ),
+      );
+      return Right(storage.getPublicUrl(path));
+    } catch (e) {
+      return Left(ServerFailure('Emergency photo upload failed: $e'));
+    }
+  }
 
   Future<Either<Failure, void>> updateMillQueueStatus({
     required String requestId,
     required String status,
   }) async {
     try {
-      await _client.from('mill_queue').update({'status': status}).eq('service_request_id', requestId);
+      await _client
+          .from('mill_queue')
+          .update({'status': status})
+          .eq('service_request_id', requestId);
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }
   }
 
-  Future<Either<Failure, void>> upsertParticipantFinancials(List<Map<String, dynamic>> records) async {
+  Future<Either<Failure, void>> upsertParticipantFinancials(
+    List<Map<String, dynamic>> records,
+  ) async {
     try {
       await _client.from('service_participant_financials').upsert(records);
       return const Right(null);
@@ -517,7 +761,9 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, void>> saveBillingItems(List<Map<String, dynamic>> items) async {
+  Future<Either<Failure, void>> saveBillingItems(
+    List<Map<String, dynamic>> items,
+  ) async {
     try {
       await _client.from('service_billing_items').insert(items);
       return const Right(null);
@@ -526,11 +772,14 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, List<Map<String, dynamic>>>> getAllBillingExpenses() async {
+  Future<Either<Failure, List<Map<String, dynamic>>>>
+  getAllBillingExpenses() async {
     try {
       final response = await _client
           .from('service_billing_items')
-          .select('*, service_requests(service_request_id, user_id, users(fname, lname))')
+          .select(
+            '*, service_requests(service_request_id, user_id, users(fname, lname))',
+          )
           .order('created_at', ascending: false);
       return Right(List<Map<String, dynamic>>.from(response));
     } catch (e) {
@@ -538,7 +787,9 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, void>> recordParticipantPayment(Map<String, dynamic> payment) async {
+  Future<Either<Failure, void>> recordParticipantPayment(
+    Map<String, dynamic> payment,
+  ) async {
     try {
       await _client.from('participant_payments').insert(payment);
       return const Right(null);
@@ -572,7 +823,9 @@ class SupabaseServiceRequestRepository {
     try {
       final response = await _client
           .from('participant_payments')
-          .select('payment_id, service_request_id, user_id, amount, receipt_url, payment_date')
+          .select(
+            'payment_id, service_request_id, user_id, amount, receipt_url, payment_date',
+          )
           .eq('user_id', userId)
           .order('payment_date', ascending: false);
       return Right(List<Map<String, dynamic>>.from(response));
@@ -633,20 +886,22 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, ServiceRequestModel>> updateServiceRequest(ServiceRequestModel model) async {
+  Future<Either<Failure, ServiceRequestModel>> updateServiceRequest(
+    ServiceRequestModel model,
+  ) async {
     try {
       final data = model.toJson();
       // Remove fields that shouldn't be updated or cause issues
-      data.remove('user_id'); 
+      data.remove('user_id');
       data.remove('created_at');
-      
+
       final response = await _client
           .from('service_requests')
           .update(data)
           .eq('service_request_id', model.id)
           .select()
           .single();
-          
+
       return Right(ServiceRequestModel.fromJson(response));
     } on PostgrestException catch (e) {
       return Left(ServerFailure('Update failed: ${e.message}'));
@@ -662,7 +917,7 @@ class SupabaseServiceRequestRepository {
           .select('pin_hash')
           .eq('userId', userId)
           .single();
-      
+
       final storedHash = response['pin_hash'] as String?;
       if (storedHash == null) return const Right(false);
 
@@ -699,7 +954,9 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, List<Map<String, dynamic>>>> getAuditTrails(String requestId) async {
+  Future<Either<Failure, List<Map<String, dynamic>>>> getAuditTrails(
+    String requestId,
+  ) async {
     try {
       final response = await _client
           .from('audit_trails')
@@ -712,20 +969,28 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, List<String>>> uploadRequestPhotos(List<PlatformFile> photos) async {
+  Future<Either<Failure, List<String>>> uploadRequestPhotos(
+    List<PlatformFile> photos,
+  ) async {
     try {
       final List<String> urls = [];
       for (final file in photos) {
         if (file.bytes == null) continue;
         final extension = file.name.split('.').last;
-        final path = 'request_${DateTime.now().millisecondsSinceEpoch}_${urls.length}.$extension';
-        
-        await _client.storage.from('serviceRequests').uploadBinary(
-          path,
-          file.bytes!,
-          fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
-        );
-        
+        final path =
+            'request_${DateTime.now().millisecondsSinceEpoch}_${urls.length}.$extension';
+
+        await _client.storage
+            .from('serviceRequests')
+            .uploadBinary(
+              path,
+              file.bytes!,
+              fileOptions: const FileOptions(
+                cacheControl: '3600',
+                upsert: false,
+              ),
+            );
+
         urls.add(_client.storage.from('serviceRequests').getPublicUrl(path));
       }
       return Right(urls);
@@ -739,18 +1004,22 @@ class SupabaseServiceRequestRepository {
     required String adminId,
   }) async {
     try {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
 
       // 1. Get the current request to check reason and find equipment
-      final srRes = await _client.from('service_requests').select('*').eq('service_request_id', requestId).single();
+      final srRes = await _client
+          .from('service_requests')
+          .select('*')
+          .eq('service_request_id', requestId)
+          .single();
       final reason = srRes['emergency_reason']?.toString() ?? '';
       final isMachineFailure = reason.contains('MACHINE FAILURE:');
 
       // 2. Resolve the SR
-      await _client.from('service_requests').update({
-        'emergency_resolved_at': now,
-        'updated_at': now,
-      }).eq('service_request_id', requestId);
+      await _client
+          .from('service_requests')
+          .update({'emergency_resolved_at': now, 'updated_at': now})
+          .eq('service_request_id', requestId);
 
       // 3. Reset Equipment
       final batchesRes = await getMillingBatches(requestId);
@@ -762,24 +1031,51 @@ class SupabaseServiceRequestRepository {
 
           if (isMachineFailure && machineId != null) {
             // Reset entire machine and all its drums
-            await _client.from('machines').update({'status': 'in_use'}).eq('machine_id', machineId);
-            await _client.from('drums').update({'status': 'in_use'}).eq('machine_id', machineId);
-            
+            await _client
+                .from('machines')
+                .update({'status': 'in_use'})
+                .eq('machine_id', machineId);
+            await _client
+                .from('drums')
+                .update({'status': 'in_use'})
+                .eq('machine_id', machineId);
+
             // Also mark other SRs on this machine as resolved
-            final drumsOfMachine = await _client.from('drums').select('drum_id').eq('machine_id', machineId);
-            final dIds = (drumsOfMachine as List).map((d) => d['drum_id'].toString()).toList();
-            
-            final otherBatches = await _client.from('milling_batches').select('service_request_id').filter('drum_id', 'in', dIds).eq('status', 'milling');
-            final otherSrs = (otherBatches as List).map((b) => b['service_request_id'].toString()).toSet().toList();
-            
+            final drumsOfMachine = await _client
+                .from('drums')
+                .select('drum_id')
+                .eq('machine_id', machineId);
+            final dIds = (drumsOfMachine as List)
+                .map((d) => d['drum_id'].toString())
+                .toList();
+
+            final otherBatches = await _client
+                .from('milling_batches')
+                .select('service_request_id')
+                .filter('drum_id', 'in', dIds)
+                .eq('status', 'milling');
+            final otherSrs = (otherBatches as List)
+                .map((b) => b['service_request_id'].toString())
+                .toSet()
+                .toList();
+
             if (otherSrs.isNotEmpty) {
-              await _client.from('service_requests').update({'emergency_resolved_at': now}).filter('service_request_id', 'in', otherSrs);
+              await _client
+                  .from('service_requests')
+                  .update({'emergency_resolved_at': now})
+                  .filter('service_request_id', 'in', otherSrs);
             }
           } else {
             // Reset only this specific drum
-            await _client.from('drums').update({'status': 'in_use'}).eq('drum_id', drumId);
+            await _client
+                .from('drums')
+                .update({'status': 'in_use'})
+                .eq('drum_id', drumId);
             if (machineId != null) {
-              await _client.from('machines').update({'status': 'in_use'}).eq('machine_id', machineId);
+              await _client
+                  .from('machines')
+                  .update({'status': 'in_use'})
+                  .eq('machine_id', machineId);
             }
           }
         }
@@ -805,15 +1101,47 @@ class SupabaseServiceRequestRepository {
     required String operatorId,
   }) async {
     try {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc();
+      final request = await _client
+          .from('service_requests')
+          .select('emergency_stopped_at')
+          .eq('service_request_id', requestId)
+          .maybeSingle();
+      final stoppedAtValue = request?['emergency_stopped_at']?.toString();
+      if (stoppedAtValue != null) {
+        final stoppedAt = DateTime.parse(stoppedAtValue).toUtc();
+        final pausedFor = now.difference(stoppedAt);
+        if (!pausedFor.isNegative && pausedFor > Duration.zero) {
+          final activeBatches = await _client
+              .from('milling_batches')
+              .select('batch_id, milling_started_at, created_at')
+              .eq('service_request_id', requestId)
+              .eq('status', 'milling');
+          for (final batch in activeBatches as List) {
+            final startValue =
+                batch['milling_started_at']?.toString() ??
+                batch['created_at'].toString();
+            final shiftedStart = DateTime.parse(
+              startValue,
+            ).toUtc().add(pausedFor).toIso8601String();
+            await _client
+                .from('milling_batches')
+                .update({'milling_started_at': shiftedStart})
+                .eq('batch_id', batch['batch_id']);
+          }
+        }
+      }
 
-      await _client.from('service_requests').update({
-        'status': 'processing',
-        'emergency_reason': null,
-        'emergency_stopped_at': null,
-        'emergency_resolved_at': null,
-        'updated_at': now,
-      }).eq('service_request_id', requestId);
+      await _client
+          .from('service_requests')
+          .update({
+            'status': 'processing',
+            'emergency_reason': null,
+            'emergency_stopped_at': null,
+            'emergency_resolved_at': null,
+            'updated_at': now.toIso8601String(),
+          })
+          .eq('service_request_id', requestId);
 
       await logAuditTrail(
         requestId: requestId,

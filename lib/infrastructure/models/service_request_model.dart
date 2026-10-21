@@ -14,10 +14,12 @@ class ServiceRequestModel extends ServiceRequestEntity {
     super.assistedByOperatorId,
     super.approvedBy,
     super.approvedAt,
+    super.queueAddedAt,
     required super.createdAt,
     required super.updatedAt,
     super.billingId,
     super.emergencyReason,
+    super.emergencyEvidenceUrl,
     super.emergencyStoppedAt,
     super.emergencyResolvedAt,
     super.creatorName,
@@ -64,15 +66,24 @@ class ServiceRequestModel extends ServiceRequestEntity {
 
     // Parse mill_queue for scheduling info
     DateTime? scheduledDate;
+    DateTime? queueAddedAt;
     if (json['mill_queue'] != null) {
       final mq = json['mill_queue'];
       if (mq is List && mq.isNotEmpty) {
         final first = mq[0];
+        if (first['added_at'] != null) {
+          queueAddedAt = DateTime.tryParse(first['added_at'].toString());
+        }
         if (first['scheduled_at'] != null) {
           scheduledDate = DateTime.parse(first['scheduled_at']);
         }
       } else if (mq is Map && mq['scheduled_at'] != null) {
+        if (mq['added_at'] != null) {
+          queueAddedAt = DateTime.tryParse(mq['added_at'].toString());
+        }
         scheduledDate = DateTime.parse(mq['scheduled_at']);
+      } else if (mq is Map && mq['added_at'] != null) {
+        queueAddedAt = DateTime.tryParse(mq['added_at'].toString());
       }
     }
 
@@ -146,6 +157,12 @@ class ServiceRequestModel extends ServiceRequestEntity {
         unloadingCompletedAt: json['unloading_completed_at'] != null
             ? DateTime.parse(json['unloading_completed_at'])
             : null,
+        washingStartedAt: json['washing_started_at'] != null
+            ? DateTime.parse(json['washing_started_at'])
+            : null,
+        washingCompletedAt: json['washing_completed_at'] != null
+            ? DateTime.parse(json['washing_completed_at'])
+            : null,
         estimatedTime: estimatedTime,
         scheduledDate: scheduledDate,
         assignedOperatorIds: assignedOperators,
@@ -199,6 +216,7 @@ class ServiceRequestModel extends ServiceRequestEntity {
       approvedAt: json['approved_at'] != null
           ? DateTime.parse(json['approved_at'])
           : null,
+      queueAddedAt: queueAddedAt,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -207,6 +225,7 @@ class ServiceRequestModel extends ServiceRequestEntity {
           : DateTime.now(),
       billingId: json['billing_id']?.toString(),
       emergencyReason: json['emergency_reason']?.toString(),
+      emergencyEvidenceUrl: json['emergency_evidence_url']?.toString(),
       emergencyStoppedAt: json['emergency_stopped_at'] != null
           ? DateTime.parse(json['emergency_stopped_at'])
           : null,
@@ -246,6 +265,10 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'unloading_started_at': processingDetails.unloadingStartedAt
           ?.toIso8601String(),
       'unloading_completed_at': processingDetails.unloadingCompletedAt
+          ?.toIso8601String(),
+      'washing_started_at': processingDetails.washingStartedAt
+          ?.toIso8601String(),
+      'washing_completed_at': processingDetails.washingCompletedAt
           ?.toIso8601String(),
       'emergency_reason': emergencyReason,
       'emergency_stopped_at': emergencyStoppedAt?.toIso8601String(),

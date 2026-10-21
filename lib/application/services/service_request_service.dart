@@ -19,7 +19,6 @@ class ServiceRequestService {
     String? materialState,
     String? materialSourceType,
     int? numberOfSacks,
-    double? materialWeight,
     String? source,
     String? notes,
     String? documentUrl,
@@ -48,7 +47,7 @@ class ServiceRequestService {
         state: materialState,
         sourceType: materialSourceType,
         numberOfSacks: numberOfSacks,
-        weight: materialWeight,
+        weight: null,
         source: source,
         notes: notes,
         documentUrl: documentUrl,
@@ -115,7 +114,6 @@ class ServiceRequestService {
     String? materialState,
     String? materialSourceType,
     int? numberOfSacks,
-    double? materialWeight,
     String? source,
     String? notes,
     List<String> photoUrls = const [],
@@ -137,7 +135,7 @@ class ServiceRequestService {
         state: materialState,
         sourceType: materialSourceType,
         numberOfSacks: numberOfSacks,
-        weight: materialWeight,
+        weight: null,
         source: source,
         notes: notes,
         photoUrls: photoUrls,
@@ -172,7 +170,6 @@ class ServiceRequestService {
     required String requestId,
     required String operatorId,
     required int actualSacks,
-    double? actualWeight,
     required String condition,
     required String state,
     required String source,
@@ -200,7 +197,6 @@ class ServiceRequestService {
         'updated_at': DateTime.now().toIso8601String(),
         'approved_by': operatorId,
         'approved_at': DateTime.now().toIso8601String(),
-        if (actualWeight != null) 'actual_weight': actualWeight,
       },
     );
 
@@ -629,55 +625,15 @@ class ServiceRequestService {
     required String requestId,
     required String minerId,
     required double paymentAmount,
-    required double totalPaid,
-    required double remainingBalance,
     required String receiptUrl,
-    required DateTime paymentDate,
-    required String currentStatus,
-  }) async {
-    final paymentResult = await _repository.recordParticipantPayment({
-      'service_request_id': requestId,
-      'user_id': minerId,
-      'amount': paymentAmount,
-      'receipt_url': receiptUrl,
-      'recorded_by': minerId,
-      'payment_date': paymentDate.toIso8601String(),
-    });
-
-    return paymentResult.fold(
-      (failure) => Left(failure),
-      (_) async {
-        final newStatus = remainingBalance <= 0
-            ? ServiceRequestStatus.completed
-            : ServiceRequestStatus.partiallyPaid;
-        final updateResult = await _repository.updateRequestStatus(
-          requestId: requestId,
-          status: _enumName(newStatus),
-          userId: minerId,
-          additionalData: {
-            'payment_amount': totalPaid,
-            'remaining_balance': remainingBalance,
-            'payment_receipt_url': receiptUrl,
-            'payment_date': paymentDate.toIso8601String(),
-            if (newStatus == ServiceRequestStatus.completed)
-              'billing_id': 'BILL-${DateTime.now().millisecondsSinceEpoch}',
-          },
-        );
-        return updateResult.fold(
-          (failure) => Left(failure),
-          (_) async {
-            await _repository.logAuditTrail(
-              requestId: requestId,
-              userId: minerId,
-              action: 'MINER_PAYMENT',
-              previousStatus: currentStatus,
-              newStatus: _enumName(newStatus),
-              remarks:
-                  'Miner paid $paymentAmount. Total paid: $totalPaid. Remaining: $remainingBalance',
-            );
-            return const Right(null);
-          },
-        );
+  }) {
+    return _repository.submitIndividualServicePayment(
+      {
+        'service_request_id': requestId,
+        'user_id': minerId,
+        'amount': paymentAmount,
+        'receipt_url': receiptUrl,
+        'recorded_by': minerId,
       },
     );
   }

@@ -65,8 +65,18 @@ CREATE TABLE IF NOT EXISTS public.participant_payments (
   amount numeric(10,2) NOT NULL CHECK (amount > 0),
   receipt_url text,
   payment_date timestamp with time zone NOT NULL DEFAULT now(),
-  recorded_by uuid REFERENCES public.users("userId")
+  recorded_by uuid REFERENCES public.users("userId"),
+  verification_status text NOT NULL DEFAULT 'approved',
+  reviewed_by uuid REFERENCES public.users("userId"),
+  reviewed_at timestamp with time zone,
+  review_note text
 );
+
+ALTER TABLE public.participant_payments
+  ADD COLUMN IF NOT EXISTS verification_status text NOT NULL DEFAULT 'approved',
+  ADD COLUMN IF NOT EXISTS reviewed_by uuid REFERENCES public.users("userId"),
+  ADD COLUMN IF NOT EXISTS reviewed_at timestamp with time zone,
+  ADD COLUMN IF NOT EXISTS review_note text;
 
 CREATE TABLE IF NOT EXISTS public.service_billing_items (
   item_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

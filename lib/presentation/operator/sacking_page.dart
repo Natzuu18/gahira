@@ -39,6 +39,7 @@ class _SackingPageState extends State<SackingPage> {
   final _millingSacksController = TextEditingController();
   final _estDurationController = TextEditingController(text: '30');
   Timer? _refreshTimer;
+  RealtimeChannel? _realtimeChannel;
   bool _isSaving = false;
   bool _isResuming = false;
 
@@ -46,6 +47,7 @@ class _SackingPageState extends State<SackingPage> {
   void initState() {
     super.initState();
     _service = ServiceRequestService(_requestRepo);
+    _subscribeToRequestUpdates();
     _loadData();
     // Periodically refresh the data from server to catch admin resolutions
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
@@ -56,11 +58,48 @@ class _SackingPageState extends State<SackingPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    final channel = _realtimeChannel;
+    if (channel != null) {
+      unawaited(Supabase.instance.client.removeChannel(channel));
+    }
     _inputSacksController.dispose();
     _outputSacksController.dispose();
     _millingSacksController.dispose();
     _estDurationController.dispose();
     super.dispose();
+  }
+
+  void _subscribeToRequestUpdates() {
+    final client = Supabase.instance.client;
+    _realtimeChannel = client
+        .channel('operator-process-${widget.request.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'service_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'service_request_id',
+            value: widget.request.id,
+          ),
+          callback: (_) {
+            if (mounted) unawaited(_loadData(showLoading: false));
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'milling_batches',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'service_request_id',
+            value: widget.request.id,
+          ),
+          callback: (_) {
+            if (mounted) unawaited(_loadData(showLoading: false));
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _loadData({bool showLoading = true}) async {

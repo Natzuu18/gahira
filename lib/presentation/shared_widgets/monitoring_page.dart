@@ -219,18 +219,28 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 
   Widget _buildLiveBadge() {
+    final isPaused =
+        _effectiveRequest.status == ServiceRequestStatus.emergencyStop;
+    final badgeColor = isPaused ? Colors.orange : Colors.red;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
+        color: badgeColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        border: Border.all(color: badgeColor.withOpacity(0.3)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.fiber_manual_record, color: Colors.red, size: 10),
-          SizedBox(width: 4),
-          Text('LIVE', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+          Icon(Icons.fiber_manual_record, color: badgeColor, size: 10),
+          const SizedBox(width: 4),
+          Text(
+            isPaused ? 'PAUSED' : 'LIVE',
+            style: TextStyle(
+              color: badgeColor,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -297,6 +307,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
   Widget _buildBatchMonitoringCard(Map<String, dynamic> batch) {
     final isMilling = batch['status'] == 'milling';
+    final isEmergencyPaused =
+        _effectiveRequest.status == ServiceRequestStatus.emergencyStop;
     final isReadyToMill = batch['status'] == 'ready_to_mill';
     final isMillingRun = batch['batch_kind'] == 'milling';
     final createdAt = DateTime.parse(
@@ -322,8 +334,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
             MillingTimerCircle(
               startTime: createdAt,
               durationMinutes: durationMinutes,
-              isPaused: _effectiveRequest.status ==
-                  ServiceRequestStatus.emergencyStop,
+              isPaused: isEmergencyPaused,
               pausedAt: _effectiveRequest.emergencyStoppedAt,
             )
           else if (isReadyToMill)
@@ -356,7 +367,16 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   style: TextStyle(color: context.mutedTextColor, fontSize: 11),
                 ),
                 if (isMilling)
-                  Text('Processing...', style: TextStyle(color: kGold.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold))
+                  Text(
+                    isEmergencyPaused ? 'Emergency paused' : 'Processing...',
+                    style: TextStyle(
+                      color: isEmergencyPaused
+                          ? Colors.red
+                          : kGold.withOpacity(0.8),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
                 else if (isReadyToMill)
                   Text('Waiting for milling', style: TextStyle(color: kGold.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold))
                 else

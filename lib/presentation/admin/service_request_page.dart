@@ -619,12 +619,6 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
             showOriginal ? 'Miner Sacks' : 'Actual Sacks (Verified)',
             '$displaySacks Sacks',
           ),
-          _buildDetailRow(
-            'Estimated Weight',
-            request.materialDetails.weight != null
-                ? '${request.materialDetails.weight} kg'
-                : 'N/A',
-          ),
           _buildDetailRow('Condition', displayCondition),
           _buildDetailRow('State', displayState),
           _buildDetailRow(

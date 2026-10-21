@@ -26,6 +26,8 @@ class _BillingPageState extends State<BillingPage> {
 
   List<ServiceRequestEntity> _requests = [];
   List<UserEntity> _allUsers = [];
+  List<Map<String, dynamic>> _pendingReceipts = [];
+  String? _reviewingReceiptId;
   bool _isLoading = true;
   String _searchQuery = '';
 
@@ -38,9 +40,34 @@ class _BillingPageState extends State<BillingPage> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final result = await _repository.getServiceRequests();
+    var result = await _repository.getServiceRequests();
+    final ownerId = Supabase.instance.client.auth.currentUser?.id;
+    var didCompleteGroupBilling = false;
+    if (ownerId != null) {
+      final requests = result.getOrElse(() => []);
+      for (final request in requests) {
+        final needsPayment =
+            request.status == ServiceRequestStatus.goldHandoff ||
+            request.status == ServiceRequestStatus.partiallyPaid;
+        if (!needsPayment || request.participatingMinerIds.length < 2) {
+          continue;
+        }
+        final completion = await _repository.completeGroupBillingIfSettled(
+          requestId: request.id,
+          userId: ownerId,
+        );
+        completion.fold((_) {}, (didComplete) {
+          didCompleteGroupBilling = didCompleteGroupBilling || didComplete;
+        });
+      }
+    }
+    if (didCompleteGroupBilling) {
+      result = await _repository.getServiceRequests();
+    }
     final usersRes = await _userRepository.getAllUsers();
+    final receiptsRes = await _repository.getPendingPaymentReceipts();
 
+    if (!mounted) return;
     setState(() {
       _requests = result
           .getOrElse(() => [])
@@ -53,6 +80,7 @@ class _BillingPageState extends State<BillingPage> {
           )
           .toList();
       _allUsers = usersRes.getOrElse(() => []);
+      _pendingReceipts = receiptsRes.getOrElse(() => []);
       _isLoading = false;
     });
   }
@@ -78,7 +106,7 @@ class _BillingPageState extends State<BillingPage> {
         .toList();
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: context.bgColor,
@@ -110,6 +138,7 @@ class _BillingPageState extends State<BillingPage> {
             tabs: [
               Tab(text: 'Pending (${pending.length})'),
               Tab(text: 'Completed (${completed.length})'),
+              Tab(text: 'Receipts (${_pendingReceipts.length})'),
               const Tab(text: 'Gold Transactions'),
             ],
           ),
@@ -120,10 +149,195 @@ class _BillingPageState extends State<BillingPage> {
                 children: [
                   _buildList(pending, isPending: true),
                   _buildList(completed, isPending: false),
+                  _buildPaymentReceiptsTab(),
                   _buildGoldTransactionsTab(),
                 ],
               ),
       ),
+    );
+  }
+
+  Widget _buildPaymentReceiptsTab() {
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: _pendingReceipts.isEmpty
+          ? ListView(
+              children: [
+                const SizedBox(height: 180),
+                Center(
+                  child: Text(
+                    'No payment receipts awaiting verification.',
+                    style: TextStyle(color: context.mutedTextColor),
+                  ),
+                ),
+              ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _pendingReceipts.length,
+              itemBuilder: (context, index) =>
+                  _buildPaymentReceiptCard(_pendingReceipts[index]),
+            ),
+    );
+  }
+
+  Widget _buildPaymentReceiptCard(Map<String, dynamic> payment) {
+    final paymentId = payment['payment_id']?.toString() ?? '';
+    final user = payment['users'] is Map
+        ? payment['users'] as Map
+        : const <String, dynamic>{};
+    final date = DateTime.tryParse(payment['payment_date']?.toString() ?? '');
+    final receiptUrl = payment['receipt_url']?.toString();
+    final isReviewing = _reviewingReceiptId == paymentId;
+
+    return Card(
+      color: context.surfaceColor,
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: kGold.withValues(alpha: 0.18)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.receipt_long_rounded, color: kGold),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '${user['fname'] ?? ''} ${user['lname'] ?? 'Miner'}'.trim(),
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(
+                  'P ${NumberFormat('#,##0.00').format((payment['amount'] as num?)?.toDouble() ?? 0)}',
+                  style: const TextStyle(
+                    color: kGold,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Service ${payment['service_request_id']?.toString().substring(0, 8).toUpperCase() ?? 'N/A'}  •  ${date == null ? 'Date unavailable' : DateFormat('MMM dd, yyyy • hh:mm a').format(date.toLocal())}',
+              style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+            ),
+            if (receiptUrl != null && receiptUrl.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: () => showDialog<void>(
+                  context: context,
+                  builder: (context) => Dialog(
+                    child: InteractiveViewer(
+                      child: Image.network(receiptUrl),
+                    ),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(
+                    receiptUrl,
+                    height: 190,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Container(
+                      height: 90,
+                      color: context.bgColor,
+                      alignment: Alignment.center,
+                      child: const Text('Receipt image could not be loaded.'),
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 10),
+              const Text(
+                'No receipt image was attached.',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: isReviewing
+                        ? null
+                        : () => _reviewPaymentReceipt(payment, approve: false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                    ),
+                    child: const Text('Reject'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: isReviewing
+                        ? null
+                        : () => _reviewPaymentReceipt(payment, approve: true),
+                    icon: isReviewing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.verified_rounded, size: 17),
+                    label: const Text('Approve payment'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _reviewPaymentReceipt(
+    Map<String, dynamic> payment, {
+    required bool approve,
+  }) async {
+    final paymentId = payment['payment_id']?.toString();
+    if (paymentId == null) return;
+    setState(() => _reviewingReceiptId = paymentId);
+    final result = await _repository.reviewPaymentReceipt(
+      paymentId: paymentId,
+      approve: approve,
+    );
+    if (!mounted) return;
+    result.fold(
+      (failure) {
+        setState(() => _reviewingReceiptId = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failure.message)),
+        );
+      },
+      (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              approve
+                  ? 'Receipt verified. Payment has been applied.'
+                  : 'Receipt rejected. The miner can submit a corrected receipt.',
+            ),
+          ),
+        );
+        setState(() => _reviewingReceiptId = null);
+        _loadData();
+      },
     );
   }
 
@@ -574,6 +788,11 @@ class _BillingPageState extends State<BillingPage> {
                     'P ${NumberFormat("#,##0.00").format(request.financialDetails?.totalBill ?? 0)}',
                     isBold: true,
                   ),
+                if ((request.financialDetails?.goldWeightGrams ?? 0) > 0)
+                  _buildSummaryRow(
+                    'Recovered Gold',
+                    '${NumberFormat("#,##0.##").format(request.financialDetails!.goldWeightGrams)} g',
+                  ),
               ],
             ),
           ),
@@ -696,10 +915,10 @@ class _BillingPageState extends State<BillingPage> {
               icon: Icons.receipt_long,
               title: 'Skip Gold Buying',
               subtitle:
-                  'Proceed directly to billing without purchasing the gold.',
+                  'Weigh the recovered gold, then continue without purchasing it.',
               onTap: () {
                 Navigator.pop(context);
-                _showBillingStep(request, isGoldBought: false);
+                _showRecoveredGoldWeightStep(request);
               },
             ),
             const SizedBox(height: 32),
@@ -767,6 +986,87 @@ class _BillingPageState extends State<BillingPage> {
         ],
       ),
     );
+  }
+
+  void _showRecoveredGoldWeightStep(ServiceRequestEntity request) {
+    final weightController = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.bgColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Record Recovered Gold',
+              style: TextStyle(
+                color: kGold,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Enter the total gold weighed after processing. Enter 0 if no gold was recovered.',
+              style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: weightController,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Recovered gold weight',
+                suffixText: 'grams',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  final weight = double.tryParse(weightController.text.trim());
+                  if (weight == null || weight < 0) {
+                    ScaffoldMessenger.of(sheetContext).showSnackBar(
+                      const SnackBar(
+                        content: Text('Enter a valid gold weight in grams.'),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.pop(sheetContext);
+                  _showBillingStep(
+                    request,
+                    isGoldBought: false,
+                    goldWeight: weight,
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kGold,
+                  foregroundColor: kBlack,
+                  minimumSize: const Size(double.infinity, 52),
+                ),
+                child: const Text('Continue to Billing'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(weightController.dispose);
   }
 
   Widget _buildWorkflowOption({
@@ -1453,6 +1753,12 @@ class _BillingPageState extends State<BillingPage> {
                     _buildSummaryRow(
                       'Gold Purchase (${goldWeight}g @ P$buyingPrice)',
                       'P ${NumberFormat("#,##0.00").format(goldValue!)}',
+                    ),
+                    const SizedBox(height: 8),
+                  ] else if (goldWeight != null) ...[
+                    _buildSummaryRow(
+                      'Recovered Gold Weight',
+                      '${NumberFormat("#,##0.##").format(goldWeight)} grams',
                     ),
                     const SizedBox(height: 8),
                   ],

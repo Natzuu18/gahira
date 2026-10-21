@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-import '../../core/navigation/app_scaffold_messenger.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/pin_dialog.dart';
@@ -517,6 +516,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
               if (!context.mounted) return;
               setSheetState(() => isRefreshingRequests = false);
             }
+            final requestFilterItems = _getServiceRequestItems();
             return Container(
           decoration: BoxDecoration(
             color: context.surfaceColor,
@@ -588,6 +588,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       children: [
                         _serviceRequestFilterChip(
                           label: 'All',
+                          icon: Icons.list_alt_rounded,
+                          count: requestFilterItems.length,
                           filter: _ServiceRequestFilter.all,
                           selectedFilter: selectedFilter,
                           onSelected: selectFilterAndRefresh,
@@ -595,6 +597,11 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         const SizedBox(width: 8),
                         _serviceRequestFilterChip(
                           label: 'To Verify',
+                          icon: Icons.fact_check_outlined,
+                          count: _filterServiceRequests(
+                            requestFilterItems,
+                            _ServiceRequestFilter.toVerify,
+                          ).length,
                           filter: _ServiceRequestFilter.toVerify,
                           selectedFilter: selectedFilter,
                           onSelected: selectFilterAndRefresh,
@@ -602,13 +609,23 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         const SizedBox(width: 8),
                         _serviceRequestFilterChip(
                           label: 'Queued',
+                          icon: Icons.format_list_numbered_rounded,
+                          count: _filterServiceRequests(
+                            requestFilterItems,
+                            _ServiceRequestFilter.queued,
+                          ).length,
                           filter: _ServiceRequestFilter.queued,
                           selectedFilter: selectedFilter,
                           onSelected: selectFilterAndRefresh,
                         ),
                         const SizedBox(width: 8),
                         _serviceRequestFilterChip(
-                          label: 'Scheduled Today',
+                          label: 'Scheduled',
+                          icon: Icons.today_outlined,
+                          count: _filterServiceRequests(
+                            requestFilterItems,
+                            _ServiceRequestFilter.scheduledToday,
+                          ).length,
                           filter: _ServiceRequestFilter.scheduledToday,
                           selectedFilter: selectedFilter,
                           onSelected: selectFilterAndRefresh,
@@ -696,15 +713,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
         );
         return queued;
       case _ServiceRequestFilter.scheduledToday:
-        final now = DateTime.now();
-        return requests.where((request) {
-          final scheduledDate = request.processingDetails.scheduledDate;
-          return request.status == ServiceRequestStatus.scheduled &&
-              scheduledDate != null &&
-              scheduledDate.year == now.year &&
-              scheduledDate.month == now.month &&
-              scheduledDate.day == now.day;
-        }).toList();
+        return requests
+            .where((request) =>
+                request.status == ServiceRequestStatus.scheduled)
+            .toList();
       case _ServiceRequestFilter.all:
         return requests;
     }
@@ -748,7 +760,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       case _ServiceRequestFilter.queued:
         return 'No queued service requests.';
       case _ServiceRequestFilter.scheduledToday:
-        return 'No services scheduled for today.';
+        return 'No scheduled services.';
       case _ServiceRequestFilter.all:
         return 'No service requests.';
     }
@@ -756,27 +768,70 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
   Widget _serviceRequestFilterChip({
     required String label,
+    required IconData icon,
+    required int count,
     required _ServiceRequestFilter filter,
     required _ServiceRequestFilter selectedFilter,
     required ValueChanged<_ServiceRequestFilter> onSelected,
   }) {
     final isSelected = selectedFilter == filter;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (_) => onSelected(filter),
-      selectedColor: kGold,
-      backgroundColor: context.bgColor,
-      labelStyle: TextStyle(
-        color: isSelected ? kBlack : context.textColor,
-        fontSize: 12,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+    return Padding(
+      padding: const EdgeInsets.only(top: 5, right: 5),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ChoiceChip(
+            label: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16),
+                const SizedBox(width: 8),
+                Text(label),
+              ],
+            ),
+            selected: isSelected,
+            onSelected: (_) => onSelected(filter),
+            selectedColor: kGold,
+            backgroundColor: context.bgColor,
+            labelStyle: TextStyle(
+              color: isSelected ? kBlack : context.textColor,
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+            side: BorderSide(
+              color: isSelected
+                  ? kGold
+                  : context.mutedTextColor.withValues(alpha: 0.25),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            showCheckmark: false,
+          ),
+          Positioned(
+            top: -5,
+            right: -5,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? kBlack : kGold,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: context.surfaceColor, width: 1.5),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: isSelected ? kGold : kBlack,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-      side: BorderSide(
-        color: isSelected ? kGold : context.mutedTextColor.withValues(alpha: 0.25),
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      showCheckmark: false,
     );
   }
 
@@ -971,7 +1026,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    '${request.materialDetails.numberOfSacks ?? 0} Sacks • ${request.materialDetails.weight != null ? '${request.materialDetails.weight} kg • ' : ''}${request.materialDetails.condition} • ${request.materialDetails.state}',
+                    '${request.materialDetails.numberOfSacks ?? 0} Sacks • ${request.materialDetails.condition} • ${request.materialDetails.state}',
                     style: TextStyle(
                       color: context.mutedTextColor,
                       fontSize: 12,
@@ -1159,16 +1214,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   'Sacks',
                   '${request.materialDetails.numberOfSacks ?? 0}',
                 ),
-                if (request.materialDetails.weight != null)
-                  _buildDetailRow(
-                    'Est. Weight',
-                    '${request.materialDetails.weight} kg',
-                  ),
-                if (request.materialDetails.actualWeight != null)
-                  _buildDetailRow(
-                    'Actual Weight',
-                    '${request.materialDetails.actualWeight} kg',
-                  ),
                 _buildDetailRow(
                   'Source Type',
                   request.materialDetails.sourceType ?? 'N/A',
@@ -1432,33 +1477,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
     result.fold(
       (failure) {
-        final messenger =
-            appScaffoldMessengerKey.currentState ??
-            ScaffoldMessenger.of(context);
-        if (failure.message.toLowerCase().contains(
-          'already assigned to another active service',
-        )) {
-          messenger.hideCurrentMaterialBanner();
-          messenger.showMaterialBanner(
-            MaterialBanner(
-              leading: const Icon(Icons.info_outline, color: Colors.redAccent),
-              content: const Text(
-                'You have an ongoing services! Please complete it first. Thank You!',
-              ),
-              backgroundColor: context.surfaceColor,
-              actions: [
-                TextButton(
-                  onPressed: messenger.hideCurrentMaterialBanner,
-                  child: const Text('DISMISS'),
-                ),
-              ],
-            ),
-          );
-        } else {
-          messenger.showSnackBar(
-            SnackBar(content: Text('Could not claim service: ${failure.message}')),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not claim service: ${failure.message}')),
+        );
       },
       (_) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1524,10 +1545,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
         (request.materialDetails.state ?? 'Dry').trim().toLowerCase();
     final sackController = TextEditingController(
       text: originalSacks.toString(),
-    );
-    final originalWeight = request.materialDetails.weight ?? request.materialDetails.actualWeight;
-    final weightController = TextEditingController(
-      text: originalWeight != null ? originalWeight.toString() : '',
     );
     final estNumController = TextEditingController(text: '3');
     final remarksController = TextEditingController();
@@ -1619,7 +1636,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                             const SizedBox(height: 4),
                             Text(
                               'Declared: ${request.materialDetails.numberOfSacks ?? 0} Sacks'
-                              '${request.materialDetails.weight != null ? ' • ${request.materialDetails.weight} kg (Est.)' : ''}'
                               ' • ${request.materialDetails.condition ?? "Rocky"} • ${request.materialDetails.state ?? "Dry"}',
                               style: TextStyle(
                                 color: context.textColor,
@@ -1644,26 +1660,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         style: TextStyle(color: context.textColor),
                         decoration: InputDecoration(
                           labelText: 'Actual Sacks',
-                          filled: true,
-                          fillColor: context.surfaceColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: weightController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        onChanged: (_) => setModalState(() {}),
-                        style: TextStyle(color: context.textColor),
-                        decoration: InputDecoration(
-                          labelText: 'Actual Weight (kg)',
-                          hintText: request.materialDetails.weight != null
-                              ? 'Est: ${request.materialDetails.weight} kg'
-                              : 'Optional',
                           filled: true,
                           fillColor: context.surfaceColor,
                           border: OutlineInputBorder(
@@ -1936,7 +1932,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     ),
                     onPressed: () => _confirmWithPin(request, {
                       'sacks': int.tryParse(sackController.text) ?? 0,
-                      'actualWeight': double.tryParse(weightController.text),
                       'condition': currentCondition,
                       'state': currentState == 'Others'
                           ? otherState
@@ -1980,7 +1975,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             requestId: request.id,
             operatorId: operatorId,
             actualSacks: data['sacks'],
-            actualWeight: data['actualWeight'],
             condition: data['condition'],
             state: data['state'],
             source: data['source'],
@@ -2151,7 +2145,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     String state = 'Dry';
     String otherState = '';
     int? sacks;
-    double weight = 0;
     String source = '';
     String estProcessingTime = '';
     String notes = '';
@@ -2368,16 +2361,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                             isNumber: true,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildAssistedInput(
-                            'Actual Weight (kg)',
-                            '0.0',
-                            (v) => weight = double.tryParse(v) ?? 0,
-                            isNumber: true,
-                            isDecimal: true,
-                          ),
-                        ),
                       ],
                     ),
 
@@ -2441,7 +2424,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                                   condition: condition,
                                   state: state == 'Others' ? otherState : state,
                                   sacks: sacks ?? 0,
-                                  weight: weight,
                                   source: source,
                                   estTime: estProcessingTime,
                                   notes: notes,
@@ -2482,7 +2464,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     required String condition,
     required String state,
     required int sacks,
-    double? weight,
     required String source,
     required String estTime,
     required String notes,
@@ -2513,8 +2494,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 const SizedBox(height: 16),
                 _buildReviewRow('Source', source),
                 _buildReviewRow('Sacks', sacks.toString()),
-                if (weight != null && weight > 0)
-                  _buildReviewRow('Weight', '$weight kg'),
                 _buildReviewRow('Condition', condition),
                 const SizedBox(height: 16),
                 const Text(
@@ -2561,7 +2540,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   condition: condition,
                   state: state,
                   sacks: sacks,
-                  weight: weight,
                   source: source,
                   estTime: estTime,
                   notes: notes,
@@ -2585,7 +2563,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     required String condition,
     required String state,
     required int sacks,
-    double? weight,
     required String source,
     required String estTime,
     required String notes,
@@ -2607,7 +2584,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             materialCondition: condition,
             materialState: state,
             numberOfSacks: sacks,
-            materialWeight: weight != null && weight > 0 ? weight : null,
             source: source,
             notes: notes,
             processingRequirements: notes,

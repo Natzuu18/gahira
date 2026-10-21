@@ -306,9 +306,13 @@ class _BillingPageState extends State<BillingPage> {
     final bool isGroup = _isGroupRequest(request);
     final participant = isGroup ? _participantFinancial(request) : null;
     final userId = Supabase.instance.client.auth.currentUser?.id;
+    final pendingReceiptAmount = _pendingReceiptAmount(request);
+    final availableToSubmit = (_remainingBalance(request) - pendingReceiptAmount)
+        .clamp(0, double.infinity)
+        .toDouble();
     final bool canPay = !isPaid &&
         (isGroup || request.creatorId == userId) &&
-        _remainingBalance(request) > 0;
+        availableToSubmit > 0;
     final String refId = 'SR-${request.id.substring(0, 5).toUpperCase()}';
 
     String statusLabel;
@@ -502,6 +506,17 @@ class _BillingPageState extends State<BillingPage> {
               ),
             ),
           ],
+          if (pendingReceiptAmount > 0) ...[
+            const SizedBox(height: 10),
+            Text(
+              'P ${NumberFormat('#,##0.00').format(pendingReceiptAmount)} submitted; awaiting admin verification.',
+              style: const TextStyle(
+                color: Colors.orange,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           if (canPay) ...[
             const SizedBox(height: 14),
             SizedBox(
@@ -552,6 +567,16 @@ class _BillingPageState extends State<BillingPage> {
         .toDouble();
   }
 
+  double _pendingReceiptAmount(ServiceRequestEntity request) {
+    return (_paymentHistory[request.id] ?? const [])
+        .where((payment) => payment['verification_status'] == 'pending')
+        .fold<double>(
+          0,
+          (sum, payment) =>
+              sum + ((payment['amount'] as num?)?.toDouble() ?? 0),
+        );
+  }
+
   Widget _buildPaymentHistory(ServiceRequestEntity request) {
     final payments = _paymentHistory[request.id] ?? const [];
     final displayPayments =
@@ -592,12 +617,29 @@ class _BillingPageState extends State<BillingPage> {
               padding: const EdgeInsets.symmetric(vertical: 5),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle_outline,
-                      color: Colors.green, size: 16),
+                  Icon(
+                    payment['verification_status'] == 'pending'
+                        ? Icons.hourglass_top_rounded
+                        : payment['verification_status'] == 'rejected'
+                        ? Icons.cancel_outlined
+                        : Icons.check_circle_outline,
+                    color: payment['verification_status'] == 'pending'
+                        ? Colors.orange
+                        : payment['verification_status'] == 'rejected'
+                        ? Colors.redAccent
+                        : Colors.green,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      date == null ? 'Payment' : DateFormat('MMM dd, yyyy').format(date),
+                      payment['verification_status'] == 'pending'
+                          ? 'Awaiting verification${date == null ? '' : ' • ${DateFormat('MMM dd, yyyy').format(date)}'}'
+                          : payment['verification_status'] == 'rejected'
+                          ? 'Receipt rejected${date == null ? '' : ' • ${DateFormat('MMM dd, yyyy').format(date)}'}'
+                          : date == null
+                          ? 'Verified payment'
+                          : 'Verified • ${DateFormat('MMM dd, yyyy').format(date)}',
                       style: TextStyle(color: context.mutedTextColor, fontSize: 12),
                     ),
                   ),
@@ -627,8 +669,10 @@ class _BillingPageState extends State<BillingPage> {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
 
-    final fd = request.financialDetails;
-    final remaining = _remainingBalance(request);
+    final remaining = (_remainingBalance(request) -
+            _pendingReceiptAmount(request))
+        .clamp(0, double.infinity)
+        .toDouble();
     double amount = remaining;
     PlatformFile? receipt;
     bool saving = false;
@@ -752,13 +796,6 @@ class _BillingPageState extends State<BillingPage> {
                               return;
                             }
 
-                            final newBalance = (remaining - amount)
-                                .clamp(0, double.infinity)
-                                .toDouble();
-                            final paidBefore =
-                                ((fd?.totalBill ?? 0) - remaining)
-                                    .clamp(0, double.infinity)
-                                    .toDouble();
                             final result = _isGroupRequest(request)
                                 ? await _service.recordGroupMinerPayment(
                                     requestId: request.id,
@@ -769,11 +806,7 @@ class _BillingPageState extends State<BillingPage> {
                                     requestId: request.id,
                                     minerId: userId,
                                     paymentAmount: amount,
-                                    totalPaid: paidBefore + amount,
-                                    remainingBalance: newBalance,
                                     receiptUrl: receiptUrl!,
-                                    paymentDate: DateTime.now(),
-                                    currentStatus: request.status.name,
                                   );
 
                             if (!sheetContext.mounted) return;
@@ -789,9 +822,7 @@ class _BillingPageState extends State<BillingPage> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      newBalance <= 0
-                                          ? 'Payment complete. This service is now paid.'
-                                          : 'Partial payment recorded. Remaining balance: P ${NumberFormat('#,##0.00').format(newBalance)}',
+                                      'Payment receipt submitted. Admin verification is required before the balance is updated.',
                                     ),
                                     backgroundColor: Colors.green,
                                   ),

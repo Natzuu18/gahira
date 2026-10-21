@@ -38,21 +38,39 @@ class _EmergencyMonitorPageState extends State<EmergencyMonitorPage> {
     if (showLoading) setState(() => _isLoading = true);
     
     final result = await _repository.getServiceRequests();
-    result.fold(
-      (l) => null,
-      (list) {
-        final filtered = list.where((r) => r.status == ServiceRequestStatus.emergencyStop).toList();
-        // Sort by most recent stopped at
-        filtered.sort((a, b) => (b.emergencyStoppedAt ?? DateTime.now()).compareTo(a.emergencyStoppedAt ?? DateTime.now()));
-        
-        if (mounted) {
-          setState(() {
-            _emergencies = filtered;
-            _isLoading = false;
-          });
+    final requests = result.getOrElse(() => []);
+    final activeBatchesResult = await _repository.getActiveMillingBatches();
+    final stoppedRequestIds = <String>{};
+    activeBatchesResult.fold((_) {}, (batches) {
+      for (final batch in batches) {
+        final drumStopped =
+            batch['drums']?['status']?.toString().toLowerCase() ==
+            'emergency_stop';
+        final machineStopped =
+            batch['machines']?['status']?.toString().toLowerCase() ==
+            'emergency_stop';
+        if ((drumStopped || machineStopped) &&
+            batch['service_request_id'] != null) {
+          stoppedRequestIds.add(batch['service_request_id'].toString());
         }
       }
-    );
+    });
+    final filtered = requests.where((request) {
+      return request.status == ServiceRequestStatus.emergencyStop ||
+          (request.status == ServiceRequestStatus.processing &&
+              stoppedRequestIds.contains(request.id));
+    }).toList();
+    filtered.sort((a, b) =>
+        (b.emergencyStoppedAt ?? DateTime.now()).compareTo(
+          a.emergencyStoppedAt ?? DateTime.now(),
+        ));
+
+    if (mounted) {
+      setState(() {
+        _emergencies = filtered;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _handleResolve(ServiceRequestEntity request) async {
@@ -157,7 +175,9 @@ class _EmergencyMonitorPageState extends State<EmergencyMonitorPage> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: context.bgColor, borderRadius: BorderRadius.circular(8)),
-                  child: Text(sr.emergencyReason ?? 'No reason provided.', 
+                  child: Text(
+                    sr.emergencyReason ??
+                        'Equipment is stopped and needs admin review.',
                     style: TextStyle(color: context.textColor, fontSize: 13, height: 1.5)),
                 ),
                 if (sr.emergencyEvidenceUrl != null &&

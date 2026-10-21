@@ -330,7 +330,8 @@ class SupabaseUserRepository implements UserRepository {
   @override
   Future<Either<Failure, void>> updateUserPin(String userId, String pin) async {
     try {
-      final pinHash = sha256.convert(utf8.encode(pin)).toString();
+      final normalizedPin = pin.trim();
+      final pinHash = sha256.convert(utf8.encode(normalizedPin)).toString();
       await _client
           .from('users')
           .update({'pin_hash': pinHash})

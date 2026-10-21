@@ -206,8 +206,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       ],
                     ),
                   ),
-                  Container(
-                    height: 40,
+                  SizedBox(
+                    height: 56,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -282,16 +282,23 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           .toList();
     }
 
-    if (_selectedFilter == 'All') return list;
+    return _applyServiceFilter(list, _selectedFilter);
+  }
 
-    if (_selectedFilter == 'Needs Attention') {
-      return list
+  List<ServiceRequestEntity> _applyServiceFilter(
+    List<ServiceRequestEntity> requests,
+    String filter,
+  ) {
+    if (filter == 'All') return requests;
+
+    if (filter == 'Needs Attention') {
+      return requests
           .where((r) => r.status == ServiceRequestStatus.returnedToMiner)
           .toList();
     }
 
-    if (_selectedFilter == 'In Progress') {
-      return list
+    if (filter == 'In Progress') {
+      return requests
           .where(
             (r) =>
                 r.status != ServiceRequestStatus.completed &&
@@ -301,40 +308,87 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           .toList();
     }
 
-    if (_selectedFilter == 'Completed') {
-      return list
+    if (filter == 'Completed') {
+      return requests
           .where((r) => r.status == ServiceRequestStatus.completed)
           .toList();
     }
 
-    return list
-        .where((r) => _getStatusLabel(r.status) == _selectedFilter)
+    return requests
+        .where((r) => _getStatusLabel(r.status) == filter)
         .toList();
+  }
+
+  int _filterCount(String filter) {
+    List<ServiceRequestEntity> requests = List.from(_requests);
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      requests = requests
+          .where(
+            (request) =>
+                request.id.toLowerCase().contains(query) ||
+                (request.materialDetails.source?.toLowerCase().contains(
+                      query,
+                    ) ??
+                    false),
+          )
+          .toList();
+    }
+    return _applyServiceFilter(requests, filter).length;
   }
 
   Widget _buildFilterChip(String label) {
     final bool selected = _selectedFilter == label;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (bool isSelected) =>
-            setState(() => _selectedFilter = isSelected ? label : 'All'),
-        backgroundColor: context.surfaceColor,
-        selectedColor: kGold,
-        labelStyle: TextStyle(
-          color: selected ? kBlack : context.textColor,
-          fontSize: 13,
-          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: selected ? kGold : kGold.withOpacity(0.1)),
-        ),
-        showCheckmark: false,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.only(top: 5, right: 8),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ChoiceChip(
+            label: Text(label),
+            selected: selected,
+            onSelected: (bool isSelected) =>
+                setState(() => _selectedFilter = isSelected ? label : 'All'),
+            backgroundColor: context.surfaceColor,
+            selectedColor: kGold,
+            labelStyle: TextStyle(
+              color: selected ? kBlack : context.textColor,
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: selected ? kGold : kGold.withOpacity(0.1),
+              ),
+            ),
+            showCheckmark: false,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          Positioned(
+            top: -5,
+            right: -5,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: selected ? kBlack : kGold,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: context.surfaceColor, width: 1.5),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '${_filterCount(label)}',
+                style: TextStyle(
+                  color: selected ? kGold : kBlack,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -718,18 +772,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 'Quantity',
                 '${request.materialDetails.numberOfSacks} Sacks',
               ),
-            if (request.materialDetails.weight != null)
-              _buildDetailRow(
-                Icons.scale_rounded,
-                'Est. Weight',
-                '${request.materialDetails.weight} kg',
-              ),
-            if (request.materialDetails.actualWeight != null)
-              _buildDetailRow(
-                Icons.scale_rounded,
-                'Actual Weight',
-                '${request.materialDetails.actualWeight} kg',
-              ),
             _buildSectionHeader('Processing & Timeline'),
             if (request.processingDetails.estimatedTime != null)
               _buildDetailRow(
@@ -1068,7 +1110,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     }
 
     int? mSacks = existingRequest?.materialDetails.numberOfSacks;
-    double? mWeight = existingRequest?.materialDetails.weight;
     String notes = existingRequest?.materialDetails.notes ?? '';
     List<PlatformFile> selectedPhotos = [];
     List<String> existingPhotoUrls = existingRequest != null
@@ -1554,18 +1595,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildValidatedInput(
-                              label: 'Est. Weight (kg)',
-                              hint: 'Optional',
-                              initialValue: mWeight?.toString(),
-                              keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
-                              onChanged: (v) => mWeight = double.tryParse(v),
-                            ),
-                          ),
                         ],
                       ),
                       _buildValidatedInput(
@@ -1789,7 +1818,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                                         : state,
                                     sourceType: sourceType,
                                     sacks: mSacks,
-                                    weight: mWeight,
                                     source: sourceDetails,
                                     notes: notes,
                                     miners: [currentUserId, ...participating],
@@ -1836,7 +1864,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     required String state,
     required String sourceType,
     int? sacks,
-    double? weight,
     required String source,
     required String notes,
     required List<String> miners,
@@ -1889,12 +1916,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       Icons.shopping_bag_outlined,
                       'Sacks',
                       sacks.toString(),
-                    ),
-                  if (weight != null)
-                    _buildDetailRow(
-                      Icons.scale_rounded,
-                      'Est. Weight',
-                      '$weight kg',
                     ),
                   _buildDetailRow(
                     Icons.people_rounded,
@@ -1966,7 +1987,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                           state: state,
                           sourceType: sourceType,
                           sacks: sacks,
-                          weight: weight,
                           source: source,
                           notes: notes,
                           miners: miners,
@@ -2002,7 +2022,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     required String state,
     required String sourceType,
     int? sacks,
-    double? weight,
     required String source,
     required String notes,
     required List<String> miners,
@@ -2043,7 +2062,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               materialState: state,
               materialSourceType: sourceType,
               numberOfSacks: sacks,
-              materialWeight: weight,
               source: source,
               notes: notes,
               pin: pin,
@@ -2059,7 +2077,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
               materialState: state,
               materialSourceType: sourceType,
               numberOfSacks: sacks,
-              materialWeight: weight,
               source: source,
               notes: notes,
               processingRequirements: notes,

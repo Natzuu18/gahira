@@ -158,36 +158,26 @@ class SupabaseServiceRequestRepository {
         );
       }
 
-      final assignedServiceRows = await _client
-          .from('ongoing_services')
-          .select('service_request_id')
-          .eq('operator_id', operatorId)
-          .neq('service_request_id', requestId);
-      final assignedRequestIds = (assignedServiceRows as List)
-          .map((row) => row['service_request_id'].toString())
-          .toList();
-      if (assignedRequestIds.isNotEmpty) {
-        final busyServices = await _client
-            .from('service_requests')
-            .select('service_request_id')
-            .inFilter('service_request_id', assignedRequestIds)
-            .inFilter('status', [
-              'verified',
-              'accepted',
-              'queued',
-              'scheduled',
-              'assigned',
-              'processing',
-              'emergencyStop',
-            ])
-            .limit(1);
-        if ((busyServices as List).isNotEmpty) {
-          return Left(
-            ServerFailure(
-              'This operator is already assigned to another active service.',
-            ),
-          );
+      final machines = await _client
+          .from('machines')
+          .select('status, drums(status)');
+      final hasAvailableEquipment = (machines as List).any((machine) {
+        if (machine is! Map ||
+            machine['status']?.toString().toLowerCase() != 'available') {
+          return false;
         }
+        final drums = machine['drums'];
+        return drums is List && drums.any(
+          (drum) => drum is Map &&
+              drum['status']?.toString().toLowerCase() == 'available',
+        );
+      });
+      if (!hasAvailableEquipment) {
+        return Left(
+          ServerFailure(
+            'No available machine with an available drum. Please try again when equipment is available.',
+          ),
+        );
       }
 
       await _client.from('ongoing_services').insert({
@@ -354,6 +344,19 @@ class SupabaseServiceRequestRepository {
           .select('*, machines(*), drums(*)')
           .eq('service_request_id', requestId)
           .order('created_at', ascending: true);
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>>
+  getActiveMillingBatches() async {
+    try {
+      final response = await _client
+          .from('milling_batches')
+          .select('*, machines(*), drums(*)')
+          .eq('status', 'milling');
       return Right(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
@@ -589,6 +592,23 @@ class SupabaseServiceRequestRepository {
     try {
       final now = DateTime.now().toUtc().toIso8601String();
 
+      // Persist the request emergency first. Equipment lookups can fail
+      // independently, but the admin monitor must still receive the stop.
+      if (requestId != null) {
+        final scope = stopEntireMachine ? 'MACHINE FAILURE' : 'DRUM FAILURE';
+        await _client
+            .from('service_requests')
+            .update({
+              'status': 'emergencyStop',
+              'emergency_reason': '$scope: $reason',
+              'emergency_evidence_url': evidenceUrl,
+              'emergency_stopped_at': now,
+              'emergency_resolved_at': null,
+              'updated_at': now,
+            })
+            .eq('service_request_id', requestId);
+      }
+
       if (stopEntireMachine && machineId != null) {
         // --- MACHINE-WIDE STOP ---
 
@@ -798,6 +818,60 @@ class SupabaseServiceRequestRepository {
     }
   }
 
+  Future<Either<Failure, void>> submitIndividualServicePayment(
+    Map<String, dynamic> payment,
+  ) async {
+    try {
+      await _client.rpc(
+        'submit_individual_service_payment',
+        params: {
+          'target_service_request_id': payment['service_request_id'],
+          'payment_amount': payment['amount'],
+          'target_receipt_url': payment['receipt_url'],
+        },
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>>
+  getPendingPaymentReceipts() async {
+    try {
+      final response = await _client
+          .from('participant_payments')
+          .select(
+            'payment_id, service_request_id, user_id, amount, receipt_url, payment_date, verification_status, users:user_id(fname, lname)',
+          )
+          .eq('verification_status', 'pending')
+          .order('payment_date');
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> reviewPaymentReceipt({
+    required String paymentId,
+    required bool approve,
+    String? reviewNote,
+  }) async {
+    try {
+      await _client.rpc(
+        'review_service_payment_receipt',
+        params: {
+          'target_payment_id': paymentId,
+          'approve_payment': approve,
+          'target_review_note': reviewNote,
+        },
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
   Future<Either<Failure, void>> submitGroupServicePayment({
     required String requestId,
     required double amount,
@@ -824,7 +898,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('participant_payments')
           .select(
-            'payment_id, service_request_id, user_id, amount, receipt_url, payment_date',
+            'payment_id, service_request_id, user_id, amount, receipt_url, payment_date, verification_status, review_note',
           )
           .eq('user_id', userId)
           .order('payment_date', ascending: false);
@@ -853,6 +927,72 @@ class SupabaseServiceRequestRepository {
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  /// Completes a group billing request once every participant's share is paid.
+  /// Returns true when this call moved the request into Completed.
+  Future<Either<Failure, bool>> completeGroupBillingIfSettled({
+    required String requestId,
+    required String userId,
+  }) async {
+    try {
+      final request = await _client
+          .from('service_requests')
+          .select('status, billing_id, participating_miners')
+          .eq('service_request_id', requestId)
+          .maybeSingle();
+      if (request == null || request['status'] == 'completed') {
+        return const Right(false);
+      }
+
+      final rows = await _client
+          .from('service_participant_financials')
+          .select('total_due, amount_paid, status')
+          .eq('service_request_id', requestId);
+      final participants = List<Map<String, dynamic>>.from(rows);
+      if (participants.isEmpty) return const Right(false);
+      final expectedParticipants = request['participating_miners'];
+      if (expectedParticipants is List &&
+          participants.length < expectedParticipants.length) {
+        return const Right(false);
+      }
+
+      var totalPaid = 0.0;
+      for (final participant in participants) {
+        final due = (participant['total_due'] as num? ?? 0).toDouble();
+        final paid = (participant['amount_paid'] as num? ?? 0).toDouble();
+        if (participant['status'] != 'paid' && paid + 0.005 < due) {
+          return const Right(false);
+        }
+        totalPaid += paid.clamp(0, due).toDouble();
+      }
+
+      final now = DateTime.now().toUtc();
+      await _client
+          .from('service_requests')
+          .update({
+            'status': 'completed',
+            'payment_amount': totalPaid,
+            'remaining_balance': 0,
+            'payment_date': now.toIso8601String(),
+            'billing_id': request['billing_id'] ??
+                'BILL-${now.millisecondsSinceEpoch}',
+            'updated_at': now.toIso8601String(),
+          })
+          .eq('service_request_id', requestId);
+
+      await logAuditTrail(
+        requestId: requestId,
+        userId: userId,
+        action: 'GROUP_BILLING_COMPLETED',
+        previousStatus: request['status']?.toString() ?? 'goldHandoff',
+        newStatus: 'completed',
+        remarks: 'All participant balances have been paid. Total paid: $totalPaid',
+      );
+      return const Right(true);
+    } catch (e) {
+      return Left(ServerFailure('Could not complete group billing: $e'));
     }
   }
 
@@ -921,7 +1061,10 @@ class SupabaseServiceRequestRepository {
       final storedHash = response['pin_hash'] as String?;
       if (storedHash == null) return const Right(false);
 
-      final inputHash = sha256.convert(utf8.encode(pin)).toString();
+      // PINs are entered through several UI flows. Normalize surrounding
+      // whitespace the same way as when a PIN is saved before hashing it.
+      final normalizedPin = pin.trim();
+      final inputHash = sha256.convert(utf8.encode(normalizedPin)).toString();
       return Right(storedHash == inputHash);
     } catch (e) {
       return Left(ServerFailure('PIN verification failed: ${e.toString()}'));
@@ -1013,7 +1156,7 @@ class SupabaseServiceRequestRepository {
           .eq('service_request_id', requestId)
           .single();
       final reason = srRes['emergency_reason']?.toString() ?? '';
-      final isMachineFailure = reason.contains('MACHINE FAILURE:');
+      var isMachineFailure = reason.contains('MACHINE FAILURE:');
 
       // 2. Resolve the SR
       await _client
@@ -1028,6 +1171,11 @@ class SupabaseServiceRequestRepository {
         if (active.isNotEmpty) {
           final drumId = active.first['drum_id'];
           final machineId = active.first['machine_id'];
+          isMachineFailure = isMachineFailure ||
+              active.first['machines']?['status']
+                      ?.toString()
+                      .toLowerCase() ==
+                  'emergency_stop';
 
           if (isMachineFailure && machineId != null) {
             // Reset entire machine and all its drums

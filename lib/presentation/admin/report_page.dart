@@ -145,15 +145,7 @@ class _ReportPageState extends State<ReportPage> {
       final status = _text(request['status']).toLowerCase();
       return status == 'completed' || status == 'processingcompleted';
     }).length;
-    final processedWeight = requests
-        .where(_isRenderedService)
-        .fold<double>(
-          0,
-          (sum, request) =>
-              sum +
-              _number(request['actual_weight'] ?? request['material_weight']),
-        );
-    final recoveredGold = requests.fold<double>(
+    final recoveredGold = requests.where(_isRenderedService).fold<double>(
       0,
       (sum, request) => sum + _number(request['gold_weight_grams']),
     );
@@ -224,15 +216,7 @@ class _ReportPageState extends State<ReportPage> {
                   SizedBox(
                     width: cardWidth,
                     child: _buildKpiCard(
-                      'Total rendered service weight (kg)',
-                      _formatNumber(processedWeight),
-                      Icons.inventory_2_rounded,
-                    ),
-                  ),
-                  SizedBox(
-                    width: cardWidth,
-                    child: _buildKpiCard(
-                      'Gold recovered (g)',
+                      'Total gold recovered (g)',
                       _formatNumber(recoveredGold),
                       Icons.monetization_on_rounded,
                     ),

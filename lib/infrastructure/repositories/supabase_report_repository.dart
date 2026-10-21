@@ -33,7 +33,7 @@ class SupabaseReportRepository {
             .from('service_requests')
             .select(
               'service_request_id, request_date, created_at, status, '
-              'material_weight, actual_weight, gold_weight_grams',
+              'gold_weight_grams',
             )
             .gte('request_date', startDate)
             .lt('request_date', endDate)
@@ -65,6 +65,7 @@ class SupabaseReportRepository {
         (from, to) => client
             .from('participant_payments')
             .select('payment_id, amount, payment_date')
+            .eq('verification_status', 'approved')
             .gte('payment_date', start.toIso8601String())
             .lt('payment_date', endExclusive.toIso8601String())
             .order('payment_date')

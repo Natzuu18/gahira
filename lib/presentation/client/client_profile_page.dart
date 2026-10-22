@@ -382,7 +382,8 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     );
   }
 
-  Widget _buildLogoMark() {    return Image.asset(
+  Widget _buildLogoMark() {
+    return Image.asset(
       'assets/img/EGReS.png',
       width: 34,
       height: 34,

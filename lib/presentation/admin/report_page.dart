@@ -151,10 +151,12 @@ class _ReportPageState extends State<ReportPage> {
       final status = _text(request['status']).toLowerCase();
       return status == 'completed' || status == 'processingcompleted';
     }).length;
-    final recoveredGold = requests.where(_isRenderedService).fold<double>(
-      0,
-      (sum, request) => sum + _number(request['gold_weight_grams']),
-    );
+    final recoveredGold = requests
+        .where(_isRenderedService)
+        .fold<double>(
+          0,
+          (sum, request) => sum + _number(request['gold_weight_grams']),
+        );
     final payments =
         [
           ...data.participantPayments,
@@ -239,7 +241,10 @@ class _ReportPageState extends State<ReportPage> {
                 ),
               ],
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
                 decoration: BoxDecoration(
                   border: Border.all(color: kGold.withValues(alpha: 0.7)),
                   borderRadius: BorderRadius.circular(8),
@@ -254,7 +259,11 @@ class _ReportPageState extends State<ReportPage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     else
-                      const Icon(Icons.download_rounded, color: kGold, size: 18),
+                      const Icon(
+                        Icons.download_rounded,
+                        color: kGold,
+                        size: 18,
+                      ),
                     const SizedBox(width: 8),
                     Text(
                       _isExporting ? 'Preparing...' : 'Export report',
@@ -361,7 +370,12 @@ class _ReportPageState extends State<ReportPage> {
       final fileBase = 'EGReS_Report_${_selectedRange.name}_$timestamp';
       if (format == 'csv') {
         final csv = _buildCsv(data);
-        final bytes = Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(csv)]);
+        final bytes = Uint8List.fromList([
+          0xEF,
+          0xBB,
+          0xBF,
+          ...utf8.encode(csv),
+        ]);
         final savedPath = await FilePicker.platform.saveFile(
           dialogTitle: 'Save report as CSV',
           fileName: '$fileBase.csv',
@@ -388,25 +402,44 @@ class _ReportPageState extends State<ReportPage> {
   void _showExportMessage(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: isError ? Colors.red : null),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : null,
+      ),
     );
   }
 
   String _buildCsv(AdminReportData data) {
     final requests = data.serviceRequests;
-    final activeJobs = requests.where((request) => const {
-      'queued', 'scheduled', 'assigned', 'processing',
-    }.contains(_text(request['status']).toLowerCase())).length;
+    final activeJobs = requests
+        .where(
+          (request) => const {
+            'queued',
+            'scheduled',
+            'assigned',
+            'processing',
+          }.contains(_text(request['status']).toLowerCase()),
+        )
+        .length;
     final completed = requests.where((request) {
       final status = _text(request['status']).toLowerCase();
       return status == 'completed' || status == 'processingcompleted';
     }).length;
-    final recoveredGold = requests.where(_isRenderedService).fold<double>(
-      0, (sum, request) => sum + _number(request['gold_weight_grams']),
-    );
-    final payments = [...data.participantPayments, ...data.serviceRequestPayments]
-        .fold<double>(0, (sum, payment) =>
-            sum + _number(payment['amount'] ?? payment['payment_amount']));
+    final recoveredGold = requests
+        .where(_isRenderedService)
+        .fold<double>(
+          0,
+          (sum, request) => sum + _number(request['gold_weight_grams']),
+        );
+    final payments =
+        [
+          ...data.participantPayments,
+          ...data.serviceRequestPayments,
+        ].fold<double>(
+          0,
+          (sum, payment) =>
+              sum + _number(payment['amount'] ?? payment['payment_amount']),
+        );
     final rows = <List<Object?>>[
       ['EGReS Reports & Analytics'],
       ['Period', _rangeDescription()],
@@ -422,33 +455,62 @@ class _ReportPageState extends State<ReportPage> {
       [],
       ['Service requests'],
       ['SR reference', 'Request date', 'Status', 'Gold weight (g)'],
-      ...requests.map((request) => [
-        _serviceReference(request['service_request_id']), request['request_date'],
-        request['status'], request['gold_weight_grams'],
-      ]),
+      ...requests.map(
+        (request) => [
+          _serviceReference(request['service_request_id']),
+          request['request_date'],
+          request['status'],
+          request['gold_weight_grams'],
+        ],
+      ),
       [],
       ['Milling batches'],
-      ['Batch ID', 'Machine ID', 'Created at', 'Input sacks', 'Output sacks', 'Status'],
-      ...data.millingBatches.map((batch) => [
-        batch['batch_id'], batch['machine_id'], batch['created_at'],
-        batch['input_sacks'], batch['output_sacks'], batch['status'],
-      ]),
+      [
+        'Batch ID',
+        'Machine ID',
+        'Created at',
+        'Input sacks',
+        'Output sacks',
+        'Status',
+      ],
+      ...data.millingBatches.map(
+        (batch) => [
+          batch['batch_id'],
+          batch['machine_id'],
+          batch['created_at'],
+          batch['input_sacks'],
+          batch['output_sacks'],
+          batch['status'],
+        ],
+      ),
       [],
       ['Payments'],
       ['Payment ID', 'Payment date', 'Amount (PHP)'],
-      ...data.participantPayments.map((payment) => [
-        payment['payment_id'], payment['payment_date'], payment['amount'],
-      ]),
-      ...data.serviceRequestPayments.map((payment) => [
-        _serviceReference(payment['service_request_id']), payment['payment_date'], payment['payment_amount'],
-      ]),
+      ...data.participantPayments.map(
+        (payment) => [
+          payment['payment_id'],
+          payment['payment_date'],
+          payment['amount'],
+        ],
+      ),
+      ...data.serviceRequestPayments.map(
+        (payment) => [
+          _serviceReference(payment['service_request_id']),
+          payment['payment_date'],
+          payment['payment_amount'],
+        ],
+      ),
       [],
       ['Equipment'],
       ['Machine ID', 'Machine name', 'Type', 'Status'],
-      ...data.machines.map((machine) => [
-        machine['machine_id'], machine['machine_name'],
-        machine['machine_type'], machine['status'],
-      ]),
+      ...data.machines.map(
+        (machine) => [
+          machine['machine_id'],
+          machine['machine_name'],
+          machine['machine_type'],
+          machine['status'],
+        ],
+      ),
     ];
     return rows.map((row) => row.map(_csvCell).join(',')).join('\r\n');
   }
@@ -467,52 +529,94 @@ class _ReportPageState extends State<ReportPage> {
 
   pw.Document _buildPdf(AdminReportData data) {
     final requests = data.serviceRequests;
-    final gold = requests.where(_isRenderedService).fold<double>(
-      0, (sum, request) => sum + _number(request['gold_weight_grams']),
-    );
-    final payments = [...data.participantPayments, ...data.serviceRequestPayments]
-        .fold<double>(0, (sum, payment) =>
-            sum + _number(payment['amount'] ?? payment['payment_amount']));
+    final gold = requests
+        .where(_isRenderedService)
+        .fold<double>(
+          0,
+          (sum, request) => sum + _number(request['gold_weight_grams']),
+        );
+    final payments =
+        [
+          ...data.participantPayments,
+          ...data.serviceRequestPayments,
+        ].fold<double>(
+          0,
+          (sum, payment) =>
+              sum + _number(payment['amount'] ?? payment['payment_amount']),
+        );
     final document = pw.Document();
-    document.addPage(pw.MultiPage(
-      build: (context) => [
-        pw.Text('EGReS Reports & Analytics', style: pw.TextStyle(
-          fontSize: 20, fontWeight: pw.FontWeight.bold,
-        )),
-        pw.SizedBox(height: 6),
-        pw.Text('Period: ${_rangeDescription()}'),
-        pw.Text('Generated: ${DateFormat.yMMMd().add_Hm().format(DateTime.now())}'),
-        pw.SizedBox(height: 16),
-        pw.TableHelper.fromTextArray(
-          headers: const ['Summary metric', 'Value'],
-          data: [
-            ['Total gold recovered (g)', _formatNumber(gold)],
-            ['Service requests', '${requests.length}'],
-            ['Completed services', '${requests.where((r) => const {'completed', 'processingcompleted'}.contains(_text(r['status']).toLowerCase())).length}'],
-            ['Payments collected (PHP)', _formatNumber(payments)],
-            ['Milling batches', '${data.millingBatches.length}'],
-          ],
-        ),
-        pw.SizedBox(height: 18),
-        pw.Text('Service requests', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
-        pw.TableHelper.fromTextArray(
-          headers: const ['SR reference', 'Date', 'Status', 'Gold (g)'],
-          data: requests.map((r) => [
-            _serviceReference(r['service_request_id']), _text(r['request_date']),
-            _text(r['status']), _formatNumber(_number(r['gold_weight_grams'])),
-          ]).toList(),
-        ),
-        pw.SizedBox(height: 18),
-        pw.Text('Milling batches', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
-        pw.TableHelper.fromTextArray(
-          headers: const ['Batch ID', 'Machine', 'Created', 'In sacks', 'Out sacks'],
-          data: data.millingBatches.map((b) => [
-            _text(b['batch_id']), _text(b['machine_id']), _text(b['created_at']),
-            _text(b['input_sacks']), _text(b['output_sacks']),
-          ]).toList(),
-        ),
-      ],
-    ));
+    document.addPage(
+      pw.MultiPage(
+        build: (context) => [
+          pw.Text(
+            'EGReS Reports & Analytics',
+            style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text('Period: ${_rangeDescription()}'),
+          pw.Text(
+            'Generated: ${DateFormat.yMMMd().add_Hm().format(DateTime.now())}',
+          ),
+          pw.SizedBox(height: 16),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Summary metric', 'Value'],
+            data: [
+              ['Total gold recovered (g)', _formatNumber(gold)],
+              ['Service requests', '${requests.length}'],
+              [
+                'Completed services',
+                '${requests.where((r) => const {'completed', 'processingcompleted'}.contains(_text(r['status']).toLowerCase())).length}',
+              ],
+              ['Payments collected (PHP)', _formatNumber(payments)],
+              ['Milling batches', '${data.millingBatches.length}'],
+            ],
+          ),
+          pw.SizedBox(height: 18),
+          pw.Text(
+            'Service requests',
+            style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.TableHelper.fromTextArray(
+            headers: const ['SR reference', 'Date', 'Status', 'Gold (g)'],
+            data: requests
+                .map(
+                  (r) => [
+                    _serviceReference(r['service_request_id']),
+                    _text(r['request_date']),
+                    _text(r['status']),
+                    _formatNumber(_number(r['gold_weight_grams'])),
+                  ],
+                )
+                .toList(),
+          ),
+          pw.SizedBox(height: 18),
+          pw.Text(
+            'Milling batches',
+            style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.TableHelper.fromTextArray(
+            headers: const [
+              'Batch ID',
+              'Machine',
+              'Created',
+              'In sacks',
+              'Out sacks',
+            ],
+            data: data.millingBatches
+                .map(
+                  (b) => [
+                    _text(b['batch_id']),
+                    _text(b['machine_id']),
+                    _text(b['created_at']),
+                    _text(b['input_sacks']),
+                    _text(b['output_sacks']),
+                  ],
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
     return document;
   }
 

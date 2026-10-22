@@ -98,6 +98,9 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
     return user != null ? '${user.fname} ${user.lname}' : 'Unknown';
   }
 
+  String _serviceReference(String id) =>
+      'SR: ${id.substring(0, id.length < 8 ? id.length : 8).toUpperCase()}';
+
   Widget _buildLogoMark() {    return Image.asset(
       'assets/img/EGReS.png',
       width: 34,
@@ -780,9 +783,18 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                Text(
+                  _serviceReference(request.id),
+                  style: TextStyle(
+                    color: context.mutedTextColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                  ),
+                ),
                 if (latestVerification != null && !showOriginal)
                   Text(
-                    'Verified by Operator',
+                    'Verified by ${latestVerification.operatorName ?? 'Operator'}',
                     style: TextStyle(
                       color: Colors.teal,
                       fontSize: 10,
@@ -1474,21 +1486,61 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
   }
 
   Widget _buildDetailRow(String label, String value) {
+    final normalizedLabel = label.toLowerCase();
+    final icon = normalizedLabel.contains('sack')
+        ? Icons.inventory_2_outlined
+        : normalizedLabel.contains('condition')
+        ? Icons.health_and_safety_outlined
+        : normalizedLabel.contains('state')
+        ? Icons.category_outlined
+        : normalizedLabel.contains('time')
+        ? Icons.schedule_outlined
+        : normalizedLabel.contains('operator') ||
+              normalizedLabel.contains('verified by')
+        ? Icons.verified_user_outlined
+        : normalizedLabel.contains('weight')
+        ? Icons.straighten_rounded
+        : normalizedLabel.contains('source')
+        ? Icons.location_on_outlined
+        : normalizedLabel.contains('note')
+        ? Icons.notes_outlined
+        : Icons.info_outline_rounded;
+    final iconColor = normalizedLabel.contains('operator') ||
+            normalizedLabel.contains('verified by')
+        ? Colors.teal
+        : kGold;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, color: iconColor, size: 17),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              color: context.textColor,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: context.mutedTextColor, fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.textColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

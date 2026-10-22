@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../shared_widgets/curved_active_bottom_nav_bar.dart';
@@ -10,6 +12,8 @@ import 'sms_notification_page.dart';
 import 'workforce_shift_page.dart';
 import 'operator_user_page.dart';
 import 'operator_menu.dart';
+import '../../infrastructure/notifications/push_notification_service.dart';
+import '../shared_widgets/notification_inbox_page.dart';
 
 class OperatorMainLayout extends StatefulWidget {
   const OperatorMainLayout({super.key, this.operatorName = 'Operator'});
@@ -32,6 +36,12 @@ class _OperatorMainLayoutState extends State<OperatorMainLayout> {
     _ => 4,
   };
 
+  @override
+  void initState() {
+    super.initState();
+    unawaited(PushNotificationService.instance.initializeForCurrentUser());
+  }
+
   int _pageIndexForTab(int index) => switch (index) {
     0 => 1,
     1 => 3,
@@ -41,6 +51,14 @@ class _OperatorMainLayoutState extends State<OperatorMainLayout> {
   };
 
   void _selectMenu(OperatorMenu menu) {
+    if (menu == OperatorMenu.notifications) {
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => const NotificationInboxPage(),
+        ),
+      );
+      return;
+    }
     if (menu == OperatorMenu.profileActivity) {
       _openProfileActivity();
       return;
@@ -56,6 +74,7 @@ class _OperatorMainLayoutState extends State<OperatorMainLayout> {
         OperatorMenu.sms => 5,
         OperatorMenu.user => 6,
         OperatorMenu.profileActivity => 6,
+        OperatorMenu.notifications => _pageIndex,
       };
     });
   }

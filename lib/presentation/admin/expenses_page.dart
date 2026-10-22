@@ -195,7 +195,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                         ),
                       ),
                       Text(
-                        'SR-${request.id.substring(0, 5).toUpperCase()}',
+                        request.serviceReference,
                         style: TextStyle(
                           color: kGold,
                           fontSize: 11,

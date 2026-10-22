@@ -6,5 +6,6 @@ enum OperatorMenu {
   workforce,
   sms,
   profileActivity,
+  notifications,
   user,
 }

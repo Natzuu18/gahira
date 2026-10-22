@@ -1,26 +1,27 @@
-# Miner service progress push notifications
+# User notification inbox and push notifications
 
-The app and database now create one progress notification for the service owner and each participating miner when service stages or milling batch milestones change. Supabase sends each new notification row to the `service-progress-push` Edge Function, which delivers it through Firebase Cloud Messaging (FCM).
+The app stores notifications for every signed-in role. The inbox includes service request and processing progress, payment changes, application decisions, and interview schedule updates. Notifications are scoped to the affected miners, participating miners, assigned operators, and administrators. Users can review saved notices from the bell, clear unread state, and receive mobile push notifications through Firebase Cloud Messaging (FCM).
 
 ## Firebase app setup
 
 Android push is configured for Firebase project `egres-43a8a` and application ID `com.example.egres` using `android/app/google-services.json` and `lib/firebase_options.dart`. iOS is not configured yet.
 
 1. The Android package ID must remain `com.example.egres` to match the Firebase app registered in `google-services.json`.
-2. Build and install the configured Android app. When a miner opens the app, it asks for push permission and registers that device's Firebase Installation ID (FID) in Supabase. Pushes received while the app is open appear as an in-app banner; pushes received in the background are displayed by the phone OS.
+2. Build and install the configured Android app. When a user opens the app, it asks for push permission and registers that device's Firebase Installation ID (FID) in Supabase. Pushes received while the app is open appear as an in-app banner; pushes received in the background are displayed by the phone OS.
 3. Create a Firebase service account with permission to send Firebase Cloud Messaging messages. Keep its private key on the server; never add it to the Flutter app or source control.
 
 To enable iOS later, register its bundle ID in Firebase, add `GoogleService-Info.plist`, configure Push Notifications and Background Modes in the iOS Runner target, and upload an APNs authentication key in Firebase.
 
 ## Supabase setup
 
-1. Apply `database/miner_service_push_notifications.sql` to the Supabase project. It enables row level security for device registrations and notification records.
-2. Deploy `supabase/functions/service-progress-push` with `verify_jwt = false` (configured in `supabase/config.toml`). Set these Edge Function secrets:
+1. Apply `database/billing_schema.sql` and `database/miner_service_push_notifications.sql` to the Supabase project.
+2. Apply `database/user_notification_inbox.sql` after both scripts. It adds read/unread state, enables each user to access only their own inbox, and creates notifications for service, application, interview, and payment updates.
+3. Deploy `supabase/functions/service-progress-push` with `verify_jwt = false` (configured in `supabase/config.toml`). Set these Edge Function secrets:
    - `FCM_PROJECT_ID`: Firebase project ID.
    - `FCM_CLIENT_EMAIL`: Firebase service account email.
    - `FCM_PRIVATE_KEY`: service account private key, preserving newlines or using `\n` escapes.
    - `PUSH_WEBHOOK_SECRET`: a long random secret shared with the webhook.
-3. In the Supabase SQL Editor, store the same webhook secret in Vault:
+4. In the Supabase SQL Editor, store the same webhook secret in Vault:
    ```sql
    select vault.create_secret(
      '<the same PUSH_WEBHOOK_SECRET value>',

@@ -887,7 +887,7 @@ class _AvailabilityPageState extends State<AvailabilityPage>
 
                             for (var app in matchingApplicants) {
                               final smsMsg =
-                                  'Gahira: Hello ${app.fullName}! Your interview schedule time on $formattedDate has been updated to $formattedStart - $formattedEnd. Location: ${item.address}. Thank you!';
+                                  'Dear ${app.fullName},\nYour interview schedule on $formattedDate has been updated to $formattedStart - $formattedEnd. Location: ${item.address}.\nEmilio Gold Refinery Service Management Center (EGReS)';
                               await _sendSmsNotification(
                                 app.phoneNumber,
                                 smsMsg,
@@ -1427,7 +1427,7 @@ class _AvailabilityPageState extends State<AvailabilityPage>
 
                             for (var app in matchingApplicants) {
                               final smsMsg =
-                                  'Gahira: Your scheduled interview on ${DateFormat('yyyy-MM-dd').format(item.date)} was cancelled. Reason: $reasonText. $reschedInfo';
+                                  'Dear ${app.fullName},\nYour scheduled interview on ${DateFormat('MMMM d, yyyy').format(item.date)} was cancelled. Reason: $reasonText. $reschedInfo\nEmilio Gold Refinery Service Management Center (EGReS)';
                               await _sendSmsNotification(
                                 app.phoneNumber,
                                 smsMsg,

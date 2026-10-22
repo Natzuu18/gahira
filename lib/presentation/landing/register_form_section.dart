@@ -192,7 +192,10 @@ class _RegisterFormSectionState extends State<RegisterFormSection> {
     });
 
     final service = RegistrationService(SupabaseRegistrationRepository());
-    final result = await service.sendPhoneOtp(_phoneController.text.trim());
+    final result = await service.sendPhoneOtp(
+      _phoneController.text.trim(),
+      recipientName: _firstNameController.text.trim(),
+    );
 
     if (!mounted) return;
     

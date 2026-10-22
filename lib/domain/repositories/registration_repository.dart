@@ -9,7 +9,7 @@ abstract class RegistrationRepository {
   Future<Either<Failure, UserEntity>> register(RegistrationData registrationData);
 
   /// Sends a one-time password (OTP) to the specified phone number.
-  Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber);
+  Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber, {String? recipientName});
 
   /// Verifies the OTP sent to the specified phone number.
   /// Returns the verification token on success.

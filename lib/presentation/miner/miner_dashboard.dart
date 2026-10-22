@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/notification_bell_button.dart';
 import '../client/service_requests_page.dart';
 import '../shared_widgets/emergency_alert_banner.dart';
 import 'miner_drawer.dart';
@@ -95,6 +96,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
         ),
         iconTheme: const IconThemeData(color: kGold),
         actions: const [
+          NotificationBellButton(),
           ThemeToggleButton(),
           SizedBox(width: 8),
         ],
@@ -407,9 +409,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
   }
 
   Widget _buildRequestListItem(ServiceRequestEntity request) {
-    final String reference = request.id.length > 8
-        ? request.id.substring(0, 8).toUpperCase()
-        : request.id.toUpperCase();
+    final reference = request.serviceReference;
     final String material =
         request.materialDetails.sourceType ?? 'Service request';
     final String date = MaterialLocalizations.of(
@@ -450,7 +450,7 @@ class _MinerDashboardPageState extends State<MinerDashboardPage> {
                   ),
                 ),
                 Text(
-                  'Ref: $reference • $date',
+                  '$reference • $date',
                   style: TextStyle(color: context.mutedTextColor, fontSize: 11),
                 ),
               ],

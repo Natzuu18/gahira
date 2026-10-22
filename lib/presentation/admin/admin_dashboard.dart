@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/notification_bell_button.dart';
 import '../shared_widgets/emergency_alert_banner.dart';
 import 'approval_page.dart';
 import 'billing_page.dart';
@@ -195,7 +196,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           ),
         ),
         iconTheme: const IconThemeData(color: kGold),
-        actions: const [ThemeToggleButton(), SizedBox(width: 8)],
+        actions: const [
+          NotificationBellButton(),
+          ThemeToggleButton(),
+          SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
@@ -887,9 +892,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   }
 
   Widget _buildPendingPaymentRow(ServiceRequestEntity request) {
-    final reference =
-        request.billingId ??
-        'SR-${request.id.substring(0, math.min(6, request.id.length)).toUpperCase()}';
+    final reference = request.serviceReference;
     final statusLabel = switch (request.status) {
       ServiceRequestStatus.processingCompleted => 'Bill pending',
       ServiceRequestStatus.partiallyPaid => 'Partially paid',
@@ -962,7 +965,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
               children: [
                 Text(
                   request.creatorName ??
-                      'Service ${request.id.substring(0, math.min(6, request.id.length))}',
+                      request.serviceReference,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

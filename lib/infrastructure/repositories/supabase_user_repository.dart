@@ -213,7 +213,7 @@ class SupabaseUserRepository implements UserRepository {
 
       // Send SMS via PhilSMS directly
       final roleTitle = role == UserRole.operator ? 'OPERATOR' : 'MINER';
-      final smsMessage = 'EGReS System: Hello $firstName! An admin has created your $roleTitle account. You can now log in using Email: $email | Password: $tempPassword. Thank you!';
+      final smsMessage = 'Dear $firstName,\nAn administrator has created your $roleTitle account. You may now log in using Email: $email | Temporary password: $tempPassword.\nEmilio Gold Refinery Service Management Center (EGReS)';
 
       final smsResponse = await http.post(
         Uri.parse(EnvConfig.philsmsEndpoint),

@@ -157,7 +157,7 @@ class _ClientServicePageState extends State<ClientServicePage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'ID: ${request.id.substring(0, 8)}',
+                    request.serviceReference,
                     style: const TextStyle(
                       color: kGold,
                       fontSize: 10,

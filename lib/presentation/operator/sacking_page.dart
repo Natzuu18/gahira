@@ -2234,9 +2234,9 @@ class _SackingPageState extends State<SackingPage> {
     final startedAt = DateTime.tryParse(
       batch['unloading_started_at']?.toString() ?? '',
     );
-    const title = 'Milling batch';
+    final title = batch['drums']?['drum_name'] ?? 'Drum';
     final subtitle =
-        '${batch['machines']?['machine_name'] ?? 'Machine'} · ${batch['drums']?['drum_name'] ?? 'Drum'}';
+        'Milling batch · ${batch['machines']?['machine_name'] ?? 'Machine'}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),

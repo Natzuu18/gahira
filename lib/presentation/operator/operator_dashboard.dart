@@ -5,6 +5,7 @@ import '../../core/error/failures.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/notification_bell_button.dart';
 import 'operator_menu.dart';
 import 'workforce_shift_page.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
@@ -79,6 +80,7 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
         ),
         iconTheme: const IconThemeData(color: kGold),
         actions: [
+          const NotificationBellButton(),
           const ThemeToggleButton(),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: kGold),
@@ -358,9 +360,7 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
         ? Colors.green
         : Colors.blue;
     final sacks = request.materialDetails.numberOfSacks ?? 0;
-    final reference = request.id.length > 8
-        ? request.id.substring(0, 8).toUpperCase()
-        : request.id.toUpperCase();
+    final reference = request.serviceReference;
 
     return Card(
       color: context.surfaceColor,
@@ -396,7 +396,7 @@ class _OperatorDashboardPageState extends State<OperatorDashboardPage> {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 3),
           child: Text(
-            'Ref $reference  •  $sacks ${sacks == 1 ? 'sack' : 'sacks'}  •  ${request.materialDetails.sourceType ?? 'Material service'}',
+            '$reference  •  $sacks ${sacks == 1 ? 'sack' : 'sacks'}  •  ${request.materialDetails.sourceType ?? 'Material service'}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: context.mutedTextColor, fontSize: 11),

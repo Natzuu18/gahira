@@ -20,6 +20,7 @@ CREATE TABLE public.users (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   mining_unit_id uuid,
   pin_hash text,
+  profile_picture_url text,
   CONSTRAINT users_pkey PRIMARY KEY (userId),
   CONSTRAINT users_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.role(role_id),
   CONSTRAINT users_mining_unit_id_fkey FOREIGN KEY (mining_unit_id) REFERENCES public.mining_units(id)

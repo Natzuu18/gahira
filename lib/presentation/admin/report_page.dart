@@ -1,8 +1,13 @@
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../../infrastructure/repositories/supabase_report_repository.dart';
 import '../shared_widgets/appColor.dart';
@@ -30,6 +35,7 @@ class _ReportPageState extends State<ReportPage> {
   final _repository = SupabaseReportRepository();
   _ReportRange _selectedRange = _ReportRange.week;
   late Future<AdminReportData> _reportFuture;
+  bool _isExporting = false;
 
   @override
   void initState() {
@@ -205,6 +211,60 @@ class _ReportPageState extends State<ReportPage> {
             _rangeDescription(),
             style: TextStyle(color: context.mutedTextColor, fontSize: 12),
           ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: PopupMenuButton<String>(
+              tooltip: 'Export report',
+              enabled: !_isExporting,
+              onSelected: (format) => _exportReport(data, format),
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'csv',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.table_chart_outlined),
+                    title: Text('Excel / CSV'),
+                    subtitle: Text('Spreadsheet compatible'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'pdf',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.picture_as_pdf_outlined),
+                    title: Text('PDF'),
+                    subtitle: Text('Print or share report'),
+                  ),
+                ),
+              ],
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  border: Border.all(color: kGold.withValues(alpha: 0.7)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isExporting)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      const Icon(Icons.download_rounded, color: kGold, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isExporting ? 'Preparing...' : 'Export report',
+                      style: const TextStyle(color: kGold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 20),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -291,6 +351,169 @@ class _ReportPageState extends State<ReportPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _exportReport(AdminReportData data, String format) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+    try {
+      final timestamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      final fileBase = 'EGReS_Report_${_selectedRange.name}_$timestamp';
+      if (format == 'csv') {
+        final csv = _buildCsv(data);
+        final bytes = Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(csv)]);
+        final savedPath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save report as CSV',
+          fileName: '$fileBase.csv',
+          type: FileType.custom,
+          allowedExtensions: const ['csv'],
+          bytes: bytes,
+        );
+        if (savedPath == null) return;
+        _showExportMessage('CSV report saved successfully.');
+      } else {
+        final document = _buildPdf(data);
+        await Printing.sharePdf(
+          bytes: await document.save(),
+          filename: '$fileBase.pdf',
+        );
+      }
+    } catch (error) {
+      _showExportMessage('Could not export report: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _showExportMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: isError ? Colors.red : null),
+    );
+  }
+
+  String _buildCsv(AdminReportData data) {
+    final requests = data.serviceRequests;
+    final activeJobs = requests.where((request) => const {
+      'queued', 'scheduled', 'assigned', 'processing',
+    }.contains(_text(request['status']).toLowerCase())).length;
+    final completed = requests.where((request) {
+      final status = _text(request['status']).toLowerCase();
+      return status == 'completed' || status == 'processingcompleted';
+    }).length;
+    final recoveredGold = requests.where(_isRenderedService).fold<double>(
+      0, (sum, request) => sum + _number(request['gold_weight_grams']),
+    );
+    final payments = [...data.participantPayments, ...data.serviceRequestPayments]
+        .fold<double>(0, (sum, payment) =>
+            sum + _number(payment['amount'] ?? payment['payment_amount']));
+    final rows = <List<Object?>>[
+      ['EGReS Reports & Analytics'],
+      ['Period', _rangeDescription()],
+      ['Generated', DateFormat.yMMMd().add_Hm().format(DateTime.now())],
+      [],
+      ['Summary'],
+      ['Metric', 'Value'],
+      ['Total gold recovered (g)', recoveredGold],
+      ['Active jobs', activeJobs],
+      ['Payments collected (PHP)', payments],
+      ['Completed services', completed],
+      ['Milling batches', data.millingBatches.length],
+      [],
+      ['Service requests'],
+      ['SR reference', 'Request date', 'Status', 'Gold weight (g)'],
+      ...requests.map((request) => [
+        _serviceReference(request['service_request_id']), request['request_date'],
+        request['status'], request['gold_weight_grams'],
+      ]),
+      [],
+      ['Milling batches'],
+      ['Batch ID', 'Machine ID', 'Created at', 'Input sacks', 'Output sacks', 'Status'],
+      ...data.millingBatches.map((batch) => [
+        batch['batch_id'], batch['machine_id'], batch['created_at'],
+        batch['input_sacks'], batch['output_sacks'], batch['status'],
+      ]),
+      [],
+      ['Payments'],
+      ['Payment ID', 'Payment date', 'Amount (PHP)'],
+      ...data.participantPayments.map((payment) => [
+        payment['payment_id'], payment['payment_date'], payment['amount'],
+      ]),
+      ...data.serviceRequestPayments.map((payment) => [
+        _serviceReference(payment['service_request_id']), payment['payment_date'], payment['payment_amount'],
+      ]),
+      [],
+      ['Equipment'],
+      ['Machine ID', 'Machine name', 'Type', 'Status'],
+      ...data.machines.map((machine) => [
+        machine['machine_id'], machine['machine_name'],
+        machine['machine_type'], machine['status'],
+      ]),
+    ];
+    return rows.map((row) => row.map(_csvCell).join(',')).join('\r\n');
+  }
+
+  String _csvCell(Object? value) {
+    var text = value?.toString() ?? '';
+    if (RegExp(r'^[=+@\-\t\r]').hasMatch(text)) text = "'$text";
+    return '"${text.replaceAll('"', '""')}"';
+  }
+
+  String _serviceReference(Object? value) {
+    final id = value?.toString() ?? '';
+    if (id.isEmpty) return 'SR: N/A';
+    return 'SR: ${id.substring(0, id.length < 8 ? id.length : 8).toUpperCase()}';
+  }
+
+  pw.Document _buildPdf(AdminReportData data) {
+    final requests = data.serviceRequests;
+    final gold = requests.where(_isRenderedService).fold<double>(
+      0, (sum, request) => sum + _number(request['gold_weight_grams']),
+    );
+    final payments = [...data.participantPayments, ...data.serviceRequestPayments]
+        .fold<double>(0, (sum, payment) =>
+            sum + _number(payment['amount'] ?? payment['payment_amount']));
+    final document = pw.Document();
+    document.addPage(pw.MultiPage(
+      build: (context) => [
+        pw.Text('EGReS Reports & Analytics', style: pw.TextStyle(
+          fontSize: 20, fontWeight: pw.FontWeight.bold,
+        )),
+        pw.SizedBox(height: 6),
+        pw.Text('Period: ${_rangeDescription()}'),
+        pw.Text('Generated: ${DateFormat.yMMMd().add_Hm().format(DateTime.now())}'),
+        pw.SizedBox(height: 16),
+        pw.TableHelper.fromTextArray(
+          headers: const ['Summary metric', 'Value'],
+          data: [
+            ['Total gold recovered (g)', _formatNumber(gold)],
+            ['Service requests', '${requests.length}'],
+            ['Completed services', '${requests.where((r) => const {'completed', 'processingcompleted'}.contains(_text(r['status']).toLowerCase())).length}'],
+            ['Payments collected (PHP)', _formatNumber(payments)],
+            ['Milling batches', '${data.millingBatches.length}'],
+          ],
+        ),
+        pw.SizedBox(height: 18),
+        pw.Text('Service requests', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+        pw.TableHelper.fromTextArray(
+          headers: const ['SR reference', 'Date', 'Status', 'Gold (g)'],
+          data: requests.map((r) => [
+            _serviceReference(r['service_request_id']), _text(r['request_date']),
+            _text(r['status']), _formatNumber(_number(r['gold_weight_grams'])),
+          ]).toList(),
+        ),
+        pw.SizedBox(height: 18),
+        pw.Text('Milling batches', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+        pw.TableHelper.fromTextArray(
+          headers: const ['Batch ID', 'Machine', 'Created', 'In sacks', 'Out sacks'],
+          data: data.millingBatches.map((b) => [
+            _text(b['batch_id']), _text(b['machine_id']), _text(b['created_at']),
+            _text(b['input_sacks']), _text(b['output_sacks']),
+          ]).toList(),
+        ),
+      ],
+    ));
+    return document;
   }
 
   Widget _buildDropdownFilter() {

@@ -15,6 +15,7 @@ import '../../infrastructure/models/user_model.dart';
 import '../../domain/entities/user_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/notification_bell_button.dart';
 import '../shared_widgets/pin_dialog.dart';
 import '../shared_widgets/audit_trail_viewer.dart';
 import '../shared_widgets/monitoring_page.dart';
@@ -390,6 +391,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         ),
         iconTheme: const IconThemeData(color: kGold),
         actions: const [
+          NotificationBellButton(),
           ThemeToggleButton(),
           SizedBox(width: 8),
         ],
@@ -850,6 +852,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
         latestAppeal['status'] == 'rejected' &&
         latestAppeal['miner_decision'] == null;
     final appealPending = latestAppeal?['status'] == 'pending';
+    final latestVerification = request.materialDetails.verifications.isNotEmpty
+        ? request.materialDetails.verifications.last
+        : null;
     final bool isActionRequired =
         request.status == ServiceRequestStatus.returnedToMiner;
     final bool isProcessingDone =
@@ -907,7 +912,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Ref: ${request.id.substring(0, 8).toUpperCase()}',
+                      request.serviceReference,
                       style: TextStyle(
                         color: context.textColor,
                         fontWeight: FontWeight.bold,
@@ -922,6 +927,18 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                         fontSize: 11,
                       ),
                     ),
+                    if ((latestVerification?.operatorName ?? '').isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          'Verified by ${latestVerification!.operatorName}',
+                          style: const TextStyle(
+                            color: kGold,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -980,7 +997,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'An operator verified this request. Review the verified details and photos below.',
+                        'Verified by ${latestVerification?.operatorName ?? 'Operator'}. Review the verified details and photos below.',
                         style: TextStyle(
                           color: context.textColor,
                           fontSize: 12,

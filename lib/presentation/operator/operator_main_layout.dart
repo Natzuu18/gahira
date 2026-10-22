@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../main.dart' show logoutAndNavigateToLogin;
 
 import '../shared_widgets/curved_active_bottom_nav_bar.dart';
 import '../shared_widgets/profile_activity_page.dart';
@@ -114,10 +115,7 @@ class _OperatorMainLayoutState extends State<OperatorMainLayout> {
       OperatorUserPage(
         operatorName: widget.operatorName,
         onOpenProfileActivity: _openProfileActivity,
-        onLogout: () => Navigator.of(context).pushNamedAndRemoveUntil(
-          '/',
-          (route) => false,
-        ),
+        onLogout: () => logoutAndNavigateToLogin(context),
       ),
     ];
 

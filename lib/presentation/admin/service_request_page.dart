@@ -278,18 +278,20 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                 onChanged: (value) => setState(() => _searchQuery = value),
               ),
               const SizedBox(height: 12),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10,
-                runSpacing: 10,
-                children:
-                    [
-                      'Verified',
-                      'Queued',
-                      'Scheduled',
-                      'Processing',
-                      'ProcessingCompleted',
-                    ].map(_buildStatusFilterChip).toList(),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    'Verified',
+                    'Queued',
+                    'Scheduled',
+                    'Processing',
+                    'ProcessingCompleted',
+                  ].map((status) => Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: _buildStatusFilterChip(status),
+                  )).toList(),
+                ),
               ),
             ],
           ),
@@ -443,6 +445,24 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
             appeal['reason']?.toString() ?? '',
             style: TextStyle(color: context.textColor, fontSize: 13),
           ),
+          if ((appeal['evidence_url']?.toString() ?? '').isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                appeal['evidence_url'].toString(),
+                height: 180,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 72,
+                  alignment: Alignment.center,
+                  color: context.surfaceColor,
+                  child: const Text('Appeal image could not be loaded.'),
+                ),
+              ),
+            ),
+          ],
           if ((appeal['admin_response']?.toString() ?? '').isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
@@ -529,6 +549,28 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('${appeal['category']}: ${appeal['reason']}'),
+                  const SizedBox(height: 12),
+                  if ((appeal['evidence_url']?.toString() ?? '').isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        appeal['evidence_url'].toString(),
+                        height: 190,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const SizedBox(
+                          height: 72,
+                          child: Center(
+                            child: Text('Appeal image could not be loaded.'),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    const Text(
+                      'No image evidence was attached to this appeal.',
+                      style: TextStyle(color: Colors.redAccent),
+                    ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: sacksController,
@@ -777,14 +819,14 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  requesterName,
+                  _serviceReference(request.id),
                   style: const TextStyle(
                     color: kGold,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
-                  _serviceReference(request.id),
+                  requesterName,
                   style: TextStyle(
                     color: context.mutedTextColor,
                     fontSize: 11,

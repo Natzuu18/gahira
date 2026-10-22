@@ -25,6 +25,7 @@ enum ProcessingStage {
   millingCrushing,
   unloading,
   washingSeparation,
+  separation,
   refining,
   completed,
 }
@@ -280,6 +281,10 @@ class ProcessingDetails extends Equatable {
   final DateTime? unloadingCompletedAt;
   final DateTime? washingStartedAt;
   final DateTime? washingCompletedAt;
+  final DateTime? separationStartedAt;
+  final DateTime? separationCompletedAt;
+  final DateTime? refiningStartedAt;
+  final DateTime? refiningCompletedAt;
   final String? estimatedTime; // Set by Operator
   final DateTime? scheduledDate; // Set by Owner
   final List<String> assignedOperatorIds;
@@ -294,6 +299,10 @@ class ProcessingDetails extends Equatable {
     this.unloadingCompletedAt,
     this.washingStartedAt,
     this.washingCompletedAt,
+    this.separationStartedAt,
+    this.separationCompletedAt,
+    this.refiningStartedAt,
+    this.refiningCompletedAt,
     this.estimatedTime,
     this.scheduledDate,
     required this.assignedOperatorIds,
@@ -309,6 +318,10 @@ class ProcessingDetails extends Equatable {
     DateTime? unloadingCompletedAt,
     DateTime? washingStartedAt,
     DateTime? washingCompletedAt,
+    DateTime? separationStartedAt,
+    DateTime? separationCompletedAt,
+    DateTime? refiningStartedAt,
+    DateTime? refiningCompletedAt,
     String? estimatedTime,
     DateTime? scheduledDate,
     List<String>? assignedOperatorIds,
@@ -323,6 +336,10 @@ class ProcessingDetails extends Equatable {
       unloadingCompletedAt: unloadingCompletedAt ?? this.unloadingCompletedAt,
       washingStartedAt: washingStartedAt ?? this.washingStartedAt,
       washingCompletedAt: washingCompletedAt ?? this.washingCompletedAt,
+      separationStartedAt: separationStartedAt ?? this.separationStartedAt,
+      separationCompletedAt: separationCompletedAt ?? this.separationCompletedAt,
+      refiningStartedAt: refiningStartedAt ?? this.refiningStartedAt,
+      refiningCompletedAt: refiningCompletedAt ?? this.refiningCompletedAt,
       estimatedTime: estimatedTime ?? this.estimatedTime,
       scheduledDate: scheduledDate ?? this.scheduledDate,
       assignedOperatorIds: assignedOperatorIds ?? this.assignedOperatorIds,
@@ -340,6 +357,10 @@ class ProcessingDetails extends Equatable {
     unloadingCompletedAt,
     washingStartedAt,
     washingCompletedAt,
+    separationStartedAt,
+    separationCompletedAt,
+    refiningStartedAt,
+    refiningCompletedAt,
     estimatedTime,
     scheduledDate,
     assignedOperatorIds,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,6 +40,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   List<UserEntity> _allUsers = [];
   final ValueNotifier<int> _requestsRevision = ValueNotifier<int>(0);
   bool _isLoading = true;
+  OverlayEntry? _claimNoticeEntry;
+  Timer? _claimNoticeTimer;
 
   @override
   void initState() {
@@ -48,8 +52,81 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
   @override
   void dispose() {
+    _hideClaimNotice();
     _requestsRevision.dispose();
     super.dispose();
+  }
+
+  void _hideClaimNotice() {
+    _claimNoticeTimer?.cancel();
+    _claimNoticeTimer = null;
+    final entry = _claimNoticeEntry;
+    _claimNoticeEntry = null;
+    if (entry != null) {
+      entry.remove();
+      entry.dispose();
+    }
+  }
+
+  void _showClaimNotice(String message, {required bool isError}) {
+    if (!mounted) return;
+    _hideClaimNotice();
+
+    final overlay = Overlay.of(context, rootOverlay: true);
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (overlayContext) => Positioned(
+        top: MediaQuery.of(overlayContext).padding.top + 12,
+        left: 16,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isError ? const Color(0xFF9F2F2F) : const Color(0xFF24734A),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x44000000),
+                  blurRadius: 18,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _hideClaimNotice,
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    _claimNoticeEntry = entry;
+    overlay.insert(entry);
+    _claimNoticeTimer = Timer(const Duration(seconds: 6), () {
+      if (_claimNoticeEntry == entry) _hideClaimNotice();
+    });
   }
 
   Future<void> _loadRequests({bool showLoading = true}) async {
@@ -1539,9 +1616,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       final failure = result.fold<String?>((error) => error.message, (_) => null);
       if (failure != null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not start service: $failure')),
-          );
+          _showClaimNotice('Could not start service: $failure', isError: true);
         }
         return;
       }
@@ -1566,15 +1641,15 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
     result.fold(
       (failure) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not claim service: ${failure.message}')),
+        _showClaimNotice(
+          'Could not claim service: ${failure.message}',
+          isError: true,
         );
       },
       (_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Service claimed. Open Assigned to You to start it.'),
-          ),
+        _showClaimNotice(
+          'Service claimed. Open Assigned to You to start it.',
+          isError: false,
         );
         _loadRequests(showLoading: false);
       },

@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:dartz/dartz.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/config/env_config.dart';
 import '../../core/error/failures.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../models/service_request_model.dart';
@@ -666,6 +668,317 @@ class SupabaseServiceRequestRepository {
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> startMillingBatchUnloading(
+    String batchId,
+  ) async {
+    try {
+      final batch = await _client
+          .from('milling_batches')
+          .select('status, unloading_started_at, unloading_completed_at')
+          .eq('batch_id', batchId)
+          .maybeSingle();
+      if (batch == null || batch['status'] != 'completed') {
+        return const Left(
+          ServerFailure('Only a completed milling batch can be unloaded.'),
+        );
+      }
+      if (batch['unloading_completed_at'] != null) {
+        return const Left(ServerFailure('This batch has already been unloaded.'));
+      }
+      if (batch['unloading_started_at'] != null) return const Right(null);
+
+      await _client
+          .from('milling_batches')
+          .update({
+            'unloading_started_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('batch_id', batchId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not start batch unloading: $e'));
+    }
+  }
+
+  Future<Either<Failure, void>> completeMillingBatchUnloading(
+    String batchId,
+  ) async {
+    try {
+      final batch = await _client
+          .from('milling_batches')
+          .select('status, unloading_started_at, unloading_completed_at')
+          .eq('batch_id', batchId)
+          .maybeSingle();
+      if (batch == null || batch['status'] != 'completed') {
+        return const Left(
+          ServerFailure('Only a completed milling batch can be unloaded.'),
+        );
+      }
+      if (batch['unloading_started_at'] == null) {
+        return const Left(ServerFailure('Start unloading before completing it.'));
+      }
+      if (batch['unloading_completed_at'] != null) return const Right(null);
+
+      await _client
+          .from('milling_batches')
+          .update({
+            'unloading_completed_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('batch_id', batchId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not complete batch unloading: $e'));
+    }
+  }
+
+  Future<Either<Failure, void>> startMillingBatchWashing(
+    String batchId,
+  ) async {
+    try {
+      final batch = await _client
+          .from('milling_batches')
+          .select(
+            'status, unloading_completed_at, washing_started_at, washing_completed_at',
+          )
+          .eq('batch_id', batchId)
+          .maybeSingle();
+      if (batch == null || batch['status'] != 'completed') {
+        return const Left(
+          ServerFailure('Only a completed milling batch can be washed.'),
+        );
+      }
+      if (batch['unloading_completed_at'] == null) {
+        return const Left(
+          ServerFailure('Finish unloading this batch before washing.'),
+        );
+      }
+      if (batch['washing_completed_at'] != null ||
+          batch['washing_started_at'] != null) {
+        return const Right(null);
+      }
+
+      await _client
+          .from('milling_batches')
+          .update({
+            'washing_started_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('batch_id', batchId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not start batch washing: $e'));
+    }
+  }
+
+  Future<Either<Failure, void>> completeMillingBatchWashing(
+    String batchId,
+  ) async {
+    try {
+      final batch = await _client
+          .from('milling_batches')
+          .select(
+            'status, unloading_completed_at, washing_started_at, washing_completed_at',
+          )
+          .eq('batch_id', batchId)
+          .maybeSingle();
+      if (batch == null || batch['status'] != 'completed') {
+        return const Left(
+          ServerFailure('Only a completed milling batch can be washed.'),
+        );
+      }
+      if (batch['unloading_completed_at'] == null) {
+        return const Left(
+          ServerFailure('Finish unloading this batch before washing.'),
+        );
+      }
+      if (batch['washing_started_at'] == null) {
+        return const Left(ServerFailure('Start washing before completing it.'));
+      }
+      if (batch['washing_completed_at'] != null) return const Right(null);
+
+      await _client
+          .from('milling_batches')
+          .update({
+            'washing_completed_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('batch_id', batchId);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not complete batch washing: $e'));
+    }
+  }
+
+  Future<Either<Failure, void>> sendSeparationStartSms(
+    String requestId,
+  ) async {
+    try {
+      final request = await _client
+          .from('service_requests')
+          .select('users:user_id(fname, contact_num)')
+          .eq('service_request_id', requestId)
+          .maybeSingle();
+      final miner = request?['users'] as Map<String, dynamic>?;
+      final phoneNumber = miner?['contact_num']?.toString().trim() ?? '';
+      if (phoneNumber.isEmpty) {
+        return const Left(ServerFailure('The miner has no phone number on file.'));
+      }
+
+      final digits = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+      final recipient = digits.startsWith('63')
+          ? digits
+          : digits.startsWith('0')
+          ? '63${digits.substring(1)}'
+          : digits.startsWith('9')
+          ? '63$digits'
+          : digits;
+      final firstName = miner?['fname']?.toString().trim();
+      final greeting = firstName == null || firstName.isEmpty
+          ? 'Hello'
+          : 'Hello $firstName';
+      final response = await http.post(
+        Uri.parse(EnvConfig.philsmsEndpoint),
+        headers: {
+          'Authorization': 'Bearer ${EnvConfig.philsmsApiKey.trim()}',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'recipient': recipient,
+          'sender_id': EnvConfig.philsmsSenderId,
+          'type': 'plain',
+          'message':
+              'EGReS: $greeting. Please proceed to the facility now to begin separation (puga) for your service request.',
+        }),
+      );
+      Map<String, dynamic>? responseBody;
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) responseBody = decoded;
+      } catch (_) {}
+      if (response.statusCode >= 300) {
+        final providerMessage = responseBody?['message']?.toString();
+        return Left(
+          ServerFailure(
+            providerMessage == null || providerMessage.isEmpty
+                ? 'Could not send separation SMS (${response.statusCode}).'
+                : 'PhilSMS: $providerMessage',
+          ),
+        );
+      }
+      final providerStatus = responseBody?['status']?.toString().toLowerCase();
+      if (providerStatus == 'error' || providerStatus == 'failed') {
+        final providerMessage = responseBody?['message']?.toString();
+        return Left(
+          ServerFailure(
+            providerMessage == null || providerMessage.isEmpty
+                ? 'PhilSMS rejected the separation SMS.'
+                : 'PhilSMS: $providerMessage',
+          ),
+        );
+      }
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not send separation SMS: $e'));
+    }
+  }
+
+  Future<Either<Failure, void>> sendProcessingCompletionSms(
+    String requestId,
+  ) async {
+    try {
+      final request = await _client
+          .from('service_requests')
+          .select('users:user_id(fname, contact_num)')
+          .eq('service_request_id', requestId)
+          .maybeSingle();
+      final miner = request?['users'] as Map<String, dynamic>?;
+      if (miner == null) {
+        return const Left(ServerFailure('Could not find the miner for this request.'));
+      }
+
+      final admins = await _client
+          .from('users')
+          .select('contact_num, role:role_id!inner(role)')
+          .ilike('role.role', 'admin');
+      final minerName = miner['fname']?.toString().trim();
+      final recipients = <({String phone, String audience})>[];
+      final minerPhone = miner['contact_num']?.toString().trim() ?? '';
+      if (minerPhone.isNotEmpty) {
+        recipients.add((phone: minerPhone, audience: 'miner'));
+      }
+      final seenAdminPhones = <String>{};
+      for (final admin in admins) {
+        final phone = admin['contact_num']?.toString().trim() ?? '';
+        final normalizedDigits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+        if (phone.isNotEmpty && seenAdminPhones.add(normalizedDigits)) {
+          recipients.add((phone: phone, audience: 'administrator'));
+        }
+      }
+      if (recipients.isEmpty) {
+        return const Left(
+          ServerFailure('No miner or administrator phone numbers are available.'),
+        );
+      }
+
+      final minerGreeting = minerName == null || minerName.isEmpty
+          ? 'Hello'
+          : 'Hello $minerName';
+      final failures = <String>[];
+      if (minerPhone.isEmpty) failures.add('miner: no phone number on file');
+      if (seenAdminPhones.isEmpty) {
+        failures.add('administrator: no phone number is available');
+      }
+      for (final target in recipients) {
+        final digits = target.phone.replaceAll(RegExp(r'[^0-9]'), '');
+        final recipient = digits.startsWith('63')
+            ? digits
+            : digits.startsWith('0')
+            ? '63${digits.substring(1)}'
+            : digits.startsWith('9')
+            ? '63$digits'
+            : digits;
+        final message = target.audience == 'miner'
+            ? 'EGReS: $minerGreeting. Processing for your service request is complete. Please contact the facility regarding billing and the next steps.'
+            : 'EGReS: Processing for service request ${requestId.substring(0, requestId.length < 8 ? requestId.length : 8).toUpperCase()} is complete and ready for billing.';
+        final response = await http.post(
+          Uri.parse(EnvConfig.philsmsEndpoint),
+          headers: {
+            'Authorization': 'Bearer ${EnvConfig.philsmsApiKey.trim()}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'recipient': recipient,
+            'sender_id': EnvConfig.philsmsSenderId,
+            'type': 'plain',
+            'message': message,
+          }),
+        );
+        Map<String, dynamic>? responseBody;
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map<String, dynamic>) responseBody = decoded;
+        } catch (_) {}
+        final providerStatus = responseBody?['status']?.toString().toLowerCase();
+        if (response.statusCode >= 300 ||
+            providerStatus == 'error' ||
+            providerStatus == 'failed') {
+          final providerMessage = responseBody?['message']?.toString();
+          failures.add(
+            '${target.audience}: ${providerMessage?.isNotEmpty == true ? providerMessage : 'SMS request failed (${response.statusCode})'}',
+          );
+        }
+      }
+
+      if (failures.isNotEmpty) {
+        return Left(
+          ServerFailure('Processing completed, but ${failures.join('; ')}.'),
+        );
+      }
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not send processing completion SMS: $e'));
     }
   }
 

@@ -33,7 +33,7 @@ class _SackingPageState extends State<SackingPage> {
   ServiceRequestEntity? _currentRequest;
 
   String? _selectedMachineId;
-  String? _selectedDrumId;
+  final Set<String> _selectedDrumIds = <String>{};
   final _inputSacksController = TextEditingController();
   final _outputSacksController = TextEditingController();
   final _estDurationController = TextEditingController(text: '30');
@@ -41,6 +41,7 @@ class _SackingPageState extends State<SackingPage> {
   RealtimeChannel? _realtimeChannel;
   bool _isSaving = false;
   bool _isResuming = false;
+  String? _completionSmsFailure;
 
   @override
   void initState() {
@@ -119,18 +120,18 @@ class _SackingPageState extends State<SackingPage> {
       final availableDrums = machineToSelect == null
           ? <dynamic>[]
           : _availableDrums(machineToSelect);
-      final selectedDrumStillAvailable = availableDrums.any(
-        (drum) => drum['drum_id']?.toString() == _selectedDrumId,
-      );
+      final availableDrumIds = availableDrums
+          .map((drum) => drum['drum_id']?.toString())
+          .whereType<String>()
+          .toSet();
       final loadedBatches = batchesRes.getOrElse(() => <Map<String, dynamic>>[]);
 
       setState(() {
         _machines = machines;
         _selectedMachineId = machineToSelect?['machine_id']?.toString();
-        if (!selectedDrumStillAvailable) {
-          _selectedDrumId = availableDrums.isNotEmpty
-              ? availableDrums.first['drum_id']?.toString()
-              : null;
+        _selectedDrumIds.removeWhere((drumId) => !availableDrumIds.contains(drumId));
+        if (_selectedDrumIds.isEmpty && availableDrums.isNotEmpty) {
+          _selectedDrumIds.add(availableDrums.first['drum_id'].toString());
         }
         _existingBatches = loadedBatches;
 
@@ -206,6 +207,84 @@ class _SackingPageState extends State<SackingPage> {
       _availableResackedSacksTotal > 0 ||
       _existingBatches.any((batch) => batch['status'] == 'milling');
 
+  bool get _hasActiveMillingBatch =>
+      _existingBatches.any((batch) => batch['status'] == 'milling');
+
+  bool get _allMillingWorkComplete =>
+      _totalSacksFromMiner > 0 &&
+      _remainingMinerSacks == 0 &&
+      _availableResackedSacksTotal == 0 &&
+      !_hasActiveMillingBatch;
+
+  bool get _hasMoreSackingOrMillingWork =>
+      _remainingMinerSacks > 0 || _availableResackedSacksTotal > 0;
+
+  bool _batchNeedsUnloading(Map<String, dynamic> batch) =>
+      batch['batch_kind'] == 'milling' &&
+      batch['status'] == 'completed' &&
+      batch['unloading_completed_at'] == null;
+
+  bool _batchIsUnloading(Map<String, dynamic> batch) =>
+      _batchNeedsUnloading(batch) && batch['unloading_started_at'] != null;
+
+  bool get _allMillingBatchesUnloaded {
+    final millingBatches = _existingBatches
+        .where((batch) => batch['batch_kind'] == 'milling')
+        .toList();
+    return millingBatches.every(
+      (batch) =>
+          batch['status'] == 'completed' &&
+          batch['unloading_completed_at'] != null,
+    );
+  }
+
+  bool get _hasUnloadedMillingBatch => _existingBatches.any(
+    (batch) =>
+        batch['batch_kind'] == 'milling' &&
+        batch['status'] == 'completed' &&
+        batch['unloading_completed_at'] != null,
+  );
+
+  List<Map<String, dynamic>> get _unloadedMillingBatches => _existingBatches
+      .where(
+        (batch) =>
+            batch['batch_kind'] == 'milling' &&
+            batch['status'] == 'completed' &&
+            batch['unloading_completed_at'] != null,
+      )
+      .toList();
+
+  List<Map<String, dynamic>> get _unloadingMillingBatchesInProgress =>
+      _existingBatches.where(_batchIsUnloading).toList();
+
+  List<Map<String, dynamic>> get _washingMillingBatchesInProgress =>
+      _unloadedMillingBatches
+          .where(
+            (batch) =>
+                batch['washing_started_at'] != null &&
+                batch['washing_completed_at'] == null,
+          )
+          .toList();
+
+  int get _washedMillingBatchCount => _unloadedMillingBatches
+      .where((batch) => batch['washing_completed_at'] != null)
+      .length;
+
+  bool get _allUnloadedMillingBatchesWashed =>
+      _unloadedMillingBatches.isNotEmpty &&
+      _unloadedMillingBatches.every(
+        (batch) => batch['washing_completed_at'] != null,
+      );
+
+  bool get _canStartSeparation =>
+      _allMillingWorkComplete &&
+      _allMillingBatchesUnloaded &&
+      _allUnloadedMillingBatchesWashed;
+
+  bool get _canProceedToRefining =>
+      _canStartSeparation &&
+      _effectiveRequest.processingDetails.separationCompletedAt != null;
+
   bool get _hasMillingBatches => _existingBatches.any(
     (batch) => batch['batch_kind'] == 'milling',
   );
@@ -234,7 +313,8 @@ class _SackingPageState extends State<SackingPage> {
           switch (_effectiveRequest.processingDetails.currentStage) {
             ProcessingStage.rebagging => 'SACKING / REBAGGING',
             ProcessingStage.millingCrushing => 'MILLING',
-            ProcessingStage.washingSeparation => 'WASHING / SEPARATION',
+            ProcessingStage.washingSeparation => 'WASHING',
+            ProcessingStage.separation => 'SEPARATION',
             ProcessingStage.refining => 'REFINING',
             _ => 'BATCH SACKING / MILLING',
           },
@@ -275,8 +355,16 @@ class _SackingPageState extends State<SackingPage> {
       return _buildWashingUI();
     }
     if (_effectiveRequest.processingDetails.currentStage ==
+        ProcessingStage.separation) {
+      return _buildSeparationUI();
+    }
+    if (_effectiveRequest.processingDetails.currentStage ==
         ProcessingStage.refining) {
       return _buildRefiningUI();
+    }
+    if (_effectiveRequest.processingDetails.currentStage ==
+        ProcessingStage.completed) {
+      return _buildCompletedProcessingUI();
     }
     return _buildSackingUI();
   }
@@ -291,8 +379,9 @@ class _SackingPageState extends State<SackingPage> {
       ProcessingStage.millingCrushing => 1,
       ProcessingStage.unloading => 2,
       ProcessingStage.washingSeparation => 3,
-      ProcessingStage.refining => 4,
-      ProcessingStage.completed => 5,
+      ProcessingStage.separation => 4,
+      ProcessingStage.refining => 5,
+      ProcessingStage.completed => 6,
     };
 
     String formatDuration(DateTime? start, DateTime? end) {
@@ -307,35 +396,75 @@ class _SackingPageState extends State<SackingPage> {
       return '${seconds}s';
     }
 
-    final stages = <({String title, int rank, String result})>[
+    final millingBatches = _existingBatches
+        .where((batch) => batch['batch_kind'] == 'milling')
+        .toList();
+    final unloadedBatchCount = millingBatches
+        .where((batch) => batch['unloading_completed_at'] != null)
+        .length;
+    final unloadingResult = millingBatches.isEmpty
+        ? formatDuration(
+            details.unloadingStartedAt,
+            details.unloadingCompletedAt,
+          )
+        : '$unloadedBatchCount / ${millingBatches.length} batches unloaded';
+
+    final stages = <({
+      String title,
+      int rank,
+      String result,
+      ProcessingStage destination,
+    })>[
       (
         title: 'Sacking / Rebagging',
         rank: 0,
         result: '$_sacksProcessedSoFar / $_totalSacksFromMiner sacks',
+        destination: ProcessingStage.rebagging,
       ),
       (
         title: 'Milling',
         rank: 1,
         result: '$_totalResackedSacks resacked sacks | '
             '${_formatDuration(_totalMillingDuration)}',
+        destination: ProcessingStage.millingCrushing,
       ),
       (
         title: 'Unloading',
         rank: 2,
-        result: formatDuration(
-          details.unloadingStartedAt,
-          details.unloadingCompletedAt,
-        ),
+        result: unloadingResult,
+        destination: ProcessingStage.unloading,
       ),
       (
-        title: 'Washing & Separation',
+        title: 'Washing',
         rank: 3,
-        result: formatDuration(
-          details.washingStartedAt,
-          details.washingCompletedAt,
-        ),
+        result: _unloadedMillingBatches.isEmpty
+            ? formatDuration(
+                details.washingStartedAt,
+                details.washingCompletedAt,
+              )
+            : '$_washedMillingBatchCount / ${_unloadedMillingBatches.length} batches washed',
+        destination: ProcessingStage.washingSeparation,
       ),
-      (title: 'Refining', rank: 4, result: 'Final stage'),
+      (
+        title: 'Separation',
+        rank: 4,
+        result: formatDuration(
+          details.separationStartedAt,
+          details.separationCompletedAt,
+        ),
+        destination: ProcessingStage.separation,
+      ),
+      (
+        title: 'Refining',
+        rank: 5,
+        result: details.refiningStartedAt == null
+            ? 'Not started'
+            : formatDuration(
+                details.refiningStartedAt,
+                details.refiningCompletedAt,
+              ),
+        destination: ProcessingStage.refining,
+      ),
     ];
 
     return Container(
@@ -391,65 +520,89 @@ class _SackingPageState extends State<SackingPage> {
                     : isCurrent
                     ? kGold
                     : context.mutedTextColor;
+                final canSelect = _canSelectProcessStage(
+                  stage.destination,
+                  currentStage,
+                );
                 final result = isComplete ||
                         (isCurrent && (stage.rank == 0 || stage.rank == 1))
                     ? stage.result
                     : isCurrent
                     ? (stage.rank == 2 && details.unloadingStartedAt != null
                           ? stage.result
-                          : stage.rank == 3 && details.washingStartedAt != null
+                          : stage.rank == 3 &&
+                                (_unloadedMillingBatches.isNotEmpty ||
+                                    details.washingStartedAt != null)
+                          ? stage.result
+                          : stage.rank == 4 &&
+                                details.separationStartedAt != null
                           ? stage.result
                           : 'In progress')
+                    : stage.rank == 2 && millingBatches.isNotEmpty
+                    ? stage.result
                     : 'Waiting';
-                return Container(
-                  width: cardWidth,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.08),
+                return Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    onTap: canSelect
+                        ? () => _handleProcessFlowTap(stage.destination)
+                        : null,
+                    mouseCursor: canSelect
+                        ? SystemMouseCursors.click
+                        : SystemMouseCursors.basic,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: color.withOpacity(0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Row(
+                    child: Container(
+                      width: cardWidth,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: color.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            isComplete
-                                ? Icons.check_circle_rounded
-                                : isCurrent
-                                ? Icons.radio_button_checked_rounded
-                                : Icons.circle_outlined,
-                            color: color,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              stage.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: context.textColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                          Row(
+                            children: [
+                              Icon(
+                                isComplete
+                                    ? Icons.check_circle_rounded
+                                    : isCurrent
+                                    ? Icons.radio_button_checked_rounded
+                                    : Icons.circle_outlined,
+                                color: color,
+                                size: 14,
                               ),
-                            ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  stage.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: context.textColor,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            result,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: color, fontSize: 10),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 5),
-                      Text(
-                        result,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: color, fontSize: 10),
-                      ),
-                    ],
+                    ),
                   ),
                 );
                     },
@@ -461,6 +614,90 @@ class _SackingPageState extends State<SackingPage> {
         ],
       ),
     );
+  }
+
+  bool _canSelectProcessStage(
+    ProcessingStage destination,
+    ProcessingStage currentStage,
+  ) {
+    final currentRank = switch (currentStage) {
+      ProcessingStage.rebagging => 0,
+      ProcessingStage.millingCrushing => 1,
+      ProcessingStage.unloading => 2,
+      ProcessingStage.washingSeparation => 3,
+      ProcessingStage.separation => 4,
+      ProcessingStage.refining => 5,
+      ProcessingStage.completed => 6,
+      ProcessingStage.none || ProcessingStage.loading => -1,
+    };
+    return switch (destination) {
+      ProcessingStage.rebagging =>
+        currentStage == ProcessingStage.rebagging ||
+            _remainingMinerSacks > 0 ||
+            _sacksProcessedSoFar > 0,
+      ProcessingStage.millingCrushing =>
+        currentStage == ProcessingStage.millingCrushing || _hasMillingBatches,
+      ProcessingStage.unloading => _hasMillingBatches,
+      ProcessingStage.washingSeparation =>
+        currentStage == ProcessingStage.washingSeparation ||
+            currentRank > 3 ||
+            _hasUnloadedMillingBatch,
+      ProcessingStage.separation =>
+        currentStage == ProcessingStage.separation ||
+            currentRank > 4 ||
+            _canStartSeparation,
+      ProcessingStage.refining =>
+        currentStage == ProcessingStage.refining ||
+            currentRank > 5 ||
+            (_allMillingWorkComplete &&
+                _allMillingBatchesUnloaded &&
+                _allUnloadedMillingBatchesWashed &&
+                _effectiveRequest.processingDetails.separationCompletedAt !=
+                    null),
+      _ => false,
+    };
+  }
+
+  Future<void> _handleProcessFlowTap(ProcessingStage destination) async {
+    if (destination == _effectiveRequest.processingDetails.currentStage) return;
+
+    switch (destination) {
+      case ProcessingStage.rebagging:
+        await _returnToOperationStage(
+          ProcessingStage.rebagging,
+          'Opened sacking from the process flow for review.',
+          resetWashing: _remainingMinerSacks > 0,
+        );
+        break;
+      case ProcessingStage.millingCrushing:
+        await _returnToOperationStage(
+          ProcessingStage.millingCrushing,
+          'Opened milling from the process flow.',
+          resetWashing: _hasMoreSackingOrMillingWork,
+        );
+        break;
+      case ProcessingStage.unloading:
+        await _advanceStage(ProcessingStage.unloading);
+        break;
+      case ProcessingStage.washingSeparation:
+        await _advanceStage(ProcessingStage.washingSeparation);
+        break;
+      case ProcessingStage.separation:
+        await _advanceStage(ProcessingStage.separation);
+        break;
+      case ProcessingStage.refining:
+        if (_effectiveRequest.processingDetails.currentStage ==
+            ProcessingStage.completed) {
+          await _advanceStage(ProcessingStage.refining);
+        } else {
+          await _handleProceedToRefining();
+        }
+        break;
+      case ProcessingStage.none ||
+          ProcessingStage.loading ||
+          ProcessingStage.completed:
+        return;
+    }
   }
 
   String _formatDuration(Duration duration) {
@@ -878,7 +1115,7 @@ class _SackingPageState extends State<SackingPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Each milling operation processes exactly one resacked sack. '
+            'Each selected drum starts one milling batch for one resacked sack. '
             'Available to mill: $_availableResackedSacksTotal.',
             style: TextStyle(color: context.mutedTextColor, fontSize: 12),
           ),
@@ -913,6 +1150,14 @@ class _SackingPageState extends State<SackingPage> {
             ),
             const SizedBox(height: 8),
             _buildDrumSelector(),
+            if (_selectedDrumIds.length > _availableResackedSacksTotal)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Select no more than $_availableResackedSacksTotal drums; each drum mills 1 sack.',
+                  style: const TextStyle(color: Colors.orange, fontSize: 12),
+                ),
+              ),
           ],
           const SizedBox(height: 16),
           _buildInput(
@@ -922,7 +1167,9 @@ class _SackingPageState extends State<SackingPage> {
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: _isSaving || _availableResackedSacksTotal <= 0
+            onPressed: _isSaving ||
+                    _selectedDrumIds.isEmpty ||
+                    _selectedDrumIds.length > _availableResackedSacksTotal
                 ? null
                 : _handleStartMillingBatch,
             style: ElevatedButton.styleFrom(
@@ -942,8 +1189,8 @@ class _SackingPageState extends State<SackingPage> {
                       color: kBlack,
                     ),
                   )
-                : const Text(
-                    'START MILLING BATCH',
+                : Text(
+                    'START MILLING (${_selectedDrumIds.length} DRUM${_selectedDrumIds.length == 1 ? '' : 'S'})',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
           ),
@@ -981,12 +1228,12 @@ class _SackingPageState extends State<SackingPage> {
               : (val) {
                   setState(() {
                     _selectedMachineId = val ? m['machine_id']?.toString() : null;
-                    _selectedDrumId = null;
+                    _selectedDrumIds.clear();
                     if (val) {
                       final drums = _availableDrums(m);
-                      _selectedDrumId = drums.isNotEmpty
-                          ? drums.first['drum_id']?.toString()
-                          : null;
+                      if (drums.isNotEmpty) {
+                        _selectedDrumIds.add(drums.first['drum_id'].toString());
+                      }
                     }
                   });
                 },
@@ -1022,7 +1269,8 @@ class _SackingPageState extends State<SackingPage> {
       spacing: 8,
       runSpacing: 8,
       children: drums.map((d) {
-        final isSelected = _selectedDrumId == d['drum_id']?.toString();
+        final drumId = d['drum_id']?.toString();
+        final isSelected = drumId != null && _selectedDrumIds.contains(drumId);
         final status = d['status']?.toString().toLowerCase();
         final inUse = status == 'in_use';
         final isEmergency = status == 'emergency_stop';
@@ -1043,7 +1291,26 @@ class _SackingPageState extends State<SackingPage> {
           onSelected: (inUse || isEmergency)
               ? null
               : (val) {
-                  setState(() => _selectedDrumId = val ? d['drum_id']?.toString() : null);
+                  if (val &&
+                      !_selectedDrumIds.contains(drumId) &&
+                      _selectedDrumIds.length >= _availableResackedSacksTotal) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Each selected drum needs one available sack.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  setState(() {
+                    if (drumId == null) return;
+                    if (val) {
+                      _selectedDrumIds.add(drumId);
+                    } else {
+                      _selectedDrumIds.remove(drumId);
+                    }
+                  });
                 },
           selectedColor: kGold,
           backgroundColor: bgColor,
@@ -1100,6 +1367,10 @@ class _SackingPageState extends State<SackingPage> {
     final isMilling = batch['status'] == 'milling';
     final isReadyToMill = batch['status'] == 'ready_to_mill';
     final isMillingRun = batch['batch_kind'] == 'milling';
+    final isCompletedMilling =
+        isMillingRun &&
+        batch['status'] == 'completed' &&
+        _batchNeedsUnloading(batch);
     final drumStatus = batch['drums']?['status']?.toString().toLowerCase();
     final isDrumEmergency = drumStatus == 'emergency_stop';
     final isSREmergency =
@@ -1237,6 +1508,45 @@ class _SackingPageState extends State<SackingPage> {
                       color: Colors.green,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                if (isCompletedMilling) ...[
+                  const SizedBox(height: 8),
+                  if (_batchIsUnloading(batch)) ...[
+                    UnloadingStopwatch(
+                      startTime: DateTime.parse(
+                        batch['unloading_started_at'].toString(),
+                      ),
+                      label: 'UNLOADING IN PROGRESS',
+                    ),
+                    TextButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : () => _handleCompleteBatchUnloading(batch),
+                      icon: const Icon(Icons.check_rounded, size: 16),
+                      label: const Text('FINISH UNLOADING'),
+                    ),
+                  ] else
+                    OutlinedButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : () => _handleStartBatchUnloading(batch),
+                      icon: const Icon(Icons.unarchive_outlined, size: 16),
+                      label: const Text('GO TO UNLOADING & START'),
+                    ),
+                ],
+                if (isMillingRun &&
+                    batch['status'] == 'completed' &&
+                    batch['unloading_completed_at'] != null)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'UNLOADING COMPLETE',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                      ),
                     ),
                   ),
               ],
@@ -1638,8 +1948,6 @@ class _SackingPageState extends State<SackingPage> {
   }
 
   Widget _buildCompletionAlert() {
-    final hasActiveBatches = _hasUnfinishedMilling;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -1662,29 +1970,22 @@ class _SackingPageState extends State<SackingPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            hasActiveBatches
-                ? 'Finish every ready and active milling batch before moving to unloading.'
-                : 'All miner sacks are sacked and all resacked batches are milled. You can proceed to unloading.',
+            _allMillingBatchesUnloaded
+                ? 'All milling batches are unloaded. Washing and separation can begin.'
+                : 'Start unloading each completed batch here. You can continue sacking or milling while unloading runs.',
             textAlign: TextAlign.center,
             style: TextStyle(color: context.textColor, fontSize: 13),
           ),
-
-          if (!hasActiveBatches) ...[
-            const SizedBox(height: 20),
+          if (_allMillingBatchesUnloaded) ...[
+            const SizedBox(height: 18),
             ElevatedButton(
-              onPressed: _handleProceedToUnloading,
+              onPressed: _isSaving ? null : _handleProceedToWashing,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                minimumSize: const Size(double.infinity, 48),
               ),
-              child: const Text(
-                'PROCEED TO UNLOADING',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              child: const Text('PROCEED TO WASHING'),
             ),
           ],
         ],
@@ -1692,141 +1993,468 @@ class _SackingPageState extends State<SackingPage> {
     );
   }
 
-  void _handleProceedToUnloading() async {
-    if (_hasUnfinishedMilling ||
-        _sacksProcessedSoFar != _totalSacksFromMiner ||
-        _totalSacksFromMiner <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Complete sacking and milling every batch before unloading.',
-          ),
-        ),
-      );
-      return;
-    }
+  Future<void> _handleStartBatchUnloading(
+    Map<String, dynamic> batch,
+  ) async {
+    if (_isSaving || !_batchNeedsUnloading(batch)) return;
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     if (operatorId == null) return;
 
-    setState(() => _isLoading = true);
-    final result = await _service.updateProcessingStatus(
+    setState(() => _isSaving = true);
+    if (_effectiveRequest.processingDetails.currentStage !=
+        ProcessingStage.unloading) {
+      final stageResult = await _service.updateProcessingStatus(
+        requestId: _effectiveRequest.id,
+        operatorId: operatorId,
+        newStatus: ServiceRequestStatus.processing,
+        currentStatus: _effectiveRequest.status.name,
+        newStage: ProcessingStage.unloading,
+        remarks: 'Moved to unloading and started a milling batch.',
+      );
+      final stageFailure = stageResult.fold<String?>(
+        (value) => value.message,
+        (_) => null,
+      );
+      if (stageFailure != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(stageFailure)));
+          setState(() => _isSaving = false);
+        }
+        return;
+      }
+    }
+    final result = await _service.startBatchUnloading(
+      batchId: batch['batch_id'].toString(),
       requestId: _effectiveRequest.id,
       operatorId: operatorId,
-      newStatus: ServiceRequestStatus.processing,
-      currentStatus: _effectiveRequest.status.toString().split('.').last,
-      newStage: ProcessingStage.unloading,
     );
+    if (!mounted) return;
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure)),
+      );
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
 
-    result.fold(
-      (l) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l.message)));
-        setState(() => _isLoading = false);
-      },
-      (_) => _loadData(), // Refresh to show unloading UI
+  Future<void> _handleCompleteBatchUnloading(
+    Map<String, dynamic> batch,
+  ) async {
+    if (_isSaving || !_batchIsUnloading(batch)) return;
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) return;
+
+    setState(() => _isSaving = true);
+    final result = await _service.completeBatchUnloading(
+      batchId: batch['batch_id'].toString(),
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
     );
+    if (!mounted) return;
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure)),
+      );
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
+  Future<void> _handleFinishAllUnloading() async {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    final runningBatches = _unloadingMillingBatchesInProgress;
+    if (operatorId == null || _isSaving || runningBatches.isEmpty) return;
+
+    setState(() => _isSaving = true);
+    final failures = <String>[];
+    for (final batch in runningBatches) {
+      final result = await _service.completeBatchUnloading(
+        batchId: batch['batch_id'].toString(),
+        requestId: _effectiveRequest.id,
+        operatorId: operatorId,
+      );
+      result.fold<void>(
+        (failure) => failures.add(failure.message),
+        (_) {},
+      );
+    }
+    if (!mounted) return;
+    if (failures.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Some batches could not finish unloading: ${failures.first}')),
+      );
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
   }
 
   Widget _buildUnloadingUI() {
-    final isStarted =
-        _effectiveRequest.processingDetails.unloadingStartedAt != null;
-    final isDone =
-        _effectiveRequest.processingDetails.unloadingCompletedAt != null;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.unarchive_outlined, color: kGold, size: 64),
-            const SizedBox(height: 24),
-            Text(
-              'UNLOADING STAGE',
-              style: TextStyle(
-                color: context.textColor,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+    final millingBatches = _existingBatches
+        .where((batch) => batch['batch_kind'] == 'milling')
+        .toList();
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        const Icon(Icons.unarchive_outlined, color: kGold, size: 52),
+        const SizedBox(height: 12),
+        Text(
+          'UNLOADING STAGE',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: context.textColor,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Unload each completed milling batch. Work on other batches can continue while an unloading timer runs.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: context.mutedTextColor),
+        ),
+        const SizedBox(height: 20),
+        if (millingBatches.isEmpty)
+          Text(
+            'No milling batches are available yet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.mutedTextColor),
+          )
+        else
+          ...millingBatches.map(_buildUnloadingBatchItem),
+        if (_unloadingMillingBatchesInProgress.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: _isSaving ? null : _handleFinishAllUnloading,
+            icon: const Icon(Icons.done_all_rounded),
+            label: Text(
+              'FINISH ALL UNLOADING (${_unloadingMillingBatchesInProgress.length})',
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Empty the drums and prepare for washing.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.mutedTextColor),
+          ),
+        ],
+        if (_hasUnloadedMillingBatch) ...[
+          const SizedBox(height: 8),
+          Text(
+            'A batch marked DONE with unloading is ready to move to washing.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: _isSaving ? null : _handleProceedToWashing,
+            icon: const Icon(Icons.water_drop_outlined),
+            label: const Text('PROCEED TO WASHING'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 52),
             ),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'Finish unloading at least one completed batch before washing.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+  }
 
-            const SizedBox(height: 48),
-            if (!isStarted)
-              ElevatedButton(
-                onPressed: _handleStartUnloading,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kGold,
-                  foregroundColor: kBlack,
-                  minimumSize: const Size(200, 60),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                ),
-                child: const Text(
-                  'START UNLOADING',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              )
-            else if (isStarted && !isDone) ...[
-              UnloadingStopwatch(
-                startTime:
-                    _effectiveRequest.processingDetails.unloadingStartedAt!,
+  Widget _buildUnloadingBatchItem(Map<String, dynamic> batch) {
+    final batchIsMilled = batch['status'] == 'completed';
+    final isUnloaded = batch['unloading_completed_at'] != null;
+    final startedAt = DateTime.tryParse(
+      batch['unloading_started_at']?.toString() ?? '',
+    );
+    const title = 'Milling batch';
+    final subtitle =
+        '${batch['machines']?['machine_name'] ?? 'Machine'} · ${batch['drums']?['drum_name'] ?? 'Drum'}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isUnloaded
+              ? Colors.green.withOpacity(0.35)
+              : kGold.withOpacity(0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isUnloaded
+                    ? Icons.check_circle_rounded
+                    : Icons.unarchive_outlined,
+                color: isUnloaded ? Colors.green : kGold,
               ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _handleDoneUnloading,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(200, 60),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                ),
-                child: const Text(
-                  'STOP UNLOADING',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '$subtitle · ${batch['input_sacks'] ?? 1} sack',
+                      style: TextStyle(
+                        color: context.mutedTextColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ] else ...[
-              _buildDurationSummary(
-                _effectiveRequest.processingDetails.unloadingStartedAt!,
-                _effectiveRequest.processingDetails.unloadingCompletedAt!,
-                title: 'UNLOADING COMPLETE',
-              ),
-              const SizedBox(height: 40),
-              ElevatedButton(
-                onPressed: _handleProceedToWashing,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'PROCEED TO WASHING',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+              Text(
+                isUnloaded
+                    ? 'DONE'
+                    : startedAt != null
+                    ? 'IN PROGRESS'
+                    : batchIsMilled
+                    ? 'READY'
+                    : 'MILLING',
+                style: TextStyle(
+                  color: isUnloaded ? Colors.green : kGold,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
+          ),
+          if (startedAt != null && !isUnloaded) ...[
+            const SizedBox(height: 12),
+            UnloadingStopwatch(startTime: startedAt),
           ],
-        ),
+          if (batchIsMilled && !isUnloaded) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: startedAt == null
+                  ? OutlinedButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : () => _handleStartBatchUnloading(batch),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('START UNLOADING'),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : () => _handleCompleteBatchUnloading(batch),
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('FINISH UNLOADING'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
   Widget _buildWashingUI() {
-    final startedAt = _effectiveRequest.processingDetails.washingStartedAt;
-    final completedAt = _effectiveRequest.processingDetails.washingCompletedAt;
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        const Icon(Icons.water_drop_outlined, color: Colors.blue, size: 52),
+        const SizedBox(height: 12),
+        Text(
+          'WASHING',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: context.textColor,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Each unloaded batch has its own washing timer. Other batches can continue through production.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: context.mutedTextColor),
+        ),
+        const SizedBox(height: 20),
+        if (_unloadedMillingBatches.isEmpty)
+          Text(
+            'No unloaded batches are ready for washing yet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.mutedTextColor),
+          )
+        else
+          ..._unloadedMillingBatches.map(_buildWashingBatchItem),
+        if (_washingMillingBatchesInProgress.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: _isSaving ? null : _handleFinishAllWashing,
+            icon: const Icon(Icons.done_all_rounded),
+            label: Text(
+              'FINISH ALL WASHING (${_washingMillingBatchesInProgress.length})',
+            ),
+          ),
+        ],
+        if (_canStartSeparation) ...[
+          const SizedBox(height: 12),
+          Text(
+            'The miner will be asked to come to the facility. Start the separation timer manually when work begins.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: _isSaving ? null : _handleProceedToSeparation,
+            icon: const Icon(Icons.arrow_forward_rounded),
+            label: const Text('GO TO SEPARATION & SEND SMS'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 52),
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          _buildReturnToOperationsActions(),
+          Text(
+            'Separation starts after production, unloading, and washing are complete.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildWashingBatchItem(Map<String, dynamic> batch) {
+    final startedAt = DateTime.tryParse(
+      batch['washing_started_at']?.toString() ?? '',
+    );
+    final completedAt = DateTime.tryParse(
+      batch['washing_completed_at']?.toString() ?? '',
+    );
+    final isComplete = completedAt != null;
+    final machineName = batch['machines']?['machine_name'] ?? 'Machine';
+    final drumName = batch['drums']?['drum_name'] ?? 'Drum';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isComplete
+              ? Colors.green.withOpacity(0.35)
+              : Colors.blue.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isComplete
+                    ? Icons.check_circle_rounded
+                    : Icons.water_drop_outlined,
+                color: isComplete ? Colors.green : Colors.blue,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Milling batch',
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '$machineName · $drumName · ${batch['input_sacks'] ?? 1} sack',
+                      style: TextStyle(
+                        color: context.mutedTextColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                isComplete ? 'DONE' : startedAt == null ? 'READY' : 'IN PROGRESS',
+                style: TextStyle(
+                  color: isComplete ? Colors.green : Colors.blue,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          if (startedAt != null && !isComplete) ...[
+            const SizedBox(height: 12),
+            UnloadingStopwatch(
+              startTime: startedAt,
+              label: 'WASHING & SEPARATION IN PROGRESS',
+            ),
+          ],
+          if (!isComplete) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: startedAt == null
+                  ? OutlinedButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : () => _handleStartBatchWashing(batch),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('START WASHING'),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : () => _handleCompleteBatchWashing(batch),
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('FINISH WASHING'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+            ),
+          ] else if (startedAt != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Washing time: ${_formatDuration(completedAt.difference(startedAt))}',
+              style: TextStyle(color: Colors.green, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeparationUI() {
+    final startedAt = _effectiveRequest.processingDetails.separationStartedAt;
+    final completedAt =
+        _effectiveRequest.processingDetails.separationCompletedAt;
 
     return Center(
       child: Padding(
@@ -1834,85 +2462,87 @@ class _SackingPageState extends State<SackingPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.water_drop_outlined, color: Colors.blue, size: 68),
+            const Icon(Icons.waves_rounded, color: Colors.teal, size: 64),
             const SizedBox(height: 20),
             Text(
-              'WASHING & SEPARATION',
-              textAlign: TextAlign.center,
+              'SEPARATION',
               style: TextStyle(
                 color: context.textColor,
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Text(
-              'The service is now in the washing and separation stage.',
+              'Separate the washed material before refining.',
               textAlign: TextAlign.center,
               style: TextStyle(color: context.mutedTextColor),
             ),
-            const SizedBox(height: 36),
-            if (startedAt == null)
-              ElevatedButton(
-                onPressed: _isSaving ? null : _handleStartWashing,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 54),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            const SizedBox(height: 28),
+            if (!_canStartSeparation)
+              Column(
+                children: [
+                  Text(
+                    'Finish all production, unloading, and batch washing first.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: context.mutedTextColor),
                   ),
-                ),
-                child: const Text(
-                  'START WASHING & SEPARATION',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                  const SizedBox(height: 20),
+                  _buildReturnToOperationsActions(),
+                ],
+              )
+            else if (startedAt == null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _isSaving ? null : _handleStartSeparation,
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text('START SEPARATION'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 54),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _isSaving ? null : _handleSendSeparationSms,
+                    icon: const Icon(Icons.sms_outlined),
+                    label: const Text('RESEND MINER SMS'),
+                  ),
+                ],
               )
             else if (completedAt == null) ...[
               UnloadingStopwatch(
                 startTime: startedAt,
-                label: 'WASHING & SEPARATION IN PROGRESS',
+                label: 'SEPARATION IN PROGRESS',
               ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _isSaving ? null : _handleStopWashing,
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _isSaving ? null : _handleCompleteSeparation,
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('FINISH SEPARATION'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 54),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'STOP WASHING & SEPARATION',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
             ] else ...[
               _buildDurationSummary(
                 startedAt,
                 completedAt,
-                title: 'WASHING & SEPARATION COMPLETE',
+                title: 'SEPARATION COMPLETE',
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _isSaving ? null : _handleProceedToRefining,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 54),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
                 ),
-                child: const Text(
-                  'PROCEED TO REFINING',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                child: const Text('PROCEED TO REFINING'),
               ),
             ],
           ],
@@ -1920,7 +2550,176 @@ class _SackingPageState extends State<SackingPage> {
       ),
     );
   }
+
+  Future<void> _handleProceedToSeparation() async {
+    if (!_canStartSeparation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Finish all production, unloading, and batch washing before separation.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (_effectiveRequest.processingDetails.separationStartedAt != null) {
+      await _advanceStage(ProcessingStage.separation);
+      await _handleSendSeparationSms();
+      return;
+    }
+
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null || _isSaving) return;
+    setState(() => _isSaving = true);
+
+    final stageResult = await _service.updateProcessingStatus(
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
+      newStatus: ServiceRequestStatus.processing,
+      currentStatus: _effectiveRequest.status.name,
+      newStage: ProcessingStage.separation,
+      remarks: 'All production and batch washing completed; miner notified to begin separation.',
+    );
+    final stageFailure = stageResult.fold<String?>(
+      (failure) => failure.message,
+      (_) => null,
+    );
+    if (stageFailure != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(stageFailure)));
+        setState(() => _isSaving = false);
+      }
+      return;
+    }
+
+    final smsResult = await _requestRepo.sendSeparationStartSms(
+      _effectiveRequest.id,
+    );
+    if (!mounted) return;
+    final smsFailure = smsResult.fold<String?>(
+      (failure) => failure.message,
+      (_) => null,
+    );
+    if (smsFailure != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(smsFailure)));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Miner notified by SMS to begin separation.')),
+      );
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
+  Future<void> _handleSendSeparationSms() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+    final result = await _requestRepo.sendSeparationStartSms(
+      _effectiveRequest.id,
+    );
+    if (!mounted) return;
+    result.fold<void>(
+      (failure) => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(failure.message))),
+      (_) => ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Miner notified by SMS to begin separation.')),
+      ),
+    );
+    setState(() => _isSaving = false);
+  }
+
+  Future<void> _handleStartSeparation() async {
+    if (!_canStartSeparation || _isSaving) return;
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) return;
+
+    setState(() => _isSaving = true);
+    final result = await _requestRepo.updateRequestStatus(
+      requestId: _effectiveRequest.id,
+      status: ServiceRequestStatus.processing.name,
+      userId: operatorId,
+      additionalData: {
+        'separation_started_at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+    if (!mounted) return;
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure)));
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
+  Future<void> _handleCompleteSeparation() async {
+    if (_isSaving) return;
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) return;
+
+    setState(() => _isSaving = true);
+    final result = await _requestRepo.updateRequestStatus(
+      requestId: _effectiveRequest.id,
+      status: ServiceRequestStatus.processing.name,
+      userId: operatorId,
+      additionalData: {
+        'separation_completed_at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+    if (!mounted) return;
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure)));
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
+  Widget _buildReturnToOperationsActions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Continue the remaining production and unloading work before refining.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: context.mutedTextColor),
+        ),
+        const SizedBox(height: 16),
+        if (_remainingMinerSacks > 0)
+          OutlinedButton.icon(
+            onPressed: _isSaving ? null : _handleReturnToSacking,
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: Text('RETURN TO SACKING ($_remainingMinerSacks LEFT)'),
+          ),
+        if (_availableResackedSacksTotal > 0) ...[
+          if (_remainingMinerSacks > 0) const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _isSaving ? null : _handleReturnToMilling,
+            icon: const Icon(Icons.arrow_back_rounded),
+            label: Text('RETURN TO MILLING ($_availableResackedSacksTotal READY)'),
+          ),
+        ],
+        if (_hasMillingBatches && !_allMillingBatchesUnloaded) ...[
+          if (_remainingMinerSacks > 0 || _availableResackedSacksTotal > 0)
+            const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _isSaving
+                ? null
+                : () => _advanceStage(ProcessingStage.unloading),
+            icon: const Icon(Icons.unarchive_outlined),
+            label: const Text('RETURN TO UNLOADING'),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildRefiningUI() {
+    final startedAt = _effectiveRequest.processingDetails.refiningStartedAt;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -1938,25 +2737,111 @@ class _SackingPageState extends State<SackingPage> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              'The service is in the refining stage. Complete processing when refining is finished.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.mutedTextColor),
-            ),
-            const SizedBox(height: 36),
-            ElevatedButton(
-              onPressed: _isSaving ? null : _handleCompleteRefining,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 54),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            if (startedAt == null) ...[
+              Text(
+                'Start the refining timer when refining work begins.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.mutedTextColor),
+              ),
+              const SizedBox(height: 36),
+              ElevatedButton.icon(
+                onPressed: _isSaving ? null : _handleStartRefining,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('START REFINING'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 54),
                 ),
               ),
-              child: const Text(
-                'COMPLETE PROCESSING',
-                style: TextStyle(fontWeight: FontWeight.bold),
+            ] else ...[
+              UnloadingStopwatch(
+                startTime: startedAt,
+                label: 'REFINING IN PROGRESS',
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'After refining is complete, enter your operator PIN to finalize processing. The miner and administrator will be notified, and the request will be submitted for billing.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.mutedTextColor),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _isSaving ? null : _handleCompleteRefining,
+                icon: const Icon(Icons.verified_outlined),
+                label: const Text('FINALIZE PROCESSING'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 54),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompletedProcessingUI() {
+    final startedAt = _effectiveRequest.processingDetails.refiningStartedAt;
+    final completedAt = _effectiveRequest.processingDetails.refiningCompletedAt;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.task_alt_rounded, color: Colors.green, size: 64),
+            const SizedBox(height: 16),
+            Text(
+              'PROCESSING COMPLETE',
+              style: TextStyle(
+                color: context.textColor,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (startedAt != null && completedAt != null) ...[
+              const SizedBox(height: 18),
+              _buildDurationSummary(
+                startedAt,
+                completedAt,
+                title: 'REFINING TIME',
+              ),
+            ],
+            const SizedBox(height: 16),
+            Text(
+              _completionSmsFailure == null
+                  ? 'Processing is complete. The miner and administrator have been notified.'
+                  : 'Processing is complete, but one or more SMS notifications could not be sent: $_completionSmsFailure',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _completionSmsFailure == null
+                    ? context.mutedTextColor
+                    : Colors.orange,
+              ),
+            ),
+            if (_completionSmsFailure != null) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _isSaving ? null : _handleResendCompletionSms,
+                icon: const Icon(Icons.sms_outlined),
+                label: const Text('RESEND NOTIFICATIONS'),
+              ),
+            ],
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.done_rounded),
+              label: const Text('COMPLETE'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kGold,
+                foregroundColor: Colors.black,
+                minimumSize: const Size(double.infinity, 52),
               ),
             ),
           ],
@@ -2071,88 +2956,88 @@ class _SackingPageState extends State<SackingPage> {
     );
   }
 
-  Future<void> _handleStartWashing() async {
-    final operatorId = Supabase.instance.client.auth.currentUser?.id;
-    if (operatorId == null) return;
-
-    setState(() => _isSaving = true);
-    final result = await _requestRepo.updateRequestStatus(
-      requestId: _effectiveRequest.id,
-      status: ServiceRequestStatus.processing.name,
-      userId: operatorId,
-      additionalData: {
-        'washing_started_at': DateTime.now().toUtc().toIso8601String(),
-      },
-    );
-    if (!mounted) return;
-    final failureMessage = result.fold<String?>(
-      (failure) => failure.message,
-      (_) => null,
-    );
-    if (failureMessage != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(failureMessage)));
-      setState(() => _isSaving = false);
+  Future<void> _handleProceedToWashing() async {
+    if (!_hasUnloadedMillingBatch) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Unload at least one completed milling batch before washing.',
+          ),
+        ),
+      );
       return;
     }
-
-    await _loadData(showLoading: false);
-    if (mounted) setState(() => _isSaving = false);
+    await _advanceStage(ProcessingStage.washingSeparation);
   }
 
-  Future<void> _handleStopWashing() async {
+  Future<void> _handleStartBatchWashing(
+    Map<String, dynamic> batch,
+  ) async {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
-    if (operatorId == null) return;
+    if (operatorId == null || _isSaving) return;
 
     setState(() => _isSaving = true);
-    final result = await _requestRepo.updateRequestStatus(
-      requestId: _effectiveRequest.id,
-      status: ServiceRequestStatus.processing.name,
-      userId: operatorId,
-      additionalData: {
-        'washing_completed_at': DateTime.now().toUtc().toIso8601String(),
-      },
-    );
-    if (!mounted) return;
-    final failureMessage = result.fold<String?>(
-      (failure) => failure.message,
-      (_) => null,
-    );
-    if (failureMessage != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(failureMessage)));
-      setState(() => _isSaving = false);
-      return;
-    }
-
-    await _loadData(showLoading: false);
-    if (mounted) setState(() => _isSaving = false);
-  }
-
-  void _handleProceedToWashing() async {
-    final operatorId = Supabase.instance.client.auth.currentUser?.id;
-    if (operatorId == null) return;
-
-    setState(() => _isSaving = true);
-    final result = await _service.updateProcessingStatus(
+    final result = await _service.startBatchWashing(
+      batchId: batch['batch_id'].toString(),
       requestId: _effectiveRequest.id,
       operatorId: operatorId,
-      newStatus: ServiceRequestStatus.processing,
-      currentStatus: _effectiveRequest.status.toString().split('.').last,
-      newStage: ProcessingStage.washingSeparation,
     );
+    if (!mounted) return;
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure)));
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
 
-    result.fold((l) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l.message)));
-      setState(() => _isSaving = false);
-    }, (_) {
-      setState(() => _isSaving = false);
-      _loadData();
-    });
+  Future<void> _handleCompleteBatchWashing(
+    Map<String, dynamic> batch,
+  ) async {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null || _isSaving) return;
+
+    setState(() => _isSaving = true);
+    final result = await _service.completeBatchWashing(
+      batchId: batch['batch_id'].toString(),
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
+    );
+    if (!mounted) return;
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure)));
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
+  Future<void> _handleFinishAllWashing() async {
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    final runningBatches = _washingMillingBatchesInProgress;
+    if (operatorId == null || _isSaving || runningBatches.isEmpty) return;
+
+    setState(() => _isSaving = true);
+    final failures = <String>[];
+    for (final batch in runningBatches) {
+      final result = await _service.completeBatchWashing(
+        batchId: batch['batch_id'].toString(),
+        requestId: _effectiveRequest.id,
+        operatorId: operatorId,
+      );
+      result.fold<void>(
+        (failure) => failures.add(failure.message),
+        (_) {},
+      );
+    }
+    if (!mounted) return;
+    if (failures.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Some batches could not finish washing: ${failures.first}')),
+      );
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
   }
 
   Future<void> _advanceStage(ProcessingStage stage) async {
@@ -2181,12 +3066,25 @@ class _SackingPageState extends State<SackingPage> {
     );
   }
 
-  Future<void> _handleProceedToRefining() =>
-      _advanceStage(ProcessingStage.refining);
+  Future<void> _handleProceedToRefining() async {
+    if (!_canProceedToRefining) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Complete production, batch washing, and separation before refining.',
+          ),
+        ),
+      );
+      return;
+    }
+    await _advanceStage(ProcessingStage.refining);
+  }
 
   Future<void> _handleCompleteRefining() async {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
-    if (operatorId == null || _isSaving) return;
+    final refiningStartedAt =
+        _effectiveRequest.processingDetails.refiningStartedAt;
+    if (operatorId == null || _isSaving || refiningStartedAt == null) return;
 
     setState(() => _isSaving = true);
     final authorized = await showDialog<bool>(
@@ -2208,25 +3106,94 @@ class _SackingPageState extends State<SackingPage> {
           );
           if (pinError != null) return pinError;
           if (pinIsValid != true) return 'Incorrect PIN';
-
-          final result = await _service.updateProcessingStatus(
-            requestId: _effectiveRequest.id,
-            operatorId: operatorId,
-            newStatus: ServiceRequestStatus.processingCompleted,
-            currentStatus: _effectiveRequest.status.toString().split('.').last,
-            newStage: ProcessingStage.completed,
-            remarks: 'Processing completed after refining.',
-          );
-          return result.fold((failure) => failure.message, (_) => null);
+          return null;
         },
       ),
     );
     if (!mounted) return;
-    if (authorized == true) {
-      Navigator.pop(context, true);
-    } else {
+    if (authorized != true) {
       setState(() => _isSaving = false);
+      return;
     }
+
+    final completionResult = await _service.updateProcessingStatus(
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
+      newStatus: ServiceRequestStatus.processingCompleted,
+      currentStatus: _effectiveRequest.status.name,
+      newStage: ProcessingStage.completed,
+      refiningCompletedAt: DateTime.now(),
+      remarks:
+          'Refining finalized with operator PIN confirmation; request submitted for billing.',
+    );
+    final completionFailure = completionResult.fold<String?>(
+      (failure) => failure.message,
+      (_) => null,
+    );
+    if (completionFailure != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(completionFailure)),
+        );
+        setState(() => _isSaving = false);
+      }
+      return;
+    }
+
+    final smsResult = await _requestRepo.sendProcessingCompletionSms(
+      _effectiveRequest.id,
+    );
+    if (!mounted) return;
+    setState(() {
+      _completionSmsFailure = smsResult.fold<String?>(
+        (failure) => failure.message,
+        (_) => null,
+      );
+    });
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
+  Future<void> _handleStartRefining() async {
+    if (!_canProceedToRefining || _isSaving) return;
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) return;
+
+    setState(() => _isSaving = true);
+    final result = await _service.updateProcessingStatus(
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
+      newStatus: ServiceRequestStatus.processing,
+      currentStatus: _effectiveRequest.status.name,
+      newStage: ProcessingStage.refining,
+      refiningStartedAt: DateTime.now(),
+      remarks: 'Refining timer started by the operator.',
+    );
+    if (!mounted) return;
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure)));
+      setState(() => _isSaving = false);
+      return;
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
+  Future<void> _handleResendCompletionSms() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+    final result = await _requestRepo.sendProcessingCompletionSms(
+      _effectiveRequest.id,
+    );
+    if (!mounted) return;
+    setState(() {
+      _completionSmsFailure = result.fold<String?>(
+        (failure) => failure.message,
+        (_) => null,
+      );
+      _isSaving = false;
+    });
   }
 
   Future<void> _handleSaveSackingBatch() async {
@@ -2349,6 +3316,7 @@ class _SackingPageState extends State<SackingPage> {
       newStatus: ServiceRequestStatus.processing,
       currentStatus: _effectiveRequest.status.name,
       newStage: ProcessingStage.millingCrushing,
+      resetWashingTimestamps: _hasMoreSackingOrMillingWork,
       remarks: _remainingMinerSacks > 0
           ? 'Started milling prepared sacks; $_remainingMinerSacks miner sacks remain for sacking.'
           : 'All miner sacks are recorded; milling phase started.',
@@ -2367,7 +3335,29 @@ class _SackingPageState extends State<SackingPage> {
   }
 
   Future<void> _handleReturnToSacking() async {
-    if (_isSaving || _remainingMinerSacks <= 0) return;
+    if (_remainingMinerSacks <= 0) return;
+    await _returnToOperationStage(
+      ProcessingStage.rebagging,
+      'Returned to sacking to process the remaining miner sacks.',
+      resetWashing: true,
+    );
+  }
+
+  Future<void> _handleReturnToMilling() async {
+    if (_availableResackedSacksTotal <= 0) return;
+    await _returnToOperationStage(
+      ProcessingStage.millingCrushing,
+      'Returned to milling to process the remaining resacked sacks.',
+      resetWashing: true,
+    );
+  }
+
+  Future<void> _returnToOperationStage(
+    ProcessingStage stage,
+    String remarks, {
+    bool resetWashing = false,
+  }) async {
+    if (_isSaving) return;
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     if (operatorId == null) return;
 
@@ -2377,8 +3367,9 @@ class _SackingPageState extends State<SackingPage> {
       operatorId: operatorId,
       newStatus: ServiceRequestStatus.processing,
       currentStatus: _effectiveRequest.status.name,
-      newStage: ProcessingStage.rebagging,
-      remarks: 'Returned to sacking to process the remaining miner sacks.',
+      newStage: stage,
+      resetWashingTimestamps: resetWashing,
+      remarks: remarks,
     );
     if (!mounted) return;
     final failure = result.fold<String?>((value) => value.message, (_) => null);
@@ -2396,29 +3387,42 @@ class _SackingPageState extends State<SackingPage> {
   Future<void> _handleStartMillingBatch() async {
     if (_isSaving) return;
     final availableSacks = _availableResackedSacksTotal;
-    if (availableSacks < 1) {
+    final selectedDrumIds = _selectedDrumIds.toList();
+    if (selectedDrumIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No resacked sacks are available for milling.'),
+          content: Text('Select at least one drum for milling.'),
         ),
       );
       return;
     }
-    if (_selectedMachineId == null || _selectedDrumId == null) {
+    if (selectedDrumIds.length > availableSacks) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select machine and drum')),
+        SnackBar(
+          content: Text(
+            'Only $availableSacks sacks are ready; select no more than $availableSacks drums.',
+          ),
+        ),
       );
       return;
     }
-    final machine = _machines.firstWhere(
-      (item) => item['machine_id']?.toString() == _selectedMachineId,
-    );
-    final drum = (machine['drums'] as List).firstWhere(
-      (item) => item['drum_id']?.toString() == _selectedDrumId,
-    );
-    if (drum['status']?.toString().toLowerCase() != 'available') {
+    if (_selectedMachineId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('That drum is no longer available.')),
+        const SnackBar(content: Text('Please select a machine.')),
+      );
+      return;
+    }
+    final machineId = _selectedMachineId!;
+    final machine = _machines.firstWhere(
+      (item) => item['machine_id']?.toString() == machineId,
+    );
+    final availableDrumIds = _availableDrums(machine)
+        .map((drum) => drum['drum_id']?.toString())
+        .whereType<String>()
+        .toSet();
+    if (selectedDrumIds.any((drumId) => !availableDrumIds.contains(drumId))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A selected drum is no longer available.')),
       );
       await _loadData(showLoading: false);
       return;
@@ -2433,25 +3437,43 @@ class _SackingPageState extends State<SackingPage> {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     if (operatorId == null) return;
     setState(() => _isSaving = true);
-    final result = await _service.startBatchMilling(
-      requestId: widget.request.id,
-      operatorId: operatorId,
-      machineId: _selectedMachineId!,
-      drumId: _selectedDrumId!,
-      inputSacks: 1,
-      estimatedDurationMinutes: duration,
-    );
+    var startedBatchCount = 0;
+    String? failure;
+    for (final drumId in selectedDrumIds) {
+      final result = await _service.startBatchMilling(
+        requestId: widget.request.id,
+        operatorId: operatorId,
+        machineId: machineId,
+        drumId: drumId,
+        inputSacks: 1,
+        estimatedDurationMinutes: duration,
+      );
+      failure = result.fold<String?>((value) => value.message, (_) => null);
+      if (failure != null) break;
+      startedBatchCount++;
+    }
     if (!mounted) return;
-    final failure = result.fold<String?>((value) => value.message, (_) => null);
     if (failure != null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(failure)));
-      setState(() => _isSaving = false);
-      return;
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            startedBatchCount == 0
+                ? failure
+                : 'Started $startedBatchCount of ${selectedDrumIds.length} batches. $failure',
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Started $startedBatchCount milling ${startedBatchCount == 1 ? 'batch' : 'batches'}; 1 sack per drum.',
+          ),
+        ),
+      );
     }
-    _selectedMachineId = null;
-    _selectedDrumId = null;
     await _loadData(showLoading: false);
     if (mounted) {
       setState(() => _isSaving = false);

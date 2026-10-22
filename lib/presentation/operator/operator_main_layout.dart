@@ -9,7 +9,6 @@ import 'service_verification_page.dart';
 import 'sms_notification_page.dart';
 import 'workforce_shift_page.dart';
 import 'operator_user_page.dart';
-import 'operator_emergency_stop_fab.dart';
 import 'operator_menu.dart';
 
 class OperatorMainLayout extends StatefulWidget {
@@ -106,13 +105,6 @@ class _OperatorMainLayoutState extends State<OperatorMainLayout> {
     return Scaffold(
       body: IndexedStack(index: _pageIndex, children: pages),
       bottomNavigationBar: _buildNavigationBar(),
-      floatingActionButton: AnimatedPadding(
-        padding: EdgeInsets.only(bottom: _pageIndex == 1 ? 76 : 0),
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeInOut,
-        child: const OperatorEmergencyStopFab(),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

@@ -469,7 +469,20 @@ class _MonitoringPageState extends State<MonitoringPage> {
       case ProcessingStage.unloading:
         return processing.unloadingCompletedAt != null;
       case ProcessingStage.washingSeparation:
-        return processing.washingCompletedAt != null;
+        final washableBatches = _batches
+            .where(
+              (batch) =>
+                  batch['batch_kind'] == 'milling' &&
+                  batch['status'] == 'completed' &&
+                  batch['unloading_completed_at'] != null,
+            )
+            .toList();
+        return washableBatches.isNotEmpty &&
+            washableBatches.every(
+              (batch) => batch['washing_completed_at'] != null,
+            );
+      case ProcessingStage.separation:
+        return processing.separationCompletedAt != null;
       case ProcessingStage.refining:
         return currentIndex > index ||
             _effectiveRequest.status == ServiceRequestStatus.completed ||
@@ -494,6 +507,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
         return _buildUnloadingSection();
       case ProcessingStage.washingSeparation:
         return _buildWashingSection();
+      case ProcessingStage.separation:
+        return _buildSeparationSection();
       case ProcessingStage.refining:
       case ProcessingStage.completed:
         return _buildRefiningSection(stage);
@@ -546,14 +561,48 @@ class _MonitoringPageState extends State<MonitoringPage> {
   );
 
   Widget _buildWashingSection() {
-    final startedAt = _effectiveRequest.processingDetails.washingStartedAt;
-    final completedAt = _effectiveRequest.processingDetails.washingCompletedAt;
+    final unloadedBatches = _batches
+        .where(
+          (batch) =>
+              batch['batch_kind'] == 'milling' &&
+              batch['status'] == 'completed' &&
+              batch['unloading_completed_at'] != null,
+        )
+        .toList();
+    final washedBatches = unloadedBatches
+        .where((batch) => batch['washing_completed_at'] != null)
+        .length;
+    final activeBatches = unloadedBatches
+        .where(
+          (batch) =>
+              batch['washing_started_at'] != null &&
+              batch['washing_completed_at'] == null,
+        )
+        .length;
+    return _stageSummaryCard(
+      title: 'WASHING PROGRESS',
+      rows: [
+        ('Batches washed', '$washedBatches / ${unloadedBatches.length}'),
+        ('Currently washing', '$activeBatches'),
+      ],
+      message: unloadedBatches.isEmpty
+          ? 'No unloaded batches are ready for washing.'
+          : washedBatches == unloadedBatches.length
+          ? 'All unloaded batches are washed.'
+          : 'The operator is washing unloaded batches.',
+      icon: Icons.water_drop_outlined,
+      color: Colors.blue,
+    );
+  }
+
+  Widget _buildSeparationSection() {
+    final processing = _effectiveRequest.processingDetails;
     return _buildTimedStageSection(
-      title: 'WASHING & SEPARATION PROGRESS',
-      startedAt: startedAt,
-      completedAt: completedAt,
-      waitingMessage: 'Washing and separation have not started yet.',
-      runningMessage: 'The operator is washing and separating the material.',
+      title: 'SEPARATION PROGRESS',
+      startedAt: processing.separationStartedAt,
+      completedAt: processing.separationCompletedAt,
+      waitingMessage: 'Separation has not started yet.',
+      runningMessage: 'The operator is separating the washed material.',
     );
   }
 
@@ -882,6 +931,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
       case ProcessingStage.millingCrushing: return Icons.settings_input_component_rounded;
       case ProcessingStage.unloading: return Icons.unarchive_outlined;
       case ProcessingStage.washingSeparation: return Icons.waves_rounded;
+      case ProcessingStage.separation: return Icons.filter_alt_outlined;
       case ProcessingStage.refining: return Icons.auto_awesome_rounded;
       case ProcessingStage.completed: return Icons.verified_rounded;
       default: return Icons.hourglass_empty_rounded;
@@ -895,6 +945,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
       case ProcessingStage.millingCrushing: return 'Milling';
       case ProcessingStage.unloading: return 'Unloading';
       case ProcessingStage.washingSeparation: return 'Washing';
+      case ProcessingStage.separation: return 'Separation';
       case ProcessingStage.refining: return 'Refining';
       case ProcessingStage.completed: return 'Completed';
       default: return 'Queued';

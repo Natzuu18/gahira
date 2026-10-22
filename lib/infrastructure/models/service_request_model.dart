@@ -167,6 +167,18 @@ class ServiceRequestModel extends ServiceRequestEntity {
         washingCompletedAt: json['washing_completed_at'] != null
             ? DateTime.parse(json['washing_completed_at'])
             : null,
+        separationStartedAt: json['separation_started_at'] != null
+            ? DateTime.parse(json['separation_started_at'])
+            : null,
+        separationCompletedAt: json['separation_completed_at'] != null
+            ? DateTime.parse(json['separation_completed_at'])
+            : null,
+        refiningStartedAt: json['refining_started_at'] != null
+            ? DateTime.parse(json['refining_started_at'])
+            : null,
+        refiningCompletedAt: json['refining_completed_at'] != null
+            ? DateTime.parse(json['refining_completed_at'])
+            : null,
         estimatedTime: estimatedTime,
         scheduledDate: scheduledDate,
         assignedOperatorIds: assignedOperators,
@@ -273,6 +285,14 @@ class ServiceRequestModel extends ServiceRequestEntity {
       'washing_started_at': processingDetails.washingStartedAt
           ?.toIso8601String(),
       'washing_completed_at': processingDetails.washingCompletedAt
+          ?.toIso8601String(),
+      'separation_started_at': processingDetails.separationStartedAt
+          ?.toIso8601String(),
+      'separation_completed_at': processingDetails.separationCompletedAt
+          ?.toIso8601String(),
+      'refining_started_at': processingDetails.refiningStartedAt
+          ?.toIso8601String(),
+      'refining_completed_at': processingDetails.refiningCompletedAt
           ?.toIso8601String(),
       'emergency_reason': emergencyReason,
       'emergency_stopped_at': emergencyStoppedAt?.toIso8601String(),

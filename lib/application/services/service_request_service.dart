@@ -415,6 +415,9 @@ class ServiceRequestService {
     ProcessingStage? newStage,
     int? sackedQuantity,
     int? minerSacksProcessed,
+    bool resetWashingTimestamps = false,
+    DateTime? refiningStartedAt,
+    DateTime? refiningCompletedAt,
     String? remarks,
   }) async {
     final result = await _repository.updateRequestStatus(
@@ -426,6 +429,18 @@ class ServiceRequestService {
         if (newStage != null) 'current_processing_stage': _enumName(newStage),
         if (sackedQuantity != null) 'sacked_quantity': sackedQuantity,
         if (minerSacksProcessed != null) 'miner_sacks_processed': minerSacksProcessed,
+        if (refiningStartedAt != null)
+          'refining_started_at': refiningStartedAt.toUtc().toIso8601String(),
+        if (refiningCompletedAt != null)
+          'refining_completed_at': refiningCompletedAt.toUtc().toIso8601String(),
+        if (resetWashingTimestamps) ...{
+          'washing_started_at': null,
+          'washing_completed_at': null,
+          'separation_started_at': null,
+          'separation_completed_at': null,
+          'refining_started_at': null,
+          'refining_completed_at': null,
+        },
       },
     );
 
@@ -864,6 +879,94 @@ class ServiceRequestService {
           previousStatus: _enumName(ServiceRequestStatus.processing),
           newStatus: _enumName(ServiceRequestStatus.processing),
           remarks: 'Completed batch milling',
+        );
+        return const Right(null);
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> startBatchUnloading({
+    required String batchId,
+    required String requestId,
+    required String operatorId,
+  }) async {
+    final result = await _repository.startMillingBatchUnloading(batchId);
+    return result.fold(
+      (failure) => Left(failure),
+      (_) async {
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: operatorId,
+          action: 'START_BATCH_UNLOADING',
+          previousStatus: _enumName(ServiceRequestStatus.processing),
+          newStatus: _enumName(ServiceRequestStatus.processing),
+          remarks: 'Started unloading milling batch $batchId.',
+        );
+        return const Right(null);
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> completeBatchUnloading({
+    required String batchId,
+    required String requestId,
+    required String operatorId,
+  }) async {
+    final result = await _repository.completeMillingBatchUnloading(batchId);
+    return result.fold(
+      (failure) => Left(failure),
+      (_) async {
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: operatorId,
+          action: 'COMPLETE_BATCH_UNLOADING',
+          previousStatus: _enumName(ServiceRequestStatus.processing),
+          newStatus: _enumName(ServiceRequestStatus.processing),
+          remarks: 'Completed unloading milling batch $batchId.',
+        );
+        return const Right(null);
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> startBatchWashing({
+    required String batchId,
+    required String requestId,
+    required String operatorId,
+  }) async {
+    final result = await _repository.startMillingBatchWashing(batchId);
+    return result.fold(
+      (failure) => Left(failure),
+      (_) async {
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: operatorId,
+          action: 'START_BATCH_WASHING',
+          previousStatus: _enumName(ServiceRequestStatus.processing),
+          newStatus: _enumName(ServiceRequestStatus.processing),
+          remarks: 'Started washing milling batch $batchId.',
+        );
+        return const Right(null);
+      },
+    );
+  }
+
+  Future<Either<Failure, void>> completeBatchWashing({
+    required String batchId,
+    required String requestId,
+    required String operatorId,
+  }) async {
+    final result = await _repository.completeMillingBatchWashing(batchId);
+    return result.fold(
+      (failure) => Left(failure),
+      (_) async {
+        await _repository.logAuditTrail(
+          requestId: requestId,
+          userId: operatorId,
+          action: 'COMPLETE_BATCH_WASHING',
+          previousStatus: _enumName(ServiceRequestStatus.processing),
+          newStatus: _enumName(ServiceRequestStatus.processing),
+          remarks: 'Completed washing milling batch $batchId.',
         );
         return const Right(null);
       },

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public.operator_verification_appeals (
     'Other'
   )),
   reason text NOT NULL CHECK (length(trim(reason)) > 0),
+  evidence_url text NOT NULL CHECK (length(trim(evidence_url)) > 0),
   appeal_date date NOT NULL DEFAULT CURRENT_DATE,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'resolved', 'rejected')),
   miner_decision text CHECK (miner_decision IN ('continue', 'cancel')),

@@ -544,6 +544,8 @@ class ServiceRequestService {
     double? buyingPrice,
     double? goldValue,
     bool deductBillFromGold = false,
+    bool autoSettleFromGold = false,
+    double? settledPaymentAmount,
     required double processingFee,
     required double otherExpenses,
     required double totalBill,
@@ -552,9 +554,13 @@ class ServiceRequestService {
     List<ParticipantFinancial>? participantBreakdown,
     List<Map<String, dynamic>>? billingItems,
   }) async {
+    final settledFromGold = autoSettleFromGold && deductBillFromGold;
+    final paymentAmount = settledPaymentAmount ?? totalBill;
     final result = await _repository.updateRequestStatus(
       requestId: requestId,
-      status: _enumName(ServiceRequestStatus.goldHandoff),
+      status: _enumName(settledFromGold
+          ? ServiceRequestStatus.completed
+          : ServiceRequestStatus.goldHandoff),
       userId: ownerId,
       additionalData: {
         'gold_weight_grams': goldWeight,
@@ -565,6 +571,9 @@ class ServiceRequestService {
         'other_expenses': otherExpenses,
         'total_bill': totalBill,
         'amount_to_miner': amountToMiner,
+        if (settledFromGold) 'payment_amount': paymentAmount,
+        if (settledFromGold) 'remaining_balance': 0,
+        if (settledFromGold) 'payment_date': DateTime.now().toIso8601String(),
       },
     );
 
@@ -602,8 +611,12 @@ class ServiceRequestService {
           userId: ownerId,
           action: 'FINANCIAL_HANDLING',
           previousStatus: currentStatus,
-          newStatus: _enumName(ServiceRequestStatus.goldHandoff),
-          remarks: 'Financial details recorded. Total Bill: $totalBill',
+          newStatus: _enumName(settledFromGold
+              ? ServiceRequestStatus.completed
+              : ServiceRequestStatus.goldHandoff),
+          remarks: settledFromGold
+              ? 'Financial details recorded and bill of $paymentAmount settled from gold purchase.'
+              : 'Financial details recorded. Total Bill: $totalBill',
         );
         return const Right(null);
       },

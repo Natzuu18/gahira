@@ -1467,6 +1467,7 @@ class SupabaseServiceRequestRepository {
     required String category,
     required String reason,
     required DateTime appealDate,
+    required String evidenceUrl,
   }) async {
     try {
       final pending = await _client
@@ -1487,6 +1488,7 @@ class SupabaseServiceRequestRepository {
         'miner_id': minerId,
         'category': category,
         'reason': reason,
+        'evidence_url': evidenceUrl,
         'appeal_date':
             '${appealDate.year.toString().padLeft(4, '0')}-'
             '${appealDate.month.toString().padLeft(2, '0')}-'
@@ -1540,7 +1542,7 @@ class SupabaseServiceRequestRepository {
           .from('operator_verification_appeals')
           .select(
             'appeal_id, service_request_id, category, reason, appeal_date, '
-            'status, admin_response, miner_decision, created_at',
+            'evidence_url, status, admin_response, miner_decision, created_at',
           )
           .eq('miner_id', minerId)
           .order('created_at', ascending: false);

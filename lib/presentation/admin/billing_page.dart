@@ -901,6 +901,42 @@ class _BillingPageState extends State<BillingPage> {
             _receiptRow('Processing Fee', currency.format(financial?.processingFee ?? 0)),
             _receiptRow('Other Charges', currency.format(financial?.otherExpenses ?? 0)),
             _receiptRow('Total Service Bill', currency.format(financial?.totalBill ?? 0), bold: true),
+            if (financial?.deductBillFromGold == true) ...[
+              _receiptRow('Gold Purchase Value', currency.format(financial?.goldPurchaseValue ?? 0)),
+              _receiptRow('Billing Deducted from Gold', currency.format(financial?.totalBill ?? 0)),
+              _receiptRow('Net Gold Payout to Miner', currency.format(financial?.amountToMiner ?? 0), bold: true),
+            ],
+            if ((financial?.participantBreakdown?.isNotEmpty ?? false)) ...[
+              pw.SizedBox(height: 12),
+              pw.Text(
+                'PARTICIPANT SETTLEMENT BREAKDOWN',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 6),
+              for (final participant
+                  in financial?.participantBreakdown ??
+                      const <ParticipantFinancial>[]) ...[
+                _receiptRow(
+                  participant.userName ?? 'Miner',
+                  currency.format(participant.totalDue),
+                  bold: true,
+                ),
+                _receiptRow(
+                  '  Shared bill share',
+                  currency.format(participant.shareAmount),
+                ),
+                if (participant.individualExpenses > 0)
+                  _receiptRow(
+                    '  Individual expense${participant.individualExpenseReason == null ? '' : ': ${participant.individualExpenseReason}'}',
+                    currency.format(participant.individualExpenses),
+                  ),
+                if (financial?.deductBillFromGold == true)
+                  _receiptRow(
+                    '  Deducted from gold / paid',
+                    currency.format(participant.amountPaid),
+                  ),
+              ],
+            ],
             _receiptRow('Payment Recorded', currency.format(financial?.paymentAmount ?? 0)),
             _receiptRow('Balance Remaining', currency.format(financial?.remainingBalance ?? 0)),
             _receiptRow('Settlement Status', request.status.name.toUpperCase()),
@@ -1622,20 +1658,35 @@ class _BillingPageState extends State<BillingPage> {
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      _showBillingSummary(
-                        request,
-                        isGoldBought: isGoldBought,
-                        goldWeight: goldWeight,
-                        buyingPrice: buyingPrice,
-                        goldValue: goldValue,
-                        deductFromGold: deductFromGold,
-                        processingFee: processingFee,
-                        otherExpenses: otherExpenses,
-                        totalBill: totalBill,
-                        individualExpenses: {},
-                        individualExpenseReasons: {},
-                        extraExpenses: extraExpenses,
-                      );
+                      if (request.participatingMinerIds.length > 1) {
+                        _showIndividualExpensesStep(
+                          request,
+                          isGoldBought: isGoldBought,
+                          goldWeight: goldWeight,
+                          buyingPrice: buyingPrice,
+                          goldValue: goldValue,
+                          deductFromGold: deductFromGold,
+                          processingFee: processingFee,
+                          otherExpenses: otherExpenses,
+                          totalBill: totalBill,
+                          extraExpenses: extraExpenses,
+                        );
+                      } else {
+                        _showBillingSummary(
+                          request,
+                          isGoldBought: isGoldBought,
+                          goldWeight: goldWeight,
+                          buyingPrice: buyingPrice,
+                          goldValue: goldValue,
+                          deductFromGold: deductFromGold,
+                          processingFee: processingFee,
+                          otherExpenses: otherExpenses,
+                          totalBill: totalBill,
+                          individualExpenses: {},
+                          individualExpenseReasons: {},
+                          extraExpenses: extraExpenses,
+                        );
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kGold,
@@ -1848,6 +1899,13 @@ class _BillingPageState extends State<BillingPage> {
     final participantCount = request.participatingMinerIds.isEmpty
         ? 1
         : request.participatingMinerIds.length;
+    final isGroup = participantCount > 1;
+    final individualExpenseTotal = individualExpenses.values.fold<double>(
+      0,
+      (sum, amount) => sum + amount,
+    );
+    final settlementBill = totalBill + individualExpenseTotal;
+    final autoSettleFromGold = isGoldBought && deductFromGold;
     final totalBillCents = (totalBill * 100).round();
     final shareCents = totalBillCents ~/ participantCount;
     final extraCents = totalBillCents % participantCount;
@@ -1869,14 +1927,14 @@ class _BillingPageState extends State<BillingPage> {
             ? null
             : individualExpenseReasons[id]?.trim(),
         totalDue: totalDue,
-        amountPaid: 0,
-        status: 'unpaid',
+        amountPaid: autoSettleFromGold ? totalDue : 0,
+        status: autoSettleFromGold ? 'paid' : 'unpaid',
       );
     }).toList();
 
     double netSettlement = isGoldBought
-        ? (deductFromGold ? (goldValue! - totalBill) : goldValue!)
-        : -totalBill;
+        ? (deductFromGold ? (goldValue! - settlementBill) : goldValue!)
+        : -settlementBill;
 
     showModalBottomSheet(
       context: context,
@@ -1921,9 +1979,20 @@ class _BillingPageState extends State<BillingPage> {
                     const SizedBox(height: 8),
                   ],
                   _buildSummaryRow(
-                    'Total Processing Bill',
+                    isGroup ? 'Shared Service Bill' : 'Total Processing Bill',
                     'P ${NumberFormat("#,##0.00").format(totalBill)}',
                   ),
+                  if (isGroup && individualExpenseTotal > 0) ...[
+                    _buildSummaryRow(
+                      'Individual Expenses',
+                      'P ${NumberFormat("#,##0.00").format(individualExpenseTotal)}',
+                    ),
+                    _buildSummaryRow(
+                      'Total Group Bill',
+                      'P ${NumberFormat("#,##0.00").format(settlementBill)}',
+                      isBold: true,
+                    ),
+                  ],
                   const Divider(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1976,6 +2045,13 @@ class _BillingPageState extends State<BillingPage> {
                                   p.userName ?? 'Miner',
                                   style: const TextStyle(fontSize: 13),
                                 ),
+                                Text(
+                                  'Shared bill: P ${NumberFormat("#,##0.00").format(p.shareAmount)}${p.individualExpenses > 0 ? ' + individual expense: P ${NumberFormat("#,##0.00").format(p.individualExpenses)}' : ''}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                                 if (p.individualExpenses > 0 &&
                                     p.individualExpenseReason != null)
                                   Text(
@@ -2003,6 +2079,16 @@ class _BillingPageState extends State<BillingPage> {
                 final currentUserId =
                     Supabase.instance.client.auth.currentUser?.id;
                 if (currentUserId == null) return;
+                if (autoSettleFromGold && settlementBill > (goldValue ?? 0)) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'The gold purchase value does not cover the full group bill. Increase the purchase value or turn off gold deduction.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
 
                 final result = await _service.submitFinancialHandling(
                   requestId: request.id,
@@ -2011,11 +2097,13 @@ class _BillingPageState extends State<BillingPage> {
                   buyingPrice: buyingPrice,
                   goldValue: goldValue,
                   deductBillFromGold: deductFromGold,
+                  autoSettleFromGold: isGoldBought && deductFromGold,
+                  settledPaymentAmount: settlementBill,
                   processingFee: processingFee,
                   otherExpenses: otherExpenses,
-                  totalBill: totalBill,
+                  totalBill: settlementBill,
                   amountToMiner: isGoldBought
-                      ? (goldValue! - (deductFromGold ? totalBill : 0))
+                      ? (goldValue! - (deductFromGold ? settlementBill : 0))
                       : 0,
                   currentStatus: request.status.name,
                   participantBreakdown: breakdown,
@@ -2037,7 +2125,16 @@ class _BillingPageState extends State<BillingPage> {
                   ).showSnackBar(SnackBar(content: Text(l.message))),
                   (_) {
                     _loadData();
-                    _showPaymentChoiceStep(request);
+                    final autoSettled = isGoldBought && deductFromGold;
+                    if (!autoSettled) _showPaymentChoiceStep(request);
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        content: Text(autoSettled
+                            ? 'Expenses confirmed. The bill was deducted from the gold purchase and marked paid.'
+                            : 'Financial handling recorded.'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
                   },
                 );
               },

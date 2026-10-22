@@ -206,6 +206,25 @@ Future<void> _replaceWithLogin({bool sessionExpired = false}) async {
 }
 
 Future<void> logoutAndNavigateToLogin(BuildContext context) async {
+  final shouldLogout = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Log out?'),
+      content: const Text('Are you sure you want to log out of your account?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Log Out'),
+        ),
+      ],
+    ),
+  );
+  if (shouldLogout != true || !context.mounted) return;
+
   try {
     await RememberMeSession.signOut();
   } catch (error) {

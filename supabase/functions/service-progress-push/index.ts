@@ -127,7 +127,7 @@ Deno.serve(async (request) => {
           },
           body: JSON.stringify({
             message: {
-              fid,
+              token: fid,
               notification: {
                 title: payload.record.title,
                 body: payload.record.body,

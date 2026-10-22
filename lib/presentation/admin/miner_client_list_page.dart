@@ -34,6 +34,8 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedRoleFilter = 'All'; // 'All', 'miner', 'operator', 'client'
+  String _selectedOperatorStatusFilter =
+      'All'; // 'All', 'active' (on duty), 'approved' (off duty)
   String _selectedMonthFilter = 'All'; // 'All' or 'January 2025'
 
   List<UserEntity> _users = [];
@@ -82,6 +84,13 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
         } else if (r != _selectedRoleFilter.toLowerCase()) {
           return false;
         }
+      }
+
+      if (_selectedRoleFilter == 'operator' &&
+          _selectedOperatorStatusFilter != 'All' &&
+          user.status.toLowerCase() !=
+              _selectedOperatorStatusFilter.toLowerCase()) {
+        return false;
       }
 
       // 3. Month Approved / Registered Filter
@@ -148,6 +157,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                       onPressed: () {
                         setState(() {
                           _selectedRoleFilter = 'All';
+                          _selectedOperatorStatusFilter = 'All';
                           _selectedMonthFilter = 'All';
                         });
                         setModalState(() {});
@@ -187,13 +197,63 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                       ),
                       onSelected: (selected) {
                         if (selected) {
-                          setState(() => _selectedRoleFilter = role);
+                          setState(() {
+                            _selectedRoleFilter = role;
+                            if (role != 'operator') {
+                              _selectedOperatorStatusFilter = 'All';
+                            }
+                          });
                           setModalState(() {});
                         }
                       },
                     );
                   }).toList(),
                 ),
+
+                if (_selectedRoleFilter == 'operator') ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Operator Duty Status',
+                    style: TextStyle(
+                      color: context.mutedTextColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: ['All', 'active', 'approved'].map((status) {
+                      final isSelected =
+                          _selectedOperatorStatusFilter == status;
+                      final label = switch (status) {
+                        'active' => 'On Duty',
+                        'approved' => 'Off Duty',
+                        _ => 'All Duty Statuses',
+                      };
+                      return ChoiceChip(
+                        label: Text(label),
+                        selected: isSelected,
+                        selectedColor: kGold.withOpacity(0.2),
+                        labelStyle: TextStyle(
+                          color: isSelected ? kGold : context.textColor,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          fontSize: 12,
+                        ),
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(
+                              () => _selectedOperatorStatusFilter = status,
+                            );
+                            setModalState(() {});
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
 
                 const SizedBox(height: 16),
 
@@ -257,7 +317,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
       _errorMessage = null;
     });
 
-    final result = await _repository.getMinersAndClients();
+    final result = await _repository.getDirectoryUsers();
     
     result.fold(
       (failure) {
@@ -1789,12 +1849,16 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: (_selectedRoleFilter != 'All' || _selectedMonthFilter != 'All')
+                    color: (_selectedRoleFilter != 'All' ||
+                            _selectedOperatorStatusFilter != 'All' ||
+                            _selectedMonthFilter != 'All')
                         ? kGold.withOpacity(0.2)
                         : context.surfaceColor,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: (_selectedRoleFilter != 'All' || _selectedMonthFilter != 'All')
+                      color: (_selectedRoleFilter != 'All' ||
+                              _selectedOperatorStatusFilter != 'All' ||
+                              _selectedMonthFilter != 'All')
                           ? kGold
                           : kGold.withOpacity(0.2),
                     ),
@@ -1803,7 +1867,9 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
                     clipBehavior: Clip.none,
                     children: [
                       const Icon(Icons.filter_list_rounded, color: kGold, size: 22),
-                      if (_selectedRoleFilter != 'All' || _selectedMonthFilter != 'All')
+                      if (_selectedRoleFilter != 'All' ||
+                          _selectedOperatorStatusFilter != 'All' ||
+                          _selectedMonthFilter != 'All')
                         Positioned(
                           right: -2,
                           top: -2,
@@ -1877,7 +1943,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
           child: _buildLogoMark(),
         ),
         title: const Text(
-          'MINERS',
+          'USER DIRECTORY',
           style: TextStyle(
             color: kGold,
             fontWeight: FontWeight.bold,
@@ -1896,7 +1962,7 @@ class _MinerClientListPageState extends State<MinerClientListPage> with SingleTi
               );
               _fetchUsers();
             },
-            tooltip: 'Add Miner',
+            tooltip: 'Add User',
           ),
           IconButton(
             icon: const Icon(Icons.person_off_outlined, color: kGold),

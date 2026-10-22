@@ -31,7 +31,9 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
   final SupabaseUserRepository _userRepository = SupabaseUserRepository();
 
   List<ServiceRequestEntity> _requests = [];
+  Set<String> _emergencyStoppedRequestIds = {};
   List<UserEntity> _allUsers = [];
+  List<Map<String, dynamic>> _verificationAppeals = [];
   bool _isLoading = true;
   String _searchQuery = '';
   String _filterStatus = 'All';
@@ -49,11 +51,31 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final requestsResult = await _repository.getServiceRequests();
+    final activeBatchesResult = await _repository.getActiveMillingBatches();
     final usersResult = await _userRepository.getAllUsers();
+    final appealsResult = await _repository.getOperatorVerificationAppeals();
+
+    final stoppedRequestIds = <String>{};
+    activeBatchesResult.fold((_) {}, (batches) {
+      for (final batch in batches) {
+        final drumStopped =
+            batch['drums']?['status']?.toString().toLowerCase() ==
+            'emergency_stop';
+        final machineStopped =
+            batch['machines']?['status']?.toString().toLowerCase() ==
+            'emergency_stop';
+        final requestId = batch['service_request_id']?.toString();
+        if ((drumStopped || machineStopped) && requestId != null) {
+          stoppedRequestIds.add(requestId);
+        }
+      }
+    });
 
     setState(() {
       _requests = requestsResult.getOrElse(() => []);
+      _emergencyStoppedRequestIds = stoppedRequestIds;
       _allUsers = usersResult.getOrElse(() => []);
+      _verificationAppeals = appealsResult.getOrElse(() => []);
       _isLoading = false;
     });
   }
@@ -153,7 +175,10 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
           .where(
             (r) =>
                 r.status.toString().split('.').last.toLowerCase() ==
-                _filterStatus.toLowerCase(),
+                    _filterStatus.toLowerCase() ||
+                (_filterStatus == 'Processing' &&
+                    r.status == ServiceRequestStatus.emergencyStop &&
+                    r.emergencyResolvedAt == null),
           )
           .toList();
     }
@@ -256,32 +281,12 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                 runSpacing: 10,
                 children:
                     [
-                      'All',
                       'Verified',
                       'Queued',
                       'Scheduled',
                       'Processing',
                       'ProcessingCompleted',
-                    ].map((status) {
-                      final isSelected = _filterStatus == status;
-                      return ChoiceChip(
-                        label: Text(
-                          status,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isSelected ? kBlack : context.textColor,
-                          ),
-                        ),
-                        selected: isSelected,
-                        onSelected: (val) => setState(() {
-                          _filterStatus = status;
-                          if (_filterStatus != 'Scheduled')
-                            _scheduleTimelineFilter = 'All';
-                        }),
-                        selectedColor: kGold,
-                        backgroundColor: context.bgColor,
-                      );
-                    }).toList(),
+                    ].map(_buildStatusFilterChip).toList(),
               ),
             ],
           ),
@@ -328,7 +333,404 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
     );
   }
 
+  Widget _buildStatusFilterChip(String status) {
+    final isSelected = _filterStatus == status;
+    final count = _requests
+        .where((request) => request.status.name.toLowerCase() == status.toLowerCase())
+        .length;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ChoiceChip(
+          label: Text(
+            status,
+            style: TextStyle(
+              fontSize: 12,
+              color: isSelected ? kBlack : context.textColor,
+            ),
+          ),
+          selected: isSelected,
+          onSelected: (_) => setState(() {
+            _filterStatus = isSelected ? 'All' : status;
+            if (_filterStatus != 'Scheduled') _scheduleTimelineFilter = 'All';
+          }),
+          selectedColor: kGold,
+          backgroundColor: context.bgColor,
+          showCheckmark: false,
+        ),
+        if (count > 0)
+          Positioned(
+            top: -6,
+            right: -6,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 25, minHeight: 25),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF28B8D4), Color(0xFF28B88A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: context.surfaceColor, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF28B8A5).withValues(alpha: 0.32),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$count',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildVerificationAppealCard(
+    Map<String, dynamic> appeal,
+    OperatorVerification? verification,
+  ) {
+    final minerValue = appeal['users'];
+    final miner = minerValue is Map ? minerValue : const <String, dynamic>{};
+    final minerName =
+        '${miner['fname'] ?? ''} ${miner['lname'] ?? ''}'.trim();
+    final appealDate = appeal['appeal_date']?.toString() ?? 'Unknown date';
+    final status = appeal['status']?.toString() ?? 'pending';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.deepOrange.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.deepOrange.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${appeal['category'] ?? 'Appeal'} • $appealDate',
+            style: const TextStyle(
+              color: Colors.deepOrange,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+          if (minerName.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Submitted by $minerName',
+              style: TextStyle(color: context.mutedTextColor, fontSize: 11),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            appeal['reason']?.toString() ?? '',
+            style: TextStyle(color: context.textColor, fontSize: 13),
+          ),
+          if ((appeal['admin_response']?.toString() ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Admin response: ${appeal['admin_response']}',
+              style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Chip(
+                label: Text(status.toUpperCase()),
+                visualDensity: VisualDensity.compact,
+                backgroundColor: switch (status) {
+                  'pending' => Colors.orange.withValues(alpha: 0.15),
+                  'rejected' => Colors.red.withValues(alpha: 0.12),
+                  _ => Colors.teal.withValues(alpha: 0.15),
+                },
+                labelStyle: TextStyle(
+                  color: switch (status) {
+                    'pending' => Colors.deepOrange,
+                    'rejected' => Colors.redAccent,
+                    _ => Colors.teal,
+                  },
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              if (status == 'pending')
+                TextButton.icon(
+                  onPressed: () => _reviewVerificationAppeal(
+                    appeal,
+                    verification,
+                  ),
+                  icon: const Icon(Icons.rate_review_outlined, size: 17),
+                  label: const Text('Review appeal'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reviewVerificationAppeal(
+    Map<String, dynamic> appeal,
+    OperatorVerification? verification,
+  ) async {
+    if (verification == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Verified data could not be loaded.')),
+      );
+      return;
+    }
+
+    final adminId = SupabaseConfig.client.auth.currentUser?.id;
+    if (adminId == null) return;
+
+    final sacksController = TextEditingController(
+      text: verification.actualSacks.toString(),
+    );
+    final conditionController = TextEditingController(text: verification.condition);
+    final stateController = TextEditingController(text: verification.state);
+    final sourceController = TextEditingController(text: verification.source);
+    final estimateController = TextEditingController(
+      text: verification.processingEstimate ?? '',
+    );
+    final responseController = TextEditingController();
+    var isSaving = false;
+    String? validationMessage;
+
+    final decision = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: dialogContext.surfaceColor,
+          title: const Text('Review Miner Appeal'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${appeal['category']}: ${appeal['reason']}'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: sacksController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Correct actual sack count',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: conditionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Correct material condition',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: stateController,
+                    decoration: const InputDecoration(
+                      labelText: 'Correct material state',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: sourceController,
+                    decoration: const InputDecoration(
+                      labelText: 'Correct source details',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: estimateController,
+                    decoration: const InputDecoration(
+                      labelText: 'Processing estimate',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: responseController,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Response to miner (optional)',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  if (validationMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      validationMessage!,
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            TextButton.icon(
+              onPressed: isSaving
+                  ? null
+                  : () => _saveAppealDecision(
+                      dialogContext,
+                      setDialogState,
+                      appeal: appeal,
+                      verification: verification,
+                      adminId: adminId,
+                      resolve: false,
+                      sacksController: sacksController,
+                      conditionController: conditionController,
+                      stateController: stateController,
+                      sourceController: sourceController,
+                      estimateController: estimateController,
+                      responseController: responseController,
+                      setSaving: (value) => isSaving = value,
+                      setValidationMessage: (value) => validationMessage = value,
+                    ),
+              icon: const Icon(Icons.close_rounded, color: Colors.redAccent),
+              label: const Text('Reject Appeal'),
+            ),
+            FilledButton.icon(
+              onPressed: isSaving
+                  ? null
+                  : () => _saveAppealDecision(
+                      dialogContext,
+                      setDialogState,
+                      appeal: appeal,
+                      verification: verification,
+                      adminId: adminId,
+                      resolve: true,
+                      sacksController: sacksController,
+                      conditionController: conditionController,
+                      stateController: stateController,
+                      sourceController: sourceController,
+                      estimateController: estimateController,
+                      responseController: responseController,
+                      setSaving: (value) => isSaving = value,
+                      setValidationMessage: (value) => validationMessage = value,
+                    ),
+              icon: const Icon(Icons.check_circle_outline_rounded),
+              label: const Text('Save & Resolve'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    sacksController.dispose();
+    conditionController.dispose();
+    stateController.dispose();
+    sourceController.dispose();
+    estimateController.dispose();
+    responseController.dispose();
+    if (decision != null && mounted) {
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            decision
+                ? 'Appeal resolved and verified data updated.'
+                : 'Appeal rejected.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveAppealDecision(
+    BuildContext dialogContext,
+    StateSetter setDialogState, {
+    required Map<String, dynamic> appeal,
+    required OperatorVerification verification,
+    required String adminId,
+    required bool resolve,
+    required TextEditingController sacksController,
+    required TextEditingController conditionController,
+    required TextEditingController stateController,
+    required TextEditingController sourceController,
+    required TextEditingController estimateController,
+    required TextEditingController responseController,
+    required ValueChanged<bool> setSaving,
+    required ValueChanged<String?> setValidationMessage,
+  }) async {
+    final sacks = int.tryParse(sacksController.text.trim());
+    if (resolve &&
+        (sacks == null ||
+            sacks < 0 ||
+            conditionController.text.trim().isEmpty ||
+            stateController.text.trim().isEmpty ||
+            sourceController.text.trim().isEmpty ||
+            estimateController.text.trim().isEmpty)) {
+      setDialogState(
+        () => setValidationMessage(
+          'Enter a valid sack count and complete all corrected verification fields.',
+        ),
+      );
+      return;
+    }
+
+    setDialogState(() {
+      setSaving(true);
+      setValidationMessage(null);
+    });
+    final result = await _repository.reviewOperatorVerificationAppeal(
+      appealId: appeal['appeal_id'].toString(),
+      requestId: appeal['service_request_id'].toString(),
+      adminId: adminId,
+      verificationId: verification.id,
+      resolve: resolve,
+      actualSacks: sacks,
+      condition: conditionController.text.trim(),
+      state: stateController.text.trim(),
+      source: sourceController.text.trim(),
+      processingEstimate: estimateController.text.trim(),
+      adminResponse: responseController.text.trim(),
+    );
+
+    result.fold(
+      (failure) => setDialogState(() {
+        setSaving(false);
+        setValidationMessage(failure.message);
+      }),
+      (_) => Navigator.pop(dialogContext, resolve),
+    );
+  }
+
   Widget _buildRequestCard(ServiceRequestEntity request, {int? index}) {
+    final hasActiveEmergency =
+        (request.status == ServiceRequestStatus.emergencyStop &&
+            request.emergencyResolvedAt == null) ||
+        _emergencyStoppedRequestIds.contains(request.id);
+    final requestAppeals = _verificationAppeals
+        .where((appeal) => appeal['service_request_id']?.toString() == request.id)
+        .toList();
     final bool isKorpo = request.participatingMinerIds.length > 1;
     final String typeLabel = isKorpo
         ? 'KORPO (${request.participatingMinerIds.length})'
@@ -359,7 +761,10 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: kGold.withOpacity(0.1)),
+        side: BorderSide(
+          color: hasActiveEmergency ? Colors.red : kGold.withOpacity(0.1),
+          width: hasActiveEmergency ? 2 : 1,
+        ),
       ),
       child: ExpansionTile(
         title: Row(
@@ -386,6 +791,30 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                   ),
               ],
             ),
+            if (hasActiveEmergency)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.red.withOpacity(0.55)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.red, size: 15),
+                    SizedBox(width: 4),
+                    Text(
+                      'EMERGENCY STOP',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 9,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (index != null)
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -453,6 +882,28 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
         ),
         childrenPadding: const EdgeInsets.all(16),
         children: [
+          if (requestAppeals.isNotEmpty) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'MINER APPEALS',
+                style: TextStyle(
+                  color: Colors.deepOrange,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...requestAppeals.map(
+              (appeal) => _buildVerificationAppealCard(
+                appeal,
+                latestVerification,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (latestVerification != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
@@ -537,81 +988,6 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                   .toList(),
             ),
             const SizedBox(height: 16),
-            if (request.status == ServiceRequestStatus.processing ||
-                request.status == ServiceRequestStatus.processingCompleted)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MonitoringPage(
-                              request: request,
-                              title: 'ADMIN MONITORING',
-                            ),
-                          ),
-                        ),
-                        icon: const Icon(
-                          Icons.monitor_heart_outlined,
-                          size: 18,
-                        ),
-                        label: const Text(
-                          'MONITOR LIVE PROCESS',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.withOpacity(0.1),
-                          foregroundColor: Colors.blue,
-                          side: BorderSide(color: Colors.blue.withOpacity(0.3)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (request.status ==
-                        ServiceRequestStatus.processingCompleted) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const BillingPage(),
-                            ),
-                          ),
-                          icon: const Icon(
-                            Icons.receipt_long_outlined,
-                            size: 18,
-                          ),
-                          label: const Text(
-                            'PROCEED TO FINANCIAL HANDLING',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: kGold,
-                            foregroundColor: kBlack,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
             const Divider(),
             const SizedBox(height: 16),
           ],
@@ -625,8 +1001,104 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
             'Est. Time',
             request.processingDetails.estimatedTime ?? 'N/A',
           ),
+          if (showOriginal && request.materialDetails.photoUrls.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Miner Submitted Photos',
+                style: TextStyle(
+                  color: context.mutedTextColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 96,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: request.materialDetails.photoUrls.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final url = request.materialDetails.photoUrls[index];
+                  return InkWell(
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => Dialog(
+                        child: InteractiveViewer(child: Image.network(url)),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        url,
+                        width: 116,
+                        height: 96,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const SizedBox(
+                          width: 116,
+                          child: Center(child: Icon(Icons.broken_image_outlined)),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
           if (latestVerification?.notes != null && !showOriginal)
             _buildDetailRow('Operator Notes', latestVerification!.notes!),
+          if (latestVerification != null &&
+              latestVerification.photoUrls.isNotEmpty &&
+              !showOriginal) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Operator Verification Photos',
+                style: TextStyle(
+                  color: context.mutedTextColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 96,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: latestVerification.photoUrls.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final url = latestVerification.photoUrls[index];
+                  return InkWell(
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => Dialog(
+                        child: InteractiveViewer(child: Image.network(url)),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        url,
+                        width: 116,
+                        height: 96,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const SizedBox(
+                          width: 116,
+                          child: Center(child: Icon(Icons.broken_image_outlined)),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
 
           if (request.status == ServiceRequestStatus.verified ||
               request.status == ServiceRequestStatus.accepted) ...[
@@ -680,6 +1152,7 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
                           builder: (_) => MonitoringPage(
                             request: request,
                             title: 'ADMIN MONITORING',
+                            isAdmin: true,
                           ),
                         ),
                       ),

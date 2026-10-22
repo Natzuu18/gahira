@@ -63,31 +63,105 @@ class _MaintenancePageState extends State<MaintenancePage> {
     final String maintId = item['maintenance_id'].toString();
     final String? machineId = item['machine_id']?.toString();
     final String? drumId = item['drum_id']?.toString();
-
-    await _repository.updateMaintenanceStatus(maintId, newStatus);
-
-    // Synchronize machine/drum availability status
     final lowerStatus = newStatus.toLowerCase();
-    if (lowerStatus == 'completed' || lowerStatus == 'cancelled' || lowerStatus == 'rejected') {
-      if (machineId != null && machineId.isNotEmpty) {
-        await _repository.updateMachine(machineId, {'status': 'available'});
+    final currentStatus = (item['status'] ?? '').toString().toLowerCase();
+    final wasPending = currentStatus == 'scheduled' || currentStatus == 'pending';
+    final isMachineRequest = drumId == null || drumId.isEmpty;
+
+    Future<String?> updateMachineStatus(String id, String status) async {
+      final result = await _repository.updateMachine(id, {
+        'status': status,
+        'description': status == 'maintenance'
+            ? item['description']?.toString() ?? 'Under maintenance'
+            : null,
+      });
+      return result.fold((failure) => failure.message, (_) => null);
+    }
+
+    Future<String?> updateDrumStatus(String id, String status) async {
+      final result = await _repository.updateDrum(id, {
+        'status': status,
+        'description': status == 'maintenance'
+            ? item['description']?.toString() ?? 'Under maintenance'
+            : null,
+      });
+      return result.fold((failure) => failure.message, (_) => null);
+    }
+
+    String? equipmentError;
+    final shouldPlaceInMaintenance =
+        lowerStatus == 'ongoing' || lowerStatus == 'in progress';
+    final shouldReleaseEquipment =
+        (lowerStatus == 'completed' || lowerStatus == 'cancelled') &&
+        !wasPending;
+
+    if ((shouldPlaceInMaintenance || shouldReleaseEquipment) &&
+        machineId != null &&
+        machineId.isNotEmpty) {
+      final targetStatus = shouldPlaceInMaintenance ? 'maintenance' : 'available';
+      if (isMachineRequest) {
+        equipmentError = await updateMachineStatus(machineId, targetStatus);
+        if (equipmentError == null) {
+          final machinesResult = await _repository.getMachines();
+          final machines = machinesResult.fold((failure) {
+            equipmentError = failure.message;
+            return <Map<String, dynamic>>[];
+          }, (value) => value);
+          Map<String, dynamic>? machine;
+          for (final row in machines) {
+            if (row['machine_id']?.toString() == machineId) {
+              machine = row;
+              break;
+            }
+          }
+          final drums = machine?['drums'];
+          if (equipmentError == null && drums is List) {
+            for (final drum in drums) {
+              if (drum is! Map || drum['drum_id'] == null) continue;
+              equipmentError = await updateDrumStatus(
+                drum['drum_id'].toString(),
+                targetStatus,
+              );
+              if (equipmentError != null) break;
+            }
+          }
+        }
+      } else if (drumId != null && drumId.isNotEmpty) {
+        // A drum request affects that drum only; sibling drums may still be
+        // running on the parent machine.
+        equipmentError = await updateDrumStatus(drumId, targetStatus);
       }
-      if (drumId != null && drumId.isNotEmpty) {
-        await _repository.updateDrum(drumId, {'status': 'available'});
+    }
+
+    if (equipmentError != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(equipmentError!), backgroundColor: Colors.red),
+        );
       }
-    } else if (lowerStatus == 'in progress' || lowerStatus == 'ongoing' || lowerStatus == 'scheduled') {
-      final desc = item['description']?.toString() ?? 'Under maintenance';
-      if (machineId != null && machineId.isNotEmpty) {
-        await _repository.updateMachine(machineId, {'status': 'maintenance', 'description': desc});
+      return;
+    }
+
+    final statusResult = await _repository.updateMaintenanceStatus(
+      maintId,
+      lowerStatus,
+    );
+    final statusError = statusResult.fold<String?>(
+      (failure) => failure.message,
+      (_) => null,
+    );
+    if (statusError != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(statusError), backgroundColor: Colors.red),
+        );
       }
-      if (drumId != null && drumId.isNotEmpty) {
-        await _repository.updateDrum(drumId, {'status': 'maintenance', 'description': desc});
-      }
+      return;
     }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Maintenance status updated to $newStatus'), backgroundColor: Colors.green),
+        SnackBar(content: Text('Maintenance status updated to $lowerStatus'), backgroundColor: Colors.green),
       );
     }
     _fetchData();
@@ -128,19 +202,28 @@ class _MaintenancePageState extends State<MaintenancePage> {
       backgroundColor: context.bgColor,
       appBar: AppBar(
         backgroundColor: context.surfaceColor,
-        leadingWidth: 64,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: _buildLogoMark(),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: kGold),
+          tooltip: 'Return',
+          onPressed: () => Navigator.maybePop(context),
         ),
-        title: const Text(
-          'MAINTENANCE REVIEWS',
-          style: TextStyle(
-            color: kGold,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-            fontSize: 16,
-          ),
+        title: Row(
+          children: [
+            _buildLogoMark(),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'MAINTENANCE REVIEWS',
+                style: TextStyle(
+                  color: kGold,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                  fontSize: 16,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
         actions: const [
           ThemeToggleButton(),

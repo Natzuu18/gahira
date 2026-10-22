@@ -11,8 +11,14 @@ import '../operator/sacking_page.dart'; // Reusing the Timer Circle
 class MonitoringPage extends StatefulWidget {
   final ServiceRequestEntity request;
   final String title;
+  final bool isAdmin;
 
-  const MonitoringPage({super.key, required this.request, this.title = 'PROCESS MONITORING'});
+  const MonitoringPage({
+    super.key,
+    required this.request,
+    this.title = 'PROCESS MONITORING',
+    this.isAdmin = false,
+  });
 
   @override
   State<MonitoringPage> createState() => _MonitoringPageState();
@@ -23,9 +29,11 @@ class _MonitoringPageState extends State<MonitoringPage> {
   
   ServiceRequestEntity? _currentRequest;
   List<Map<String, dynamic>> _batches = [];
+  ProcessingStage? _selectedStage;
   bool _isLoading = true;
   bool _isRefreshing = false;
   bool _refreshQueued = false;
+  bool _isResolvingEmergency = false;
   Timer? _refreshTimer;
   RealtimeChannel? _realtimeChannel;
 
@@ -114,10 +122,56 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
   ServiceRequestEntity get _effectiveRequest => _currentRequest ?? widget.request;
 
+  ProcessingStage get _liveStage =>
+      _effectiveRequest.processingDetails.currentStage;
+
+  ProcessingStage get _displayStage => _selectedStage ?? _liveStage;
+
+  bool get _hasActiveEquipmentEmergency => _batches.any((batch) {
+    if (batch['status'] != 'milling') return false;
+    final drumStopped =
+        batch['drums']?['status']?.toString().toLowerCase() == 'emergency_stop';
+    final machineStopped =
+        batch['machines']?['status']?.toString().toLowerCase() ==
+        'emergency_stop';
+    return drumStopped || machineStopped;
+  });
+
+  bool get _isResolvedAwaitingOperator =>
+      _effectiveRequest.emergencyResolvedAt != null &&
+      _effectiveRequest.emergencyStoppedAt != null;
+
+  Future<void> _resolveEmergency() async {
+    if (_isResolvingEmergency) return;
+    final adminId = Supabase.instance.client.auth.currentUser?.id;
+    if (adminId == null) return;
+
+    setState(() => _isResolvingEmergency = true);
+    final result = await _requestRepo.resolveEmergencyStop(
+      requestId: widget.request.id,
+      adminId: adminId,
+    );
+    if (!mounted) return;
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failure.message), backgroundColor: Colors.red),
+        );
+      },
+      (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Emergency issue resolved.')),
+        );
+      },
+    );
+    setState(() => _isResolvingEmergency = false);
+    await _loadData(showLoading: false);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final stage = _effectiveRequest.processingDetails.currentStage;
-    final isUnloading = stage == ProcessingStage.unloading;
+    final stage = _liveStage;
 
     return Scaffold(
       backgroundColor: context.bgColor,
@@ -134,19 +188,16 @@ class _MonitoringPageState extends State<MonitoringPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_effectiveRequest.status == ServiceRequestStatus.emergencyStop)
+                if (_effectiveRequest.status == ServiceRequestStatus.emergencyStop ||
+                    _hasActiveEquipmentEmergency ||
+                    _isResolvedAwaitingOperator)
                   _buildEmergencyAlert(),
                 _buildStatusHeader(),
                 const SizedBox(height: 24),
                 _buildWorkflowProgress(),
                 const SizedBox(height: 32),
                 
-                if (isUnloading) 
-                  _buildUnloadingSection()
-                else if (stage == ProcessingStage.millingCrushing || stage == ProcessingStage.rebagging)
-                  _buildMillingSection()
-                else
-                  _buildGeneralInfoSection(),
+                _buildSelectedStageSection(_displayStage),
               ],
             ),
           ),
@@ -154,20 +205,29 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 
   Widget _buildEmergencyAlert() {
+    final isResolved = _isResolvedAwaitingOperator;
+    final alertColor = isResolved ? Colors.orange : Colors.red;
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 24),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.red,
+        color: alertColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.4), blurRadius: 12, spreadRadius: 2)],
+        boxShadow: [BoxShadow(color: alertColor.withOpacity(0.4), blurRadius: 12, spreadRadius: 2)],
       ),
       child: Column(
         children: [
-          const Icon(Icons.emergency_share_rounded, color: Colors.white, size: 48),
+          Icon(
+            isResolved ? Icons.check_circle_outline : Icons.emergency_share_rounded,
+            color: Colors.white,
+            size: 48,
+          ),
           const SizedBox(height: 16),
-          const Text('EMERGENCY STOP ACTIVE', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(
+            isResolved ? 'ISSUE RESOLVED' : 'EMERGENCY STOP ACTIVE',
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 12),
           Text(_effectiveRequest.emergencyReason ?? 'No reason provided', 
             textAlign: TextAlign.center,
@@ -179,8 +239,15 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 11)),
             ),
           const SizedBox(height: 20),
-          const Text('Operations have been halted. Technical team notified.', 
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(
+            isResolved
+                ? 'The issue is resolved. Waiting for the operator to continue the process.'
+                : _effectiveRequest.status == ServiceRequestStatus.emergencyStop
+                ? 'Operations have been halted. Technical team notified.'
+                : 'The affected drum or machine is halted. Other equipment may continue operating.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+          ),
         ],
       ),
     );
@@ -208,7 +275,16 @@ class _MonitoringPageState extends State<MonitoringPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Current Stage', style: TextStyle(color: context.mutedTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                Text(_getStageName(stage).toUpperCase(), style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  (_isResolvedAwaitingOperator
+                          ? 'Waiting for Operator'
+                          : _effectiveRequest.status ==
+                                ServiceRequestStatus.emergencyStop
+                          ? 'Emergency Stop'
+                          : _getStageName(stage))
+                      .toUpperCase(),
+                  style: TextStyle(color: context.textColor, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
           ),
@@ -220,8 +296,14 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
   Widget _buildLiveBadge() {
     final isPaused =
-        _effectiveRequest.status == ServiceRequestStatus.emergencyStop;
-    final badgeColor = isPaused ? Colors.orange : Colors.red;
+        _effectiveRequest.status == ServiceRequestStatus.emergencyStop &&
+        !_isResolvedAwaitingOperator;
+    final isWaiting = _isResolvedAwaitingOperator;
+    final badgeColor = isWaiting
+        ? Colors.orange
+        : isPaused
+        ? Colors.red
+        : Colors.green;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -234,7 +316,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
           Icon(Icons.fiber_manual_record, color: badgeColor, size: 10),
           const SizedBox(width: 4),
           Text(
-            isPaused ? 'PAUSED' : 'LIVE',
+            isWaiting ? 'WAITING' : isPaused ? 'PAUSED' : 'LIVE',
             style: TextStyle(
               color: badgeColor,
               fontSize: 10,
@@ -248,67 +330,403 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
   Widget _buildWorkflowProgress() {
     final stages = ProcessingStage.values.where((s) => s != ProcessingStage.none).toList();
-    final currentStage = _effectiveRequest.processingDetails.currentStage;
+    final currentStage = _liveStage;
     final currentIndex = stages.indexOf(currentStage);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: stages.map((s) {
-            final index = stages.indexOf(s);
-            final isCompleted = index < currentIndex;
-            final isCurrent = index == currentIndex;
-            
-            return Expanded(
-              child: Column(
-                children: [
-                  Container(
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
+        Text(
+          'TAP A STAGE TO REVIEW ITS PROGRESS',
+          style: TextStyle(
+            color: context.mutedTextColor,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.7,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: stages.map((stage) {
+              final index = stages.indexOf(stage);
+              final isCurrent = stage == currentStage;
+              final isSelected = stage == _displayStage;
+              final isComplete = _isStageComplete(stage, index, currentIndex);
+              final color = isCurrent
+                  ? kGold
+                  : isComplete
+                  ? Colors.green
+                  : context.mutedTextColor;
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => setState(() => _selectedStage = stage),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 104,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
-                      color: isCompleted ? Colors.green : (isCurrent ? kGold : context.mutedTextColor.withOpacity(0.2)),
-                      borderRadius: BorderRadius.circular(2),
+                      color: color.withOpacity(isSelected ? 0.17 : 0.07),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? color : color.withOpacity(0.3),
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              isCurrent
+                                  ? Icons.radio_button_checked_rounded
+                                  : isComplete
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
+                              color: color,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                'STEP ${index + 1}',
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          _getStageName(stage),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isCurrent ? 'CURRENT' : isComplete ? 'DONE' : 'WAITING',
+                          style: TextStyle(color: color, fontSize: 8),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(_getStageName(s).split(' ')[0], 
-                    style: TextStyle(
-                      color: isCurrent ? kGold : context.mutedTextColor, 
-                      fontSize: 9, 
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
+                ),
+              );
+            }).toList(),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildMillingSection() {
+  bool _isStageComplete(ProcessingStage stage, int index, int currentIndex) {
+    final processing = _effectiveRequest.processingDetails;
+    switch (stage) {
+      case ProcessingStage.rebagging:
+        final minerSacks = _effectiveRequest.materialDetails.numberOfSacks ?? 0;
+        final sackedSacks = _batches
+            .where((batch) => batch['batch_kind'] != 'milling')
+            .fold<int>(
+              0,
+              (total, batch) =>
+                  total + ((batch['input_sacks'] as num?)?.toInt() ?? 0),
+            );
+        return minerSacks > 0 && sackedSacks >= minerSacks;
+      case ProcessingStage.loading:
+        return currentIndex > index;
+      case ProcessingStage.millingCrushing:
+        final minerSacks = _effectiveRequest.materialDetails.numberOfSacks ?? 0;
+        final sackedSacks = _batches
+            .where((batch) => batch['batch_kind'] != 'milling')
+            .fold<int>(
+              0,
+              (total, batch) =>
+                  total + ((batch['input_sacks'] as num?)?.toInt() ?? 0),
+            );
+        return currentIndex > index &&
+            minerSacks > 0 &&
+            sackedSacks >= minerSacks &&
+            !_batches.any(
+              (batch) => batch['status'] == 'milling' ||
+                  batch['status'] == 'ready_to_mill',
+            );
+      case ProcessingStage.unloading:
+        return processing.unloadingCompletedAt != null;
+      case ProcessingStage.washingSeparation:
+        return processing.washingCompletedAt != null;
+      case ProcessingStage.refining:
+        return currentIndex > index ||
+            _effectiveRequest.status == ServiceRequestStatus.completed ||
+            processing.currentStage == ProcessingStage.completed;
+      case ProcessingStage.completed:
+        return _effectiveRequest.status == ServiceRequestStatus.completed ||
+            processing.currentStage == ProcessingStage.completed;
+      case ProcessingStage.none:
+        return false;
+    }
+  }
+
+  Widget _buildSelectedStageSection(ProcessingStage stage) {
+    switch (stage) {
+      case ProcessingStage.rebagging:
+        return _buildSackingSection();
+      case ProcessingStage.loading:
+        return _buildLoadingSection();
+      case ProcessingStage.millingCrushing:
+        return _buildMillingSection();
+      case ProcessingStage.unloading:
+        return _buildUnloadingSection();
+      case ProcessingStage.washingSeparation:
+        return _buildWashingSection();
+      case ProcessingStage.refining:
+      case ProcessingStage.completed:
+        return _buildRefiningSection(stage);
+      case ProcessingStage.none:
+        return _buildGeneralInfoSection();
+    }
+  }
+
+  Widget _buildSackingSection() {
+    final totalMinerSacks = _effectiveRequest.materialDetails.numberOfSacks ?? 0;
+    final sackingBatches = _batches
+        .where((batch) => batch['batch_kind'] != 'milling')
+        .toList();
+    final sackedSacks = sackingBatches.fold<int>(
+      0,
+      (total, batch) => total + ((batch['input_sacks'] as num?)?.toInt() ?? 0),
+    );
+    final resackedSacks = sackingBatches.fold<int>(
+      0,
+      (total, batch) => total + ((batch['output_sacks'] as num?)?.toInt() ?? 0),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('MILLING BATCHES', style: TextStyle(color: context.textColor, fontSize: 16, fontWeight: FontWeight.bold)),
+        _stageSummaryCard(
+          title: 'SACKING / REBAGGING PROGRESS',
+          rows: [
+            ('Miner sacks recorded', '$sackedSacks / $totalMinerSacks'),
+            ('Resacked sacks ready for milling', '$resackedSacks'),
+            ('Miner sacks remaining', '${(totalMinerSacks - sackedSacks).clamp(0, totalMinerSacks)}'),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'SACKING BATCHES',
+          style: TextStyle(color: context.textColor, fontSize: 15, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        if (sackingBatches.isEmpty)
+          _stageMessage('The operator has not recorded a sacking batch yet.')
+        else
+          ...sackingBatches.reversed.map(_buildBatchMonitoringCard),
+      ],
+    );
+  }
+
+  Widget _buildLoadingSection() => _stageMessage(
+    'The operator is preparing sacks and equipment for milling.',
+  );
+
+  Widget _buildWashingSection() {
+    final startedAt = _effectiveRequest.processingDetails.washingStartedAt;
+    final completedAt = _effectiveRequest.processingDetails.washingCompletedAt;
+    return _buildTimedStageSection(
+      title: 'WASHING & SEPARATION PROGRESS',
+      startedAt: startedAt,
+      completedAt: completedAt,
+      waitingMessage: 'Washing and separation have not started yet.',
+      runningMessage: 'The operator is washing and separating the material.',
+    );
+  }
+
+  Widget _buildRefiningSection(ProcessingStage stage) {
+    final complete = stage == ProcessingStage.completed ||
+        _effectiveRequest.status == ServiceRequestStatus.completed;
+    return _stageSummaryCard(
+      title: complete ? 'PROCESS COMPLETED' : 'REFINING PROGRESS',
+      rows: [
+        ('Status', complete ? 'Completed' : 'Waiting for refining'),
+        ('Current service stage', _getStageName(_liveStage)),
+      ],
+      icon: complete ? Icons.verified_rounded : Icons.auto_awesome_rounded,
+      color: complete ? Colors.green : kGold,
+    );
+  }
+
+  Widget _buildTimedStageSection({
+    required String title,
+    required DateTime? startedAt,
+    required DateTime? completedAt,
+    required String waitingMessage,
+    required String runningMessage,
+  }) {
+    final isCurrent = _liveStage == _displayStage;
+    final elapsed = startedAt == null
+        ? null
+        : (completedAt ?? DateTime.now()).difference(startedAt.toLocal());
+    final safeElapsed = elapsed == null || elapsed.isNegative
+        ? Duration.zero
+        : elapsed;
+
+    return _stageSummaryCard(
+      title: title,
+      rows: [
+        ('Started', startedAt == null ? 'Not started' : DateFormat('MMM d, yyyy  hh:mm a').format(startedAt.toLocal())),
+        ('Finished', completedAt == null ? (startedAt == null ? '—' : 'In progress') : DateFormat('MMM d, yyyy  hh:mm a').format(completedAt.toLocal())),
+        if (completedAt != null) ('Total time', _formatElapsed(safeElapsed)),
+      ],
+      message: startedAt == null
+          ? waitingMessage
+          : completedAt == null
+          ? runningMessage
+          : 'This stage is complete.',
+      trailing: startedAt != null && completedAt == null && isCurrent
+          ? UnloadingStopwatch(startTime: startedAt.toLocal())
+          : null,
+    );
+  }
+
+  String _formatElapsed(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+    final seconds = duration.inSeconds % 60;
+    if (hours > 0) return '${hours}h ${minutes}m ${seconds}s';
+    if (minutes > 0) return '${minutes}m ${seconds}s';
+    return '${seconds}s';
+  }
+
+  Widget _stageSummaryCard({
+    required String title,
+    required List<(String, String)> rows,
+    String? message,
+    Widget? trailing,
+    IconData icon = Icons.info_outline_rounded,
+    Color color = kGold,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          if (message != null) ...[
+            const SizedBox(height: 12),
+            Text(message, style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
+          ],
+          for (final row in rows) ...[
+            const SizedBox(height: 12),
+            _infoRow(row.$1, row.$2),
+          ],
+          if (trailing != null) ...[
+            const SizedBox(height: 16),
+            Center(child: trailing),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _stageMessage(String message) => _stageSummaryCard(
+    title: _getStageName(_displayStage).toUpperCase(),
+    rows: const [],
+    message: message,
+  );
+
+  Widget _buildMillingSection() {
+    final millingBatches = _batches
+        .where(
+          (batch) =>
+              batch['batch_kind'] == 'milling' ||
+              (batch['batch_kind'] != 'sacking' && batch['machine_id'] != null),
+        )
+        .toList();
+    final totalResacked = _batches
+        .where(
+          (batch) =>
+              batch['batch_kind'] == 'sacking' ||
+              (batch['batch_kind'] != 'milling' && batch['machine_id'] == null),
+        )
+        .fold<int>(
+          0,
+          (total, batch) =>
+              total + ((batch['output_sacks'] as num?)?.toInt() ?? 0),
+        );
+    final totalMilled = millingBatches.fold<int>(
+      0,
+      (total, batch) => total + ((batch['input_sacks'] as num?)?.toInt() ?? 0),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _stageSummaryCard(
+          title: 'MILLING PROGRESS',
+          rows: [
+            ('Resacked sacks prepared', '$totalResacked'),
+            ('Sacks milled or in progress', '$totalMilled'),
+            ('Prepared sacks remaining', '${(totalResacked - totalMilled).clamp(0, totalResacked)}'),
+          ],
+        ),
         const SizedBox(height: 12),
-        if (_batches.isEmpty)
+        Text('MILLING BATCHES', style: TextStyle(color: context.textColor, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        if (millingBatches.isEmpty)
           Center(child: Padding(
             padding: const EdgeInsets.all(32.0),
             child: Text('Waiting for operator to start batches...', style: TextStyle(color: context.mutedTextColor)),
           ))
         else
-          ..._batches.reversed.map((b) => _buildBatchMonitoringCard(b)),
+          ...millingBatches.reversed.map(_buildBatchMonitoringCard),
       ],
     );
   }
 
   Widget _buildBatchMonitoringCard(Map<String, dynamic> batch) {
     final isMilling = batch['status'] == 'milling';
+    final isDrumEmergency =
+        batch['drums']?['status']?.toString().toLowerCase() == 'emergency_stop';
+    final isMachineEmergency =
+        batch['machines']?['status']?.toString().toLowerCase() ==
+        'emergency_stop';
     final isEmergencyPaused =
-        _effectiveRequest.status == ServiceRequestStatus.emergencyStop;
+        _effectiveRequest.status == ServiceRequestStatus.emergencyStop ||
+        isDrumEmergency ||
+        isMachineEmergency;
+    final isResolvedAwaitingOperator = _isResolvedAwaitingOperator;
     final isReadyToMill = batch['status'] == 'ready_to_mill';
     final isMillingRun = batch['batch_kind'] == 'milling';
     final createdAt = DateTime.parse(
@@ -334,7 +752,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
             MillingTimerCircle(
               startTime: createdAt,
               durationMinutes: durationMinutes,
-              isPaused: isEmergencyPaused,
+              isPaused: isEmergencyPaused || isResolvedAwaitingOperator,
               pausedAt: _effectiveRequest.emergencyStoppedAt,
             )
           else if (isReadyToMill)
@@ -368,9 +786,15 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 ),
                 if (isMilling)
                   Text(
-                    isEmergencyPaused ? 'Emergency paused' : 'Processing...',
+                    isResolvedAwaitingOperator
+                        ? 'Issue resolved — waiting for operator to continue'
+                        : isEmergencyPaused
+                        ? 'Emergency paused'
+                        : 'Processing...',
                     style: TextStyle(
-                      color: isEmergencyPaused
+                      color: isResolvedAwaitingOperator
+                          ? Colors.orange
+                          : isEmergencyPaused
                           ? Colors.red
                           : kGold.withOpacity(0.8),
                       fontSize: 10,
@@ -384,37 +808,39 @@ class _MonitoringPageState extends State<MonitoringPage> {
               ],
             ),
           ),
+          if (widget.isAdmin &&
+              isEmergencyPaused &&
+              !isResolvedAwaitingOperator) ...[
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: _isResolvingEmergency ? null : _resolveEmergency,
+              icon: _isResolvingEmergency
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check_circle_outline, size: 16),
+              label: const Text('Resolve'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildUnloadingSection() {
-    final isStarted = _effectiveRequest.processingDetails.unloadingStartedAt != null;
-    final isDone = _effectiveRequest.processingDetails.unloadingCompletedAt != null;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.1)),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.unarchive_outlined, color: kGold, size: 48),
-          const SizedBox(height: 16),
-          const Text('UNLOADING PROGRESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 24),
-          if (!isStarted)
-            Text('Operator is preparing to unload...', style: TextStyle(color: context.mutedTextColor))
-          else if (isStarted && !isDone)
-            UnloadingStopwatch(startTime: _effectiveRequest.processingDetails.unloadingStartedAt!.toLocal())
-          else
-            Text('Unloading Finished', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-        ],
-      ),
+    return _buildTimedStageSection(
+      title: 'UNLOADING PROGRESS',
+      startedAt: _effectiveRequest.processingDetails.unloadingStartedAt,
+      completedAt: _effectiveRequest.processingDetails.unloadingCompletedAt,
+      waitingMessage: 'The operator is preparing to unload.',
+      runningMessage: 'The operator is unloading the drums.',
     );
   }
 
@@ -463,7 +889,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 
   String _getStageName(ProcessingStage stage) {
-    if (_effectiveRequest.status == ServiceRequestStatus.emergencyStop) return 'Emergency Stop';
     switch (stage) {
       case ProcessingStage.rebagging: return 'Sacking';
       case ProcessingStage.loading: return 'Loading';

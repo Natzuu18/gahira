@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../core/error/failures.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/models/service_request_model.dart';
@@ -178,12 +179,26 @@ class ServiceRequestService {
     required String pin,
     String? remarks,
     required String currentStatus,
+    List<PlatformFile> evidencePhotos = const [],
   }) async {
     // 1. Verify PIN
     final pinValid = await _repository.verifyUserPin(operatorId, pin);
     if (pinValid.isLeft()) return Left((pinValid as Left<Failure, bool>).value);
     if (!(pinValid as Right<Failure, bool>).value) {
       return const Left(ValidationFailure('Incorrect PIN'));
+    }
+
+    var verificationPhotoUrls = <String>[];
+    if (evidencePhotos.isNotEmpty) {
+      final uploadResult = await _repository.uploadRequestPhotos(evidencePhotos);
+      final uploadFailure = uploadResult.fold<Failure?>(
+        (failure) => failure,
+        (urls) {
+          verificationPhotoUrls = urls;
+          return null;
+        },
+      );
+      if (uploadFailure != null) return Left(uploadFailure);
     }
 
     const newStatus = ServiceRequestStatus.verified;
@@ -213,6 +228,7 @@ class ServiceRequestService {
       isAccurate: isAccurate,
       processingEstimate: estimatedTime,
       notes: remarks,
+      verificationPhotoUrls: verificationPhotoUrls,
     );
 
     // 4. Log Audit Trail
@@ -706,6 +722,7 @@ class ServiceRequestService {
     required String operatorId,
     required int inputSacks,
     required int outputSacks,
+    bool skippedSacking = false,
   }) async {
     final batchResult = await _repository.createSackingBatch(
       requestId: requestId,
@@ -745,10 +762,12 @@ class ServiceRequestService {
         await _repository.logAuditTrail(
           requestId: requestId,
           userId: operatorId,
-          action: 'COMPLETE_SACKING_BATCH',
+          action: skippedSacking ? 'SKIP_SACKING_BATCH' : 'COMPLETE_SACKING_BATCH',
           previousStatus: _enumName(ServiceRequestStatus.processing),
           newStatus: _enumName(ServiceRequestStatus.processing),
-          remarks: 'Sacked $inputSacks miner sacks into $outputSacks resacked sacks',
+          remarks: skippedSacking
+              ? 'Skipped rebagging for $inputSacks miner sacks; kept all $outputSacks sacks unchanged for milling.'
+              : 'Sacked $inputSacks miner sacks into $outputSacks resacked sacks',
         );
 
         return const Right(null);

@@ -238,6 +238,7 @@ class OperatorVerification extends Equatable {
   final bool isAccurate;
   final String? notes; // correction_notes
   final String? processingEstimate;
+  final List<String> photoUrls;
 
   const OperatorVerification({
     required this.id,
@@ -250,6 +251,7 @@ class OperatorVerification extends Equatable {
     required this.isAccurate,
     this.notes,
     this.processingEstimate,
+    this.photoUrls = const [],
   });
 
   @override
@@ -264,6 +266,7 @@ class OperatorVerification extends Equatable {
     isAccurate,
     notes,
     processingEstimate,
+    photoUrls,
   ];
 }
 

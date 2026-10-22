@@ -148,7 +148,7 @@ class AdminDrawer extends StatelessWidget {
                     _buildExpansionTile(
                       context,
                       icon: Icons.people_outline,
-                      label: 'Miners and Clients',
+                      label: 'User Directory',
                       menus: [
                         AdminMenu.minerList,
                         AdminMenu.registrationRequests,
@@ -160,7 +160,7 @@ class AdminDrawer extends StatelessWidget {
                         _buildSubItem(
                           context,
                           icon: Icons.list_alt_rounded,
-                          label: 'Miner and Client List',
+                          label: 'Miners and Operators',
                           menu: AdminMenu.minerList,
                           page: const MinerClientListPage(),
                         ),

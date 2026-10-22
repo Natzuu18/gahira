@@ -289,13 +289,13 @@ class _OperatorEmergencyStopFabState extends State<OperatorEmergencyStopFab> {
     if (_isLoading || _activeEquipment.isEmpty) {
       return const SizedBox.shrink();
     }
-    return FloatingActionButton(
+    return FloatingActionButton.small(
       heroTag: 'operator-emergency-stop',
       tooltip: 'Emergency stop active service equipment',
       onPressed: _isSubmitting ? null : _openStopOptions,
       backgroundColor: Colors.redAccent,
       foregroundColor: Colors.white,
-      child: const Icon(Icons.emergency_rounded),
+      child: const Icon(Icons.warning_rounded, size: 22),
     );
   }
 }

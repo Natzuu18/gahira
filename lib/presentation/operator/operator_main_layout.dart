@@ -106,8 +106,8 @@ class _OperatorMainLayoutState extends State<OperatorMainLayout> {
     return Scaffold(
       body: IndexedStack(index: _pageIndex, children: pages),
       bottomNavigationBar: _buildNavigationBar(),
-      floatingActionButton: AnimatedSlide(
-        offset: _pageIndex == 1 ? const Offset(0, -1.35) : Offset.zero,
+      floatingActionButton: AnimatedPadding(
+        padding: EdgeInsets.only(bottom: _pageIndex == 1 ? 76 : 0),
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeInOut,
         child: const OperatorEmergencyStopFab(),

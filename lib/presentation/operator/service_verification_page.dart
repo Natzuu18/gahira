@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -407,24 +408,31 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   ),
                   child: Icon(icon, color: color, size: 22),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                if (count > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          color.withValues(alpha: 0.2),
+                          color.withValues(alpha: 0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: color.withValues(alpha: 0.25)),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -587,15 +595,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     child: Row(
                       children: [
                         _serviceRequestFilterChip(
-                          label: 'All',
-                          icon: Icons.list_alt_rounded,
-                          count: requestFilterItems.length,
-                          filter: _ServiceRequestFilter.all,
-                          selectedFilter: selectedFilter,
-                          onSelected: selectFilterAndRefresh,
-                        ),
-                        const SizedBox(width: 8),
-                        _serviceRequestFilterChip(
                           label: 'To Verify',
                           icon: Icons.fact_check_outlined,
                           count: _filterServiceRequests(
@@ -715,12 +714,28 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       case _ServiceRequestFilter.scheduledToday:
         return requests
             .where((request) =>
-                request.status == ServiceRequestStatus.scheduled)
+                request.status == ServiceRequestStatus.scheduled &&
+                _isScheduledForToday(request))
             .toList();
       case _ServiceRequestFilter.all:
         return requests;
     }
   }
+
+  bool _isScheduledForToday(ServiceRequestEntity request) {
+    final scheduledDate = request.processingDetails.scheduledDate?.toLocal();
+    if (scheduledDate == null) return false;
+    final today = DateTime.now();
+    return scheduledDate.year == today.year &&
+        scheduledDate.month == today.month &&
+        scheduledDate.day == today.day;
+  }
+
+  bool get _hasScheduledServicesToday => _requests.any(
+    (request) =>
+        request.status == ServiceRequestStatus.scheduled &&
+        _isScheduledForToday(request),
+  );
 
   List<ServiceRequestEntity> _getServiceRequestItems() {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
@@ -808,28 +823,47 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             ),
             showCheckmark: false,
           ),
-          Positioned(
-            top: -5,
-            right: -5,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: isSelected ? kBlack : kGold,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: context.surfaceColor, width: 1.5),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                '$count',
-                style: TextStyle(
-                  color: isSelected ? kGold : kBlack,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
+          if (count > 0)
+            Positioned(
+              top: -6,
+              right: -6,
+              child: AnimatedScale(
+                scale: 1,
+                duration: const Duration(milliseconds: 180),
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 25, minHeight: 25),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: const [
+                        Color(0xFF28B8D4),
+                        Color(0xFF28B88A),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: context.surfaceColor, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                      color: const Color(0xFF28B8A5).withValues(alpha: 0.32),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -930,6 +964,12 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     final isAssignedToCurrentOperator = operatorId != null &&
         request.processingDetails.assignedOperatorIds.contains(operatorId);
+    final scheduledPriorityBlocksQueue =
+        request.status == ServiceRequestStatus.queued &&
+        _hasScheduledServicesToday;
+    final canClaimService = !isAssignedToCurrentOperator &&
+        !scheduledPriorityBlocksQueue &&
+        (queueNumber != null || request.status == ServiceRequestStatus.scheduled);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1068,17 +1108,32 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 const SizedBox(height: 12),
                 _buildStatusBadge(request.status),
               ],
-              if (queueNumber != null) ...[
+              if (canClaimService || scheduledPriorityBlocksQueue) ...[
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _claimQueuedService(request),
-                    icon: const Icon(Icons.front_hand_rounded, size: 18),
-                    label: const Text('CLAIM SERVICE'),
+                  child: ElevatedButton(
+                    onPressed: canClaimService
+                        ? () => _claimQueuedService(request)
+                        : null,
+                    child: Text(
+                      scheduledPriorityBlocksQueue
+                          ? 'START TODAY’S SCHEDULED SERVICES FIRST'
+                          : 'CLAIM SERVICE',
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: kGold,
-                      foregroundColor: kBlack,
+                      backgroundColor: scheduledPriorityBlocksQueue
+                          ? Colors.grey
+                          : Colors.green,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade700,
+                      disabledForegroundColor: Colors.white,
+                      side: BorderSide(
+                        color: scheduledPriorityBlocksQueue
+                            ? Colors.grey.shade400
+                            : Colors.white,
+                        width: 1.5,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -1129,6 +1184,14 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     final isAssignedToMe = operatorId != null &&
         request.processingDetails.assignedOperatorIds.contains(operatorId);
+    final scheduledPriorityBlocksQueue =
+        request.status == ServiceRequestStatus.queued &&
+        _hasScheduledServicesToday;
+    final canClaimService = !isAssignedToMe &&
+        !scheduledPriorityBlocksQueue &&
+        (request.status == ServiceRequestStatus.queued ||
+            request.status == ServiceRequestStatus.scheduled);
+    final showClaimAction = canClaimService || scheduledPriorityBlocksQueue;
     var canScrollFurther = true;
     showModalBottomSheet(
       context: context,
@@ -1328,35 +1391,61 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   height: 56,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: context.surfaceColor,
-                      foregroundColor: kGold,
-                      side: const BorderSide(color: kGold),
+                      backgroundColor: scheduledPriorityBlocksQueue
+                          ? Colors.grey
+                          : canClaimService
+                          ? Colors.green
+                          : context.surfaceColor,
+                      foregroundColor: showClaimAction ? Colors.white : kGold,
+                      disabledBackgroundColor: Colors.grey.shade700,
+                      disabledForegroundColor: Colors.white,
+                      side: BorderSide(
+                        color: showClaimAction ? Colors.white : kGold,
+                        width: 1.5,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: isAssignedToMe
+                    onPressed: scheduledPriorityBlocksQueue
+                        ? null
+                        : canClaimService
                         ? () async {
                             Navigator.pop(context);
-                            await _openAssignedService(request);
+                            await _claimQueuedService(request);
                           }
-                        : null,
+                        : isAssignedToMe
+                            ? () async {
+                                Navigator.pop(context);
+                                await _openAssignedService(request);
+                              }
+                            : null,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          request.status == ServiceRequestStatus.processing ||
-                                  request.status ==
-                                      ServiceRequestStatus.emergencyStop
-                              ? 'CONTINUE SERVICE'
-                              : 'START SERVICE',
+                          scheduledPriorityBlocksQueue
+                              ? 'START TODAY’S SCHEDULED SERVICES FIRST'
+                              : canClaimService
+                              ? 'CLAIM SERVICE'
+                              : request.status ==
+                                          ServiceRequestStatus.processing ||
+                                      request.status ==
+                                          ServiceRequestStatus.emergencyStop
+                                  ? 'CONTINUE SERVICE'
+                                  : 'START SERVICE',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Icon(Icons.play_arrow_rounded, size: 20),
+                        Icon(
+                          showClaimAction
+                              ? Icons.assignment_turned_in_rounded
+                              : Icons.play_arrow_rounded,
+                          size: 20,
+                        ),
                       ],
                     ),
                   ),
@@ -1548,6 +1637,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     );
     final estNumController = TextEditingController(text: '3');
     final remarksController = TextEditingController();
+    final List<PlatformFile> evidencePhotos = [];
 
     // Pre-fill editable fields
     String currentCondition = request.materialDetails.condition ?? 'Rocky';
@@ -1670,6 +1760,66 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await FilePicker.platform.pickFiles(
+                      type: FileType.image,
+                      allowMultiple: true,
+                      withData: true,
+                    );
+                    if (result == null) return;
+                    setModalState(() {
+                      evidencePhotos.addAll(
+                        result.files.where((file) => file.bytes != null),
+                      );
+                    });
+                  },
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  label: Text(
+                    evidencePhotos.isEmpty
+                        ? 'Add Verification Photos'
+                        : 'Add More Photos (${evidencePhotos.length})',
+                  ),
+                ),
+                if (evidencePhotos.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 78,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: evidencePhotos.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) => Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(
+                              evidencePhotos[index].bytes!,
+                              width: 78,
+                              height: 78,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: InkWell(
+                              onTap: () => setModalState(
+                                () => evidencePhotos.removeAt(index),
+                              ),
+                              child: const CircleAvatar(
+                                radius: 11,
+                                backgroundColor: Colors.black87,
+                                child: Icon(Icons.close, size: 14, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
 
                 const Text(
@@ -1899,6 +2049,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   ),
                 ),
 
+                const SizedBox(height: 20),
                 TextFormField(
                   controller: remarksController,
                   style: TextStyle(color: context.textColor),
@@ -1940,6 +2091,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       'isAccurate': isAccurate(),
                       'time': '${estNumController.text} $timeUnit',
                       'remarks': remarksController.text,
+                      'photos': List<PlatformFile>.from(evidencePhotos),
                     }),
                     child: const Text(
                       'SUBMIT VERIFICATION',
@@ -1983,6 +2135,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             pin: pin,
             remarks: data['remarks'],
             currentStatus: request.status.name,
+            evidencePhotos: List<PlatformFile>.from(data['photos'] as List),
           );
 
           return result.fold(

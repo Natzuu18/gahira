@@ -246,9 +246,31 @@ CREATE TABLE public.operator_verified_services (
   is_accurate boolean NOT NULL DEFAULT true,
   correction_notes text,
   processing_estimate character varying,
+  verification_photo_urls text[] NOT NULL DEFAULT '{}'::text[],
   CONSTRAINT operator_verified_services_pkey PRIMARY KEY (verification_id),
   CONSTRAINT fk_verified_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
   CONSTRAINT fk_verified_operator FOREIGN KEY (operator_id) REFERENCES public.users(userId)
+);
+CREATE TABLE public.operator_verification_appeals (
+  appeal_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  service_request_id uuid NOT NULL,
+  miner_id uuid NOT NULL,
+  category text NOT NULL,
+  reason text NOT NULL,
+  appeal_date date NOT NULL DEFAULT CURRENT_DATE,
+  status text NOT NULL DEFAULT 'pending',
+  miner_decision text CHECK (miner_decision = ANY (ARRAY['continue', 'cancel'])),
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  admin_response text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT operator_verification_appeals_pkey PRIMARY KEY (appeal_id),
+  CONSTRAINT operator_verification_appeals_request_fkey FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id) ON DELETE CASCADE,
+  CONSTRAINT operator_verification_appeals_miner_fkey FOREIGN KEY (miner_id) REFERENCES public.users(userId),
+  CONSTRAINT operator_verification_appeals_reviewer_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(userId),
+  CONSTRAINT operator_verification_appeals_category_check CHECK (category = ANY (ARRAY['Incorrect sack count', 'Incorrect material condition', 'Incorrect material state', 'Incorrect source details', 'Verification photo issue', 'Other'])),
+  CONSTRAINT operator_verification_appeals_reason_check CHECK (length(trim(reason)) > 0),
+  CONSTRAINT operator_verification_appeals_status_check CHECK (status = ANY (ARRAY['pending', 'resolved', 'rejected']))
 );
 CREATE TABLE public.mill_queue (
   queue_id uuid NOT NULL DEFAULT gen_random_uuid(),

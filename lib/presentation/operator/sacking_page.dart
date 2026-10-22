@@ -36,7 +36,6 @@ class _SackingPageState extends State<SackingPage> {
   String? _selectedDrumId;
   final _inputSacksController = TextEditingController();
   final _outputSacksController = TextEditingController();
-  final _millingSacksController = TextEditingController();
   final _estDurationController = TextEditingController(text: '30');
   Timer? _refreshTimer;
   RealtimeChannel? _realtimeChannel;
@@ -64,7 +63,6 @@ class _SackingPageState extends State<SackingPage> {
     }
     _inputSacksController.dispose();
     _outputSacksController.dispose();
-    _millingSacksController.dispose();
     _estDurationController.dispose();
     super.dispose();
   }
@@ -207,6 +205,10 @@ class _SackingPageState extends State<SackingPage> {
   bool get _hasUnfinishedMilling =>
       _availableResackedSacksTotal > 0 ||
       _existingBatches.any((batch) => batch['status'] == 'milling');
+
+  bool get _hasMillingBatches => _existingBatches.any(
+    (batch) => batch['batch_kind'] == 'milling',
+  );
 
   Duration get _totalMillingDuration {
     Duration total = Duration.zero;
@@ -595,6 +597,20 @@ class _SackingPageState extends State<SackingPage> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
           ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _isSaving ? null : _handleSkipRemainingSacking,
+            icon: const Icon(Icons.skip_next_rounded),
+            label: const Text('SKIP REMAINING SACKING'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.green,
+              side: const BorderSide(color: Colors.green),
+              minimumSize: const Size(double.infinity, 48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -612,6 +628,22 @@ class _SackingPageState extends State<SackingPage> {
             _buildBatchForm()
           else
             _buildSackingCompletionAlert(),
+          if (_availableResackedSacksTotal > 0 || _hasMillingBatches) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isSaving ? null : _handleProceedToMilling,
+              icon: const Icon(Icons.arrow_forward_rounded),
+              label: const Text('GO TO MILLING'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green,
+                side: const BorderSide(color: Colors.green),
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           Text(
             'Sacking Batches',
@@ -758,6 +790,24 @@ class _SackingPageState extends State<SackingPage> {
                     ),
                   ),
                 ),
+                if (_remainingMinerSacks > 0) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _isSaving ? null : _handleReturnToSacking,
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    label: Text(
+                      'RETURN TO SACKING ($_remainingMinerSacks SACKS LEFT)',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kGold,
+                      side: BorderSide(color: kGold.withOpacity(0.7)),
+                      minimumSize: const Size(double.infinity, 46),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
                 if (_availableResackedSacksTotal > 0) ...[
                   const SizedBox(height: 18),
                   _buildMillingBatchForm(),
@@ -777,7 +827,7 @@ class _SackingPageState extends State<SackingPage> {
                       border: Border.all(color: Colors.orange.withOpacity(0.3)),
                     ),
                     child: const Text(
-                      'Milling cannot proceed until every miner sack has been recorded in a sacking batch.',
+                      'No sacks are ready to mill yet. Return to sacking and record the remaining miner sacks.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.orange),
                     ),
@@ -828,14 +878,9 @@ class _SackingPageState extends State<SackingPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Available total: $_availableResackedSacksTotal resacked sacks. Enter how many to mill in this batch.',
+            'Each milling operation processes exactly one resacked sack. '
+            'Available to mill: $_availableResackedSacksTotal.',
             style: TextStyle(color: context.mutedTextColor, fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-          _buildInput(
-            'Resacked Sacks to Mill in This Batch',
-            _millingSacksController,
-            hint: 'Maximum $_availableResackedSacksTotal',
           ),
           const SizedBox(height: 16),
           const Text(
@@ -1069,7 +1114,7 @@ class _SackingPageState extends State<SackingPage> {
     final isHalted = (isDrumEmergency || isSREmergency) && !isResolved;
 
     // Resume UI: If logically stopped (emergencyStop status) BUT physically ready (isResolved)
-    final showResumeUI = isSREmergency && isResolved;
+    final showResumeUI = isResolved && _effectiveRequest.emergencyStoppedAt != null;
 
     final createdAt = DateTime.parse(
       batch['milling_started_at']?.toString() ?? batch['created_at'].toString(),
@@ -1152,7 +1197,7 @@ class _SackingPageState extends State<SackingPage> {
                     padding: const EdgeInsets.only(top: 4.0),
                     child: Text(
                       isResolved
-                          ? 'Admin fixed the issue. You can continue.'
+                          ? 'Admin resolved the issue. Continue when ready.'
                           : 'Wait for admin to resolve.',
                       style: TextStyle(
                         color: isResolved ? Colors.orange : Colors.red,
@@ -2230,13 +2275,67 @@ class _SackingPageState extends State<SackingPage> {
     if (mounted) setState(() => _isSaving = false);
   }
 
+  Future<void> _handleSkipRemainingSacking() async {
+    if (_isSaving || _remainingMinerSacks <= 0) return;
+
+    final sacksToKeep = _remainingMinerSacks;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Skip remaining sacking?'),
+        content: Text(
+          'The remaining $sacksToKeep sacks will be marked ready for milling '
+          'without rebagging. Their sack count will stay $sacksToKeep.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('GO BACK'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('SKIP SACKING'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) return;
+    setState(() => _isSaving = true);
+
+    final result = await _service.recordSackingBatch(
+      requestId: widget.request.id,
+      operatorId: operatorId,
+      inputSacks: sacksToKeep,
+      outputSacks: sacksToKeep,
+      skippedSacking: true,
+    );
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (!mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure)),
+      );
+      setState(() => _isSaving = false);
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$sacksToKeep sacks kept unchanged and ready for milling.'),
+      ),
+    );
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
   Future<void> _handleProceedToMilling() async {
-    if (_remainingMinerSacks != 0 ||
-        _sacksProcessedSoFar != _totalSacksFromMiner ||
-        _totalResackedSacks <= 0) {
+    if (_availableResackedSacksTotal <= 0 && !_hasMillingBatches) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Complete sacking all miner sacks before milling.'),
+          content: Text('Record at least one sacking batch before milling.'),
         ),
       );
       return;
@@ -2250,7 +2349,9 @@ class _SackingPageState extends State<SackingPage> {
       newStatus: ServiceRequestStatus.processing,
       currentStatus: _effectiveRequest.status.name,
       newStage: ProcessingStage.millingCrushing,
-      remarks: 'All miner sacks resacked; milling phase started.',
+      remarks: _remainingMinerSacks > 0
+          ? 'Started milling prepared sacks; $_remainingMinerSacks miner sacks remain for sacking.'
+          : 'All miner sacks are recorded; milling phase started.',
     );
     if (!mounted) return;
     final failure = result.fold<String?>((value) => value.message, (_) => null);
@@ -2265,16 +2366,40 @@ class _SackingPageState extends State<SackingPage> {
     if (mounted) setState(() => _isSaving = false);
   }
 
+  Future<void> _handleReturnToSacking() async {
+    if (_isSaving || _remainingMinerSacks <= 0) return;
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null) return;
+
+    setState(() => _isSaving = true);
+    final result = await _service.updateProcessingStatus(
+      requestId: _effectiveRequest.id,
+      operatorId: operatorId,
+      newStatus: ServiceRequestStatus.processing,
+      currentStatus: _effectiveRequest.status.name,
+      newStage: ProcessingStage.rebagging,
+      remarks: 'Returned to sacking to process the remaining miner sacks.',
+    );
+    if (!mounted) return;
+    final failure = result.fold<String?>((value) => value.message, (_) => null);
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure)),
+      );
+      setState(() => _isSaving = false);
+      return;
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
   Future<void> _handleStartMillingBatch() async {
     if (_isSaving) return;
-    final millingSacks = int.tryParse(_millingSacksController.text) ?? 0;
     final availableSacks = _availableResackedSacksTotal;
-    if (millingSacks <= 0 || millingSacks > availableSacks) {
+    if (availableSacks < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Enter a milling quantity from 1 to $availableSacks resacked sacks.',
-          ),
+        const SnackBar(
+          content: Text('No resacked sacks are available for milling.'),
         ),
       );
       return;
@@ -2313,7 +2438,7 @@ class _SackingPageState extends State<SackingPage> {
       operatorId: operatorId,
       machineId: _selectedMachineId!,
       drumId: _selectedDrumId!,
-      inputSacks: millingSacks,
+      inputSacks: 1,
       estimatedDurationMinutes: duration,
     );
     if (!mounted) return;
@@ -2327,7 +2452,6 @@ class _SackingPageState extends State<SackingPage> {
     }
     _selectedMachineId = null;
     _selectedDrumId = null;
-    _millingSacksController.clear();
     await _loadData(showLoading: false);
     if (mounted) {
       setState(() => _isSaving = false);

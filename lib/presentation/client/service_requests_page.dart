@@ -36,6 +36,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   String _selectedFilter = 'All';
   String _searchQuery = '';
   List<ServiceRequestEntity> _requests = [];
+  List<Map<String, dynamic>> _myVerificationAppeals = [];
   List<UserEntity> _availableMiners = [];
   UserEntity? _currentUser;
   bool _isLoading = true;
@@ -62,6 +63,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     }
 
     final requestsResult = await _repository.getServiceRequests();
+    final appealsResult = await _repository.getVerificationAppealsForMiner(currentUserId);
     final minersResult = await _userRepository.getMinersAndClients();
     final userResult = await _userRepository.getUserById(currentUserId);
     userResult.fold((_) => null, (user) => _currentUser = user);
@@ -78,8 +80,206 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           .toList();
 
       _availableMiners = minersResult.getOrElse(() => []);
+      _myVerificationAppeals = appealsResult.getOrElse(() => []);
       _isLoading = false;
     });
+  }
+
+  Future<void> _decideRejectedAppeal(
+    ServiceRequestEntity request, {
+    required bool continueService,
+  }) async {
+    final minerId = Supabase.instance.client.auth.currentUser?.id;
+    if (minerId == null) return;
+    final result = await _repository.decideRejectedVerificationAppeal(
+      requestId: request.id,
+      minerId: minerId,
+      continueService: continueService,
+    );
+    if (!mounted) return;
+    result.fold(
+      (failure) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure.message), backgroundColor: Colors.redAccent),
+      ),
+      (_) async {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              continueService
+                  ? 'You chose to continue the service.'
+                  : 'The service request was cancelled.',
+            ),
+          ),
+        );
+        await _loadData();
+      },
+    );
+  }
+
+  Future<void> _showVerificationAppealDialog(
+    ServiceRequestEntity request,
+  ) async {
+    const categories = [
+      'Incorrect sack count',
+      'Incorrect material condition',
+      'Incorrect material state',
+      'Incorrect source details',
+      'Verification photo issue',
+      'Other',
+    ];
+    final reasonController = TextEditingController();
+    final appealDate = DateTime.now();
+    var selectedCategory = categories.first;
+    var isSubmitting = false;
+    String? errorMessage;
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: dialogContext.surfaceColor,
+          title: Text(
+            'Appeal Verification',
+            style: TextStyle(color: dialogContext.textColor),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Appeal date: ${DateFormat('MMM dd, yyyy').format(appealDate)}',
+                  style: TextStyle(color: dialogContext.mutedTextColor),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Error category',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: categories
+                      .map((category) => DropdownMenuItem(
+                            value: category,
+                            child: Text(category),
+                          ))
+                      .toList(),
+                  onChanged: isSubmitting
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setDialogState(() => selectedCategory = value);
+                          }
+                        },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonController,
+                  minLines: 3,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason for appeal',
+                    hintText: 'Describe what is incorrect in the verification.',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    errorMessage!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final reason = reasonController.text.trim();
+                      if (reason.isEmpty) {
+                        setDialogState(
+                          () => errorMessage = 'Please enter a reason for appeal.',
+                        );
+                        return;
+                      }
+                      final minerId =
+                          Supabase.instance.client.auth.currentUser?.id;
+                      if (minerId == null) {
+                        setDialogState(
+                          () => errorMessage = 'Your session has expired. Please sign in again.',
+                        );
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                        errorMessage = null;
+                      });
+                      final result = await _repository
+                          .submitOperatorVerificationAppeal(
+                            requestId: request.id,
+                            minerId: minerId,
+                            category: selectedCategory,
+                            reason: reason,
+        appealDate: appealDate,
+                          );
+                      result.fold(
+                        (failure) {
+                          setDialogState(() {
+                            isSubmitting = false;
+                            errorMessage = failure.message;
+                          });
+                        },
+                        (_) => Navigator.pop(dialogContext, true),
+                      );
+                    },
+              icon: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send_rounded),
+              label: const Text('Submit Appeal'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final submittedReason = reasonController.text.trim();
+    reasonController.dispose();
+
+    if (submitted == true && mounted) {
+      setState(() {
+        _myVerificationAppeals.insert(0, {
+          'service_request_id': request.id,
+          'category': selectedCategory,
+          'reason': submittedReason,
+          'appeal_date': DateFormat('yyyy-MM-dd').format(appealDate),
+          'status': 'pending',
+          'miner_decision': null,
+        });
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Appeal submitted on ${DateFormat('MMM dd, yyyy').format(appealDate)}.',
+          ),
+          backgroundColor: Colors.teal,
+        ),
+      );
+    }
   }
 
   String _getStatusLabel(ServiceRequestStatus status) {
@@ -213,7 +413,6 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       physics: const BouncingScrollPhysics(),
                       children: [
-                        _buildFilterChip('All'),
                         _buildFilterChip('Needs Attention'),
                         _buildFilterChip('In Progress'),
                         _buildFilterChip('Completed'),
@@ -366,28 +565,40 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
-          Positioned(
-            top: -5,
-            right: -5,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: selected ? kBlack : kGold,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: context.surfaceColor, width: 1.5),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                '${_filterCount(label)}',
-                style: TextStyle(
-                  color: selected ? kGold : kBlack,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
+          if (_filterCount(label) > 0)
+            Positioned(
+              top: -6,
+              right: -6,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 25, minHeight: 25),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF28B8D4), Color(0xFF28B88A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: context.surfaceColor, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF28B8A5).withValues(alpha: 0.32),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${_filterCount(label)}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -572,6 +783,14 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   }
 
   Widget _buildRequestCard(ServiceRequestEntity request) {
+    final requestAppeals = _myVerificationAppeals
+        .where((appeal) => appeal['service_request_id']?.toString() == request.id)
+        .toList();
+    final latestAppeal = requestAppeals.isEmpty ? null : requestAppeals.first;
+    final appealDecisionRequired = latestAppeal != null &&
+        latestAppeal['status'] == 'rejected' &&
+        latestAppeal['miner_decision'] == null;
+    final appealPending = latestAppeal?['status'] == 'pending';
     final bool isActionRequired =
         request.status == ServiceRequestStatus.returnedToMiner;
     final bool isProcessingDone =
@@ -684,6 +903,153 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           children: [
             const Divider(height: 32),
+            if (request.materialDetails.verifications.isNotEmpty &&
+                request.status != ServiceRequestStatus.pendingOperatorVerification &&
+                request.status != ServiceRequestStatus.returnedToMiner)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.verified_rounded, color: Colors.teal),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'An operator verified this request. Review the verified details and photos below.',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (request.materialDetails.verifications.isNotEmpty &&
+                {
+                  ServiceRequestStatus.verified,
+                  ServiceRequestStatus.accepted,
+                  ServiceRequestStatus.queued,
+                  ServiceRequestStatus.scheduled,
+                  ServiceRequestStatus.assigned,
+                }.contains(request.status))
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: appealPending || appealDecisionRequired
+                      ? null
+                      : () => _showVerificationAppealDialog(request),
+                  icon: Icon(
+                    appealPending
+                        ? Icons.hourglass_top_rounded
+                        : appealDecisionRequired
+                            ? Icons.pending_actions_rounded
+                            : Icons.report_gmailerrorred_rounded,
+                  ),
+                  label: Text(
+                    appealPending
+                        ? 'APPEAL SUBMITTED'
+                        : appealDecisionRequired
+                            ? 'DECISION REQUIRED'
+                            : 'APPEAL VERIFICATION',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: appealPending || appealDecisionRequired
+                        ? Colors.orange
+                        : Colors.deepOrange,
+                    side: BorderSide(
+                      color: appealPending || appealDecisionRequired
+                          ? Colors.orange
+                          : Colors.deepOrange,
+                    ),
+                  ),
+                ),
+              ),
+            if (latestAppeal != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(top: 8, bottom: 12),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: latestAppeal['status'] == 'rejected'
+                      ? Colors.red.withValues(alpha: 0.08)
+                      : Colors.teal.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Your appeal: ${latestAppeal['status'].toString().toUpperCase()} • ${latestAppeal['appeal_date']}',
+                      style: TextStyle(
+                        color: latestAppeal['status'] == 'rejected'
+                            ? Colors.redAccent
+                            : Colors.teal,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                    if ((latestAppeal['admin_response']?.toString() ?? '')
+                        .isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Admin response: ${latestAppeal['admin_response']}',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            if (appealDecisionRequired &&
+                request.status != ServiceRequestStatus.cancelled)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'The appeal was rejected. Choose whether to continue or cancel this request.',
+                      style: TextStyle(color: context.textColor, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => _decideRejectedAppeal(
+                            request,
+                            continueService: false,
+                          ),
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('Cancel Request'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                          ),
+                        ),
+                        FilledButton.icon(
+                          onPressed: () => _decideRejectedAppeal(
+                            request,
+                            continueService: true,
+                          ),
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: const Text('Continue Service'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             if (request.emergencyStoppedAt != null) ...[
               _buildSectionHeader('Emergency Stop'),
               if (request.emergencyReason != null &&
@@ -764,6 +1130,48 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 'Photos',
                 '${request.materialDetails.photoUrls.length} Attached',
               ),
+            if (request.materialDetails.verifications.isNotEmpty &&
+                request.materialDetails.verifications.last.photoUrls.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildSectionHeader('Operator Verification Photos'),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 92,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: request
+                      .materialDetails.verifications.last.photoUrls.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final url = request
+                        .materialDetails.verifications.last.photoUrls[index];
+                    return InkWell(
+                      onTap: () => showDialog<void>(
+                        context: context,
+                        builder: (context) => Dialog(
+                          child: InteractiveViewer(
+                            child: Image.network(url),
+                          ),
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          url,
+                          width: 110,
+                          height: 92,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const SizedBox(
+                            width: 110,
+                            child: Center(child: Icon(Icons.broken_image_outlined)),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
             if (request.participatingMinerIds.length > 1)
               _buildParticipantsDropdown(request.participatingMinerIds),
             if (request.materialDetails.numberOfSacks != null)

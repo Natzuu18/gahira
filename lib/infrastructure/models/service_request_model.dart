@@ -59,6 +59,10 @@ class ServiceRequestModel extends ServiceRequestEntity {
             isAccurate: v['is_accurate'] ?? true,
             notes: v['correction_notes'],
             processingEstimate: v['processing_estimate'],
+            photoUrls: (v['verification_photo_urls'] as List<dynamic>?)
+                    ?.map((url) => url.toString())
+                    .toList() ??
+                const [],
           ),
         );
       }

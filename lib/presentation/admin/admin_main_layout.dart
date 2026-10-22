@@ -52,7 +52,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
           CurvedNavItem(
             icon: Icons.people_outline_rounded,
             selectedIcon: Icons.people_alt_rounded,
-            label: 'Miners',
+            label: 'Users',
             activeColor: Colors.tealAccent.shade400,
           ),
           const CurvedNavItem(

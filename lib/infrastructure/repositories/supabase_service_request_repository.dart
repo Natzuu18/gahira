@@ -110,6 +110,9 @@ class SupabaseServiceRequestRepository {
     required String operatorId,
   }) async {
     try {
+      final appealHold = await _getAppealOperationHold(requestId);
+      if (appealHold != null) return Left(ServerFailure(appealHold));
+
       final operator = await _client
           .from('users')
           .select('status, role:role_id!inner(role)')
@@ -146,6 +149,39 @@ class SupabaseServiceRequestRepository {
         );
       }
 
+      if (requestStatus == 'queued') {
+        final now = DateTime.now();
+        final todayStart = DateTime(now.year, now.month, now.day);
+        final tomorrowStart = todayStart.add(const Duration(days: 1));
+        final scheduledQueueRows = await _client
+            .from('mill_queue')
+            .select('service_request_id')
+            .eq('queue_type', 'scheduled')
+            .gte('scheduled_at', todayStart.toUtc().toIso8601String())
+            .lt('scheduled_at', tomorrowStart.toUtc().toIso8601String());
+        final scheduledRequestIds = (scheduledQueueRows as List)
+            .map((row) => row['service_request_id'].toString())
+            .toSet()
+            .toList();
+
+        if (scheduledRequestIds.isNotEmpty) {
+          final scheduledRequest = await _client
+              .from('service_requests')
+              .select('service_request_id')
+              .inFilter('service_request_id', scheduledRequestIds)
+              .eq('status', 'scheduled')
+              .limit(1)
+              .maybeSingle();
+          if (scheduledRequest != null) {
+            return Left(
+              ServerFailure(
+                'Start today’s scheduled services before claiming queued services.',
+              ),
+            );
+          }
+        }
+      }
+
       final rawAssignments = request['ongoing_services'];
       final currentAssignments = rawAssignments is List
           ? rawAssignments
@@ -158,24 +194,19 @@ class SupabaseServiceRequestRepository {
         );
       }
 
-      final machines = await _client
-          .from('machines')
-          .select('status, drums(status)');
-      final hasAvailableEquipment = (machines as List).any((machine) {
-        if (machine is! Map ||
-            machine['status']?.toString().toLowerCase() != 'available') {
-          return false;
-        }
-        final drums = machine['drums'];
-        return drums is List && drums.any(
-          (drum) => drum is Map &&
-              drum['status']?.toString().toLowerCase() == 'available',
-        );
-      });
-      if (!hasAvailableEquipment) {
+      // A machine may be busy while one of its drums is still free. Claiming
+      // another queued service is allowed whenever at least one drum is free;
+      // equipment is selected when the operator starts processing it.
+      final availableDrum = await _client
+          .from('drums')
+          .select('drum_id')
+          .ilike('status', 'available')
+          .limit(1)
+          .maybeSingle();
+      if (availableDrum == null) {
         return Left(
           ServerFailure(
-            'No available machine with an available drum. Please try again when equipment is available.',
+            'No drums are currently available. Please try again when a drum is available.',
           ),
         );
       }
@@ -259,6 +290,12 @@ class SupabaseServiceRequestRepository {
     Map<String, dynamic>? additionalData,
   }) async {
     try {
+      if ({'processing', 'processingCompleted', 'goldHandoff', 'partiallyPaid', 'completed'}
+          .contains(status)) {
+        final hold = await _getAppealOperationHold(requestId);
+        if (hold != null) return Left(ServerFailure(hold));
+      }
+
       final updates = {
         'status': status,
         'updated_at': DateTime.now().toIso8601String(),
@@ -302,6 +339,9 @@ class SupabaseServiceRequestRepository {
     required String operatorId,
   }) async {
     try {
+      final hold = await _getAppealOperationHold(requestId);
+      if (hold != null) return Left(ServerFailure(hold));
+
       final existing = await _client
           .from('ongoing_services')
           .select('operator_id')
@@ -331,6 +371,67 @@ class SupabaseServiceRequestRepository {
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<String?> _getAppealOperationHold(String requestId) async {
+    final appeal = await _client
+        .from('operator_verification_appeals')
+        .select('status, miner_decision')
+        .eq('service_request_id', requestId)
+        .or('status.eq.pending,and(status.eq.rejected,miner_decision.is.null)')
+        .limit(1)
+        .maybeSingle();
+    if (appeal == null) return null;
+    if (appeal['status'] == 'pending') {
+      return 'This service is on hold while the admin reviews the miner appeal.';
+    }
+    return 'The miner must choose to continue or cancel this service after the appeal was rejected.';
+  }
+
+  Future<Either<Failure, void>> decideRejectedVerificationAppeal({
+    required String requestId,
+    required String minerId,
+    required bool continueService,
+  }) async {
+    try {
+      final appeal = await _client
+          .from('operator_verification_appeals')
+          .select('appeal_id')
+          .eq('service_request_id', requestId)
+          .eq('miner_id', minerId)
+          .eq('status', 'rejected')
+          .isFilter('miner_decision', null)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (appeal == null) {
+        return const Left(
+          ServerFailure('There is no rejected appeal awaiting your decision.'),
+        );
+      }
+
+      if (!continueService) {
+        final cancelResult = await updateRequestStatus(
+          requestId: requestId,
+          status: 'cancelled',
+          userId: minerId,
+        );
+        final failure = cancelResult.fold<Failure?>(
+          (error) => error,
+          (_) => null,
+        );
+        if (failure != null) return Left(failure);
+      }
+
+      await _client
+          .from('operator_verification_appeals')
+          .update({'miner_decision': continueService ? 'continue' : 'cancel'})
+          .eq('appeal_id', appeal['appeal_id'].toString())
+          .eq('status', 'rejected');
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not save your appeal decision: $e'));
     }
   }
 
@@ -464,6 +565,9 @@ class SupabaseServiceRequestRepository {
     required int estimatedDurationMinutes,
   }) async {
     try {
+      final appealHold = await _getAppealOperationHold(requestId);
+      if (appealHold != null) return Left(ServerFailure(appealHold));
+
       final requestBatches = await _client
           .from('milling_batches')
           .select('batch_kind, input_sacks, output_sacks')
@@ -592,14 +696,13 @@ class SupabaseServiceRequestRepository {
     try {
       final now = DateTime.now().toUtc().toIso8601String();
 
-      // Persist the request emergency first. Equipment lookups can fail
-      // independently, but the admin monitor must still receive the stop.
+      // Persist the request emergency details while keeping the service itself
+      // processing. The selected drum or machine determines which batches pause.
       if (requestId != null) {
         final scope = stopEntireMachine ? 'MACHINE FAILURE' : 'DRUM FAILURE';
         await _client
             .from('service_requests')
             .update({
-              'status': 'emergencyStop',
               'emergency_reason': '$scope: $reason',
               'emergency_evidence_url': evidenceUrl,
               'emergency_stopped_at': now,
@@ -645,15 +748,16 @@ class SupabaseServiceRequestRepository {
               .toSet()
               .toList();
 
-          // 4. Update all these service requests to emergencyStop
+          // Keep affected services processing. Equipment status pauses only
+          // batches running on this machine, leaving other machines running.
           if (requestIds.isNotEmpty) {
             await _client
                 .from('service_requests')
                 .update({
-                  'status': 'emergencyStop',
                   'emergency_reason': 'MACHINE FAILURE: $reason',
                   'emergency_evidence_url': evidenceUrl,
                   'emergency_stopped_at': now,
+                  'emergency_resolved_at': null,
                   'updated_at': now,
                 })
                 .filter('service_request_id', 'in', requestIds);
@@ -664,7 +768,7 @@ class SupabaseServiceRequestRepository {
                 userId: operatorId,
                 action: 'EMERGENCY_STOP_MACHINE',
                 previousStatus: 'processing',
-                newStatus: 'emergencyStop',
+                newStatus: 'processing',
                 remarks: reason,
               );
             }
@@ -691,14 +795,15 @@ class SupabaseServiceRequestRepository {
         if (batches.isNotEmpty) {
           final rid = batches.first['service_request_id'].toString();
 
-          // 3. Update the specific service request
+          // Keep the service processing; the stopped drum pauses only its own
+          // milling batch.
           await _client
               .from('service_requests')
               .update({
-                'status': 'emergencyStop',
                 'emergency_reason': 'DRUM FAILURE: $reason',
                 'emergency_evidence_url': evidenceUrl,
                 'emergency_stopped_at': now,
+                'emergency_resolved_at': null,
                 'updated_at': now,
               })
               .eq('service_request_id', rid);
@@ -709,7 +814,7 @@ class SupabaseServiceRequestRepository {
             userId: operatorId,
             action: 'EMERGENCY_STOP_DRUM',
             previousStatus: 'processing',
-            newStatus: 'emergencyStop',
+            newStatus: 'processing',
             remarks: reason,
           );
         }
@@ -1006,6 +1111,7 @@ class SupabaseServiceRequestRepository {
     required bool isAccurate,
     required String processingEstimate,
     String? notes,
+    List<String> verificationPhotoUrls = const [],
   }) async {
     try {
       await _client.from('operator_verified_services').insert({
@@ -1018,11 +1124,145 @@ class SupabaseServiceRequestRepository {
         'is_accurate': isAccurate,
         'processing_estimate': processingEstimate,
         'correction_notes': notes,
+        'verification_photo_urls': verificationPhotoUrls,
         'verified_at': DateTime.now().toIso8601String(),
       });
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  Future<Either<Failure, void>> submitOperatorVerificationAppeal({
+    required String requestId,
+    required String minerId,
+    required String category,
+    required String reason,
+    required DateTime appealDate,
+  }) async {
+    try {
+      final pending = await _client
+          .from('operator_verification_appeals')
+          .select('appeal_id')
+          .eq('service_request_id', requestId)
+          .eq('miner_id', minerId)
+          .eq('status', 'pending')
+          .maybeSingle();
+      if (pending != null) {
+        return const Left(
+          ServerFailure('You already have a pending appeal for this request.'),
+        );
+      }
+
+      await _client.from('operator_verification_appeals').insert({
+        'service_request_id': requestId,
+        'miner_id': minerId,
+        'category': category,
+        'reason': reason,
+        'appeal_date':
+            '${appealDate.year.toString().padLeft(4, '0')}-'
+            '${appealDate.month.toString().padLeft(2, '0')}-'
+            '${appealDate.day.toString().padLeft(2, '0')}',
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not submit appeal: $e'));
+    }
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>>
+  getOperatorVerificationAppeals() async {
+    try {
+      final response = await _client
+          .from('operator_verification_appeals')
+          .select(
+            '*, users:miner_id(fname, lname), '
+            'service_requests!inner(service_type)',
+          )
+          .order('created_at', ascending: false);
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(ServerFailure('Could not load verification appeals: $e'));
+    }
+  }
+
+  Future<Either<Failure, Set<String>>> getPendingAppealRequestIds(
+    String minerId,
+  ) async {
+    try {
+      final response = await _client
+          .from('operator_verification_appeals')
+          .select('service_request_id')
+          .eq('miner_id', minerId)
+          .eq('status', 'pending');
+      return Right(
+        (response as List)
+            .map((row) => row['service_request_id'].toString())
+            .toSet(),
+      );
+    } catch (e) {
+      return Left(ServerFailure('Could not load your pending appeals: $e'));
+    }
+  }
+
+  Future<Either<Failure, List<Map<String, dynamic>>>>
+  getVerificationAppealsForMiner(String minerId) async {
+    try {
+      final response = await _client
+          .from('operator_verification_appeals')
+          .select(
+            'appeal_id, service_request_id, category, reason, appeal_date, '
+            'status, admin_response, miner_decision, created_at',
+          )
+          .eq('miner_id', minerId)
+          .order('created_at', ascending: false);
+      return Right(List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      return Left(ServerFailure('Could not load your appeals: $e'));
+    }
+  }
+
+  Future<Either<Failure, void>> reviewOperatorVerificationAppeal({
+    required String appealId,
+    required String requestId,
+    required String adminId,
+    required String verificationId,
+    required bool resolve,
+    int? actualSacks,
+    String? condition,
+    String? state,
+    String? source,
+    String? processingEstimate,
+    String? adminResponse,
+  }) async {
+    try {
+      if (resolve) {
+        await _client
+            .from('operator_verified_services')
+            .update({
+              'actual_sacks': actualSacks,
+              'condition': condition,
+              'state': state,
+              'source': source,
+              'processing_estimate': processingEstimate,
+            })
+            .eq('verification_id', verificationId)
+            .eq('service_request_id', requestId);
+      }
+
+      await _client
+          .from('operator_verification_appeals')
+          .update({
+            'status': resolve ? 'resolved' : 'rejected',
+            'reviewed_by': adminId,
+            'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+            'admin_response': adminResponse,
+          })
+          .eq('appeal_id', appealId)
+          .eq('status', 'pending');
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Could not finish appeal review: $e'));
     }
   }
 
@@ -1148,93 +1388,142 @@ class SupabaseServiceRequestRepository {
   }) async {
     try {
       final now = DateTime.now().toUtc().toIso8601String();
-
-      // 1. Get the current request to check reason and find equipment
       final srRes = await _client
           .from('service_requests')
-          .select('*')
+          .select('emergency_reason, emergency_stopped_at')
           .eq('service_request_id', requestId)
           .single();
       final reason = srRes['emergency_reason']?.toString() ?? '';
-      var isMachineFailure = reason.contains('MACHINE FAILURE:');
+      final batchesRes = await getMillingBatches(requestId);
+      final batches = batchesRes.getOrElse(() => <Map<String, dynamic>>[]);
+      final activeBatches = batches
+          .where((batch) => batch['status'] == 'milling')
+          .toList();
+      final stoppedBatches = activeBatches.where((batch) {
+        final drumStopped =
+            batch['drums']?['status']?.toString().toLowerCase() ==
+            'emergency_stop';
+        final machineStopped =
+            batch['machines']?['status']?.toString().toLowerCase() ==
+            'emergency_stop';
+        return drumStopped || machineStopped;
+      }).toList();
+      final machineFailure = reason.startsWith('MACHINE FAILURE:') ||
+          stoppedBatches.any(
+            (batch) =>
+                batch['machines']?['status']?.toString().toLowerCase() ==
+                'emergency_stop',
+          );
 
-      // 2. Resolve the SR
+      final affectedBatches = <Map<String, dynamic>>[];
+      final affectedRequestIds = <String>{requestId};
+      if (machineFailure && stoppedBatches.isNotEmpty) {
+        final machineId = stoppedBatches
+            .firstWhere(
+              (batch) => batch['machine_id'] != null,
+              orElse: () => stoppedBatches.first,
+            )['machine_id']
+            ?.toString();
+        if (machineId != null) {
+          final drumRows = await _client
+              .from('drums')
+              .select('drum_id')
+              .eq('machine_id', machineId);
+          final drumIds = (drumRows as List)
+              .map((row) => row['drum_id'].toString())
+              .toList();
+          if (drumIds.isNotEmpty) {
+            final batchRows = await _client
+                .from('milling_batches')
+                .select('batch_id, service_request_id, milling_started_at, created_at')
+                .filter('drum_id', 'in', drumIds)
+                .eq('status', 'milling');
+            affectedBatches.addAll(
+              (batchRows as List).cast<Map<String, dynamic>>(),
+            );
+            affectedRequestIds.addAll(
+              affectedBatches
+                  .map((batch) => batch['service_request_id'].toString()),
+            );
+          }
+          await _client
+              .from('machines')
+              .update({'status': 'in_use'})
+              .eq('machine_id', machineId);
+          await _client
+              .from('drums')
+              .update({'status': 'in_use'})
+              .eq('machine_id', machineId);
+        }
+      } else if (stoppedBatches.isNotEmpty) {
+        affectedBatches.addAll(stoppedBatches);
+        final drumIds = stoppedBatches
+            .map((batch) => batch['drum_id']?.toString())
+            .whereType<String>()
+            .toSet()
+            .toList();
+        final machineIds = stoppedBatches
+            .map((batch) => batch['machine_id']?.toString())
+            .whereType<String>()
+            .toSet()
+            .toList();
+        if (drumIds.isNotEmpty) {
+          await _client
+              .from('drums')
+              .update({'status': 'in_use'})
+              .inFilter('drum_id', drumIds);
+        }
+        for (final machineId in machineIds) {
+          await _client
+              .from('machines')
+              .update({'status': 'in_use'})
+              .eq('machine_id', machineId);
+        }
+      }
+
+      final requestRows = await _client
+          .from('service_requests')
+          .select('service_request_id, emergency_stopped_at')
+          .inFilter('service_request_id', affectedRequestIds.toList());
+      final stoppedAtByRequest = <String, DateTime>{};
+      for (final row in requestRows as List) {
+        final stoppedAt = row['emergency_stopped_at']?.toString();
+        if (stoppedAt != null) {
+          stoppedAtByRequest[row['service_request_id'].toString()] =
+              DateTime.parse(stoppedAt).toUtc();
+        }
+      }
+
+      for (final batch in affectedBatches) {
+        final batchRequestId = batch['service_request_id'].toString();
+        final stoppedAt = stoppedAtByRequest[batchRequestId];
+        if (stoppedAt == null) continue;
+        final pausedFor = DateTime.now().toUtc().difference(stoppedAt);
+        if (pausedFor <= Duration.zero) continue;
+        final startValue =
+            batch['milling_started_at']?.toString() ??
+            batch['created_at'].toString();
+        final shiftedStart = DateTime.parse(startValue)
+            .toUtc()
+            .add(pausedFor)
+            .toIso8601String();
+        await _client
+            .from('milling_batches')
+            .update({'milling_started_at': shiftedStart})
+            .eq('batch_id', batch['batch_id']);
+      }
+
       await _client
           .from('service_requests')
           .update({'emergency_resolved_at': now, 'updated_at': now})
-          .eq('service_request_id', requestId);
-
-      // 3. Reset Equipment
-      final batchesRes = await getMillingBatches(requestId);
-      await batchesRes.fold((_) async {}, (batches) async {
-        final active = batches.where((b) => b['status'] == 'milling').toList();
-        if (active.isNotEmpty) {
-          final drumId = active.first['drum_id'];
-          final machineId = active.first['machine_id'];
-          isMachineFailure = isMachineFailure ||
-              active.first['machines']?['status']
-                      ?.toString()
-                      .toLowerCase() ==
-                  'emergency_stop';
-
-          if (isMachineFailure && machineId != null) {
-            // Reset entire machine and all its drums
-            await _client
-                .from('machines')
-                .update({'status': 'in_use'})
-                .eq('machine_id', machineId);
-            await _client
-                .from('drums')
-                .update({'status': 'in_use'})
-                .eq('machine_id', machineId);
-
-            // Also mark other SRs on this machine as resolved
-            final drumsOfMachine = await _client
-                .from('drums')
-                .select('drum_id')
-                .eq('machine_id', machineId);
-            final dIds = (drumsOfMachine as List)
-                .map((d) => d['drum_id'].toString())
-                .toList();
-
-            final otherBatches = await _client
-                .from('milling_batches')
-                .select('service_request_id')
-                .filter('drum_id', 'in', dIds)
-                .eq('status', 'milling');
-            final otherSrs = (otherBatches as List)
-                .map((b) => b['service_request_id'].toString())
-                .toSet()
-                .toList();
-
-            if (otherSrs.isNotEmpty) {
-              await _client
-                  .from('service_requests')
-                  .update({'emergency_resolved_at': now})
-                  .filter('service_request_id', 'in', otherSrs);
-            }
-          } else {
-            // Reset only this specific drum
-            await _client
-                .from('drums')
-                .update({'status': 'in_use'})
-                .eq('drum_id', drumId);
-            if (machineId != null) {
-              await _client
-                  .from('machines')
-                  .update({'status': 'in_use'})
-                  .eq('machine_id', machineId);
-            }
-          }
-        }
-      });
+          .inFilter('service_request_id', affectedRequestIds.toList());
 
       await logAuditTrail(
         requestId: requestId,
         userId: adminId,
         action: 'EMERGENCY_RESOLVED',
-        previousStatus: 'emergencyStop',
-        newStatus: 'emergencyStop',
+        previousStatus: 'processing',
+        newStatus: 'processing',
         remarks: 'Admin resolved issue. Systems restored.',
       );
 
@@ -1252,11 +1541,14 @@ class SupabaseServiceRequestRepository {
       final now = DateTime.now().toUtc();
       final request = await _client
           .from('service_requests')
-          .select('emergency_stopped_at')
+          .select('emergency_stopped_at, emergency_resolved_at')
           .eq('service_request_id', requestId)
           .maybeSingle();
       final stoppedAtValue = request?['emergency_stopped_at']?.toString();
-      if (stoppedAtValue != null) {
+      final alreadyResolved = request?['emergency_resolved_at'] != null;
+      // The admin resolution already accounts for the paused time. Only apply
+      // this fallback adjustment when resuming an older, unresolved stop.
+      if (stoppedAtValue != null && !alreadyResolved) {
         final stoppedAt = DateTime.parse(stoppedAtValue).toUtc();
         final pausedFor = now.difference(stoppedAt);
         if (!pausedFor.isNegative && pausedFor > Duration.zero) {

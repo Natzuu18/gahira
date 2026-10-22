@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/service_request_entity.dart';
+import '../../infrastructure/models/service_request_model.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../admin/emergency_monitor_page.dart';
 import 'monitoring_page.dart';
@@ -44,24 +45,53 @@ class _EmergencyAlertBannerState extends State<EmergencyAlertBanner> {
 
   Future<void> _checkEmergencies() async {
     final result = await _repository.getServiceRequests();
-    result.fold((_) => null, (list) {
-      final emergencies = list
-          .where((r) => r.status == ServiceRequestStatus.emergencyStop)
-          .toList();
-
-      if (mounted) {
-        setState(() {
-          _emergencyRequests = emergencies;
-          if (emergencies.isNotEmpty && !_soundPlayed) {
-            _playEmergencySound();
-            _soundPlayed = true;
-          } else if (emergencies.isEmpty) {
-            _soundPlayed = false;
-            _audioPlayer.stop();
-          }
-        });
+    final requests = result.getOrElse(() => <ServiceRequestModel>[]);
+    final activeBatchesResult = await _repository.getActiveMillingBatches();
+    final stoppedRequestIds = <String>{};
+    activeBatchesResult.fold((_) {}, (batches) {
+      for (final batch in batches) {
+        final drumStopped =
+            batch['drums']?['status']?.toString().toLowerCase() ==
+            'emergency_stop';
+        final machineStopped =
+            batch['machines']?['status']?.toString().toLowerCase() ==
+            'emergency_stop';
+        if ((drumStopped || machineStopped) &&
+            batch['service_request_id'] != null) {
+          stoppedRequestIds.add(batch['service_request_id'].toString());
+        }
       }
     });
+    final emergencies = requests.where((request) {
+      return request.status == ServiceRequestStatus.emergencyStop ||
+          (request.status == ServiceRequestStatus.processing &&
+              stoppedRequestIds.contains(request.id));
+    }).toList();
+    final activeEmergencies = emergencies.where((request) {
+      return request.emergencyResolvedAt == null ||
+          stoppedRequestIds.contains(request.id);
+    }).toList();
+    emergencies.sort((a, b) {
+      final aResolved = a.emergencyResolvedAt != null;
+      final bResolved = b.emergencyResolvedAt != null;
+      if (aResolved != bResolved) return aResolved ? 1 : -1;
+      return (b.emergencyStoppedAt ?? DateTime(0)).compareTo(
+        a.emergencyStoppedAt ?? DateTime(0),
+      );
+    });
+
+    if (mounted) {
+      setState(() {
+        _emergencyRequests = emergencies;
+        if (activeEmergencies.isNotEmpty && !_soundPlayed) {
+          _playEmergencySound();
+          _soundPlayed = true;
+        } else if (activeEmergencies.isEmpty) {
+          _soundPlayed = false;
+          _audioPlayer.stop();
+        }
+      });
+    }
   }
 
   Future<void> _playEmergencySound() async {
@@ -93,7 +123,6 @@ class _EmergencyAlertBannerState extends State<EmergencyAlertBanner> {
           setState(() => _isResolving = false);
         },
         (_) {
-          _audioPlayer.stop();
           _checkEmergencies();
           setState(() {
             _isResolving = false;
@@ -155,6 +184,7 @@ class _EmergencyAlertBannerState extends State<EmergencyAlertBanner> {
                       builder: (_) => MonitoringPage(
                         request: latest,
                         title: 'EMERGENCY MONITOR',
+                        isAdmin: widget.isAdmin,
                       ),
                     ),
                   );

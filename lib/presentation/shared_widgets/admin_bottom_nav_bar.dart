@@ -40,7 +40,7 @@ Widget buildAdminBottomNavBar(BuildContext context, {int selectedIndex = 3}) {
           NavigationDestination(
             icon: Icon(Icons.people_outline_rounded, color: kGold),
             selectedIcon: Icon(Icons.people_alt_rounded, color: kGold),
-            label: 'Miners',
+            label: 'Users',
           ),
           NavigationDestination(
             icon: Icon(Icons.precision_manufacturing_outlined, color: kGold),

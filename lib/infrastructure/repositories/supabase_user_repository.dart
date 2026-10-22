@@ -76,6 +76,33 @@ class SupabaseUserRepository implements UserRepository {
     }
   }
 
+  Future<Either<Failure, List<UserEntity>>> getDirectoryUsers() async {
+    try {
+      final response = await _client
+          .from('users')
+          .select(
+            '*, role:role_id(role), mining_units:mining_unit_id(name, type), pin_hash',
+          )
+          .or('status.eq.approved,status.eq.active,status.eq.inactive')
+          .order('fname', ascending: true);
+
+      final users = (response as List)
+          .map((json) {
+            final data = Map<String, dynamic>.from(json);
+            final roleName = data['role']?['role']?.toString().toLowerCase() ?? '';
+            data['role_id'] = roleName;
+            return MapEntry(roleName, UserModel.fromJson(data));
+          })
+          .where((entry) => entry.key == 'miner' || entry.key == 'operator')
+          .map((entry) => entry.value)
+          .toList();
+
+      return Right(users);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
   Future<Either<Failure, List<UserEntity>>> getInactiveUsers() async {
     try {
       final response = await _client

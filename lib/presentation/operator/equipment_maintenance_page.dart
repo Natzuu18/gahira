@@ -559,7 +559,7 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setModalState) {
-          final availableDrums = _drums
+          final machineDrums = _drums
               .where(
                 (drum) =>
                     drum['machine_id']?.toString() == selectedMachineId,
@@ -684,8 +684,7 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
                                 (machine) => DropdownMenuItem<String>(
                                   value: machine['machine_id'].toString(),
                                   child: Text(
-                                    machine['machine_name']?.toString() ??
-                                        'Machine',
+                                    '${machine['machine_name']?.toString() ?? 'Machine'}  •  ${(machine['status'] ?? 'unknown').toString().replaceAll('_', ' ').toUpperCase()}',
                                   ),
                                 ),
                               )
@@ -707,21 +706,21 @@ class _EquipmentMaintenancePageState extends State<EquipmentMaintenancePage> {
                               prefixIcon: Icon(Icons.inventory_2_rounded),
                             ),
                             hint: Text(
-                              availableDrums.isEmpty
+                              machineDrums.isEmpty
                                   ? 'No drums for this machine'
                                   : 'Select drum',
                             ),
-                            items: availableDrums
+                            items: machineDrums
                                 .map(
                                   (drum) => DropdownMenuItem<String>(
                                     value: drum['drum_id'].toString(),
                                     child: Text(
-                                      drum['drum_name']?.toString() ?? 'Drum',
+                                      '${drum['drum_name']?.toString() ?? 'Drum'}  •  ${(drum['status'] ?? 'unknown').toString().replaceAll('_', ' ').toUpperCase()}',
                                     ),
                                   ),
                                 )
                                 .toList(),
-                            onChanged: isSubmitting || availableDrums.isEmpty
+                            onChanged: isSubmitting || machineDrums.isEmpty
                                 ? null
                                 : (id) => setModalState(
                                     () => selectedDrumId = id,

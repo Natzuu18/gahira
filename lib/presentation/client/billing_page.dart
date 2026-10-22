@@ -8,6 +8,7 @@ import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/notification_bell_button.dart';
 
 class BillingPage extends StatefulWidget {
   const BillingPage({super.key});
@@ -140,6 +141,7 @@ class _BillingPageState extends State<BillingPage> {
             ),
           ),
           actions: const [
+            NotificationBellButton(),
             ThemeToggleButton(),
             SizedBox(width: 8),
           ],
@@ -313,7 +315,7 @@ class _BillingPageState extends State<BillingPage> {
     final bool canPay = !isPaid &&
         (isGroup || request.creatorId == userId) &&
         availableToSubmit > 0;
-    final String refId = 'SR-${request.id.substring(0, 5).toUpperCase()}';
+    final refId = request.serviceReference;
 
     String statusLabel;
     if (_remainingBalance(request) <= 0) {

@@ -31,7 +31,7 @@ class _MinerMainLayoutState extends State<MinerMainLayout> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    unawaited(PushNotificationService.instance.initializeForMiner());
+    unawaited(PushNotificationService.instance.initializeForCurrentUser());
   }
 
   @override

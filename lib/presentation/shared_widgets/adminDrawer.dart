@@ -20,6 +20,7 @@ import '../admin/processing/completed_processing_page.dart';
 import '../admin/equipment/machine_page.dart';
 import '../admin/equipment/maintenance_page.dart';
 import '../admin/emergency_monitor_page.dart';
+import 'notification_inbox_page.dart';
 
 // Shared drawer menu used across every admin page.
 // Drop <AdminDrawer currentMenu: AdminMenu.xxx> into any page's
@@ -311,7 +312,7 @@ class AdminDrawer extends StatelessWidget {
                       icon: Icons.notifications_outlined,
                       label: 'Notifications',
                       menu: AdminMenu.notification,
-                      page: _PlaceholderPage(title: 'Notifications'),
+                      page: const NotificationInboxPage(),
                     ),
                     _buildItem(
                       context,
@@ -406,9 +407,13 @@ class AdminDrawer extends StatelessWidget {
       onTap: () {
         Navigator.of(context).pop(); // close drawer first
         if (!selected) {
-          Navigator.of(
-            context,
-          ).pushReplacement(MaterialPageRoute(builder: (_) => page));
+          final navigator = Navigator.of(context);
+          final route = MaterialPageRoute<void>(builder: (_) => page);
+          if (menu == AdminMenu.notification) {
+            navigator.push(route);
+          } else {
+            navigator.pushReplacement(route);
+          }
         }
       },
     );

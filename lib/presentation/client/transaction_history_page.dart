@@ -71,7 +71,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
     final List<Map<String, dynamic>> txns = [];
     for (final r in _requests) {
       final fd = r.financialDetails;
-      final refId = 'SR-${r.id.substring(0, 5).toUpperCase()}';
+      final refId = r.serviceReference;
       final bool isGroup = r.participatingMinerIds.length > 1;
       final String minerLabel = isGroup ? 'Korpo (Group)' : 'Gold Ore Processing';
 

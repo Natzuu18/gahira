@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/profile_activity_page.dart';
+import '../shared_widgets/profile_picture_editor.dart';
 import 'package:gahira/main.dart';
 
 // Gahira Ball Mill Management System - Client Profile Page
@@ -80,18 +81,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               ),
               child: Column(
                 children: [
-                  Center(
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: kGold, width: 2),
-                        color: context.bgColor,
-                      ),
-                      child: const Icon(Icons.person, color: kGold, size: 40),
-                    ),
-                  ),
+                  const ProfilePictureEditor(size: 80),
                   const SizedBox(height: 16),
                   Text(
                     'Client Name',
@@ -129,15 +119,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    label: const Text('Edit Profile'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: kGold,
-                      side: BorderSide(color: kGold.withOpacity(0.5)),
-                    ),
-                  ),
                 ],
               ),
             ),

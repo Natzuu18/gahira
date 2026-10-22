@@ -22,7 +22,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
           );
 
       print('--- FETCHING SERVICE REQUESTS ---');
@@ -51,7 +51,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
           )
           .eq('status', 'pendingOperatorVerification');
       return Right(_parseServiceRequestList(response));
@@ -66,7 +66,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services!inner(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services!inner(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
           )
           .eq('operator_verified_services.operator_id', operatorId);
       return Right(_parseServiceRequestList(response));
@@ -81,7 +81,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
           )
           .eq('ongoing_services.operator_id', operatorId)
           .inFilter('status', ['processing', 'emergencyStop']);
@@ -97,7 +97,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
           )
           .eq('ongoing_services.operator_id', operatorId)
           .inFilter('status', ['verified', 'accepted', 'queued', 'scheduled']);
@@ -843,8 +843,8 @@ class SupabaseServiceRequestRepository {
           : digits;
       final firstName = miner?['fname']?.toString().trim();
       final greeting = firstName == null || firstName.isEmpty
-          ? 'Hello'
-          : 'Hello $firstName';
+          ? 'Customer'
+          : firstName;
       final response = await http.post(
         Uri.parse(EnvConfig.philsmsEndpoint),
         headers: {
@@ -857,7 +857,7 @@ class SupabaseServiceRequestRepository {
           'sender_id': EnvConfig.philsmsSenderId,
           'type': 'plain',
           'message':
-              'EGReS: $greeting. Please proceed to the facility now to begin separation (puga) for your service request.',
+              'Dear $greeting,\nPlease proceed to the facility to begin separation (puga) for your service request.\nEmilio Gold Refinery Service Management Center (EGReS)',
         }),
       );
       Map<String, dynamic>? responseBody;
@@ -931,8 +931,8 @@ class SupabaseServiceRequestRepository {
       }
 
       final minerGreeting = minerName == null || minerName.isEmpty
-          ? 'Hello'
-          : 'Hello $minerName';
+          ? 'Customer'
+          : minerName;
       final failures = <String>[];
       if (minerPhone.isEmpty) failures.add('miner: no phone number on file');
       if (seenAdminPhones.isEmpty) {
@@ -948,8 +948,8 @@ class SupabaseServiceRequestRepository {
             ? '63$digits'
             : digits;
         final message = target.audience == 'miner'
-            ? 'EGReS: $minerGreeting. Processing for your service request is complete. Please contact the facility regarding billing and the next steps.'
-            : 'EGReS: Processing for service request ${requestId.substring(0, requestId.length < 8 ? requestId.length : 8).toUpperCase()} is complete and ready for billing.';
+            ? 'Dear $minerGreeting,\nProcessing for your service request is complete. Please contact the facility regarding billing and the next steps.\nEmilio Gold Refinery Service Management Center (EGReS)'
+            : 'Dear Administrator,\nProcessing for SR: ${requestId.substring(0, requestId.length < 8 ? requestId.length : 8).toUpperCase()} is complete and ready for billing.\nEmilio Gold Refinery Service Management Center (EGReS)';
         final response = await http.post(
           Uri.parse(EnvConfig.philsmsEndpoint),
           headers: {

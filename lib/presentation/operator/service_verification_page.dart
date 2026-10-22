@@ -1267,7 +1267,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'SERVICE ID',
+                          'SERVICE REF',
                           style: TextStyle(
                             color: context.mutedTextColor,
                             fontSize: 9,
@@ -1277,7 +1277,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         ),
                         const SizedBox(height: 2),
                         SelectableText(
-                          request.id.toUpperCase(),
+                          request.serviceReference,
                           style: TextStyle(
                             color: context.textColor,
                             fontSize: 10,

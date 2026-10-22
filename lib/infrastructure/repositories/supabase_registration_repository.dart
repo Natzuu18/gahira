@@ -204,7 +204,7 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
   }
 
   @override
-  Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber) async {
+  Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber, {String? recipientName}) async {
     String? insertedId;
     try {
       final phone = _normalizePhone(phoneNumber);
@@ -242,7 +242,7 @@ class SupabaseRegistrationRepository implements RegistrationRepository {
         body: jsonEncode({
           'recipient': phone,
           'sender_id': EnvConfig.philsmsSenderId,
-          'message': 'EGReS: $pin is your confirmation code. Valid for 5 mins.',
+          'message': 'Dear ${recipientName?.trim().isNotEmpty == true ? recipientName!.trim() : 'Customer'},\nYour confirmation code is $pin. It is valid for 5 minutes.\nEmilio Gold Refinery Service Management Center (EGReS)',
         }),
       );
 

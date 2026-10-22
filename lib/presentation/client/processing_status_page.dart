@@ -7,6 +7,7 @@ import '../../infrastructure/repositories/supabase_service_request_repository.da
 import '../../domain/entities/service_request_entity.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/notification_bell_button.dart';
 import '../shared_widgets/monitoring_page.dart';
 import '../miner/miner_drawer.dart';
 
@@ -153,6 +154,7 @@ class _ProcessingStatusPageState extends State<ProcessingStatusPage> {
         title: const Text('PROCESSING TRACKER', style: TextStyle(color: kGold, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 16)),
         iconTheme: const IconThemeData(color: kGold),
         actions: const [
+          NotificationBellButton(),
           ThemeToggleButton(),
           SizedBox(width: 8),
         ],
@@ -214,7 +216,7 @@ class _ProcessingStatusPageState extends State<ProcessingStatusPage> {
           child: Icon(isDone ? Icons.check_circle : Icons.sync, color: isDone ? Colors.green : kGold),
         ),
         title: Text(request.materialDetails.sourceType ?? 'Service Request', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
-        subtitle: Text('ID: ${request.id.substring(0, 8).toUpperCase()} • ${request.status.name}', style: const TextStyle(fontSize: 12)),
+        subtitle: Text('${request.serviceReference} • ${request.status.name}', style: const TextStyle(fontSize: 12)),
         trailing: TextButton.icon(
           onPressed: () => _openProcess(request, isDone),
           icon: Icon(isDone ? Icons.history_rounded : Icons.visibility_outlined),

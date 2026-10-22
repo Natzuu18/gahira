@@ -27,7 +27,8 @@ create table if not exists public.service_progress_notifications (
   title text not null,
   body text not null,
   data jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  read_at timestamptz
 );
 
 create index if not exists service_progress_notifications_user_created_idx

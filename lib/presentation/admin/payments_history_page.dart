@@ -239,8 +239,8 @@ class _PaymentsHistoryPageState extends State<PaymentsHistoryPage> {
               runSpacing: 8,
               children: [
                 _buildMiniInfo(
-                  'REF ID',
-                  'SR-${request.id.substring(0, 5).toUpperCase()}',
+                  'SR REFERENCE',
+                  request.serviceReference,
                 ),
                 _buildStatusChip(request.status),
                 if (fd?.paymentReceiptUrl != null)

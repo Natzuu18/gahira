@@ -164,7 +164,7 @@ class _EmergencyMonitorPageState extends State<EmergencyMonitorPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Service Ref: ${sr.id.substring(0, 8).toUpperCase()}', style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
+                    Text(sr.serviceReference, style: TextStyle(color: context.textColor, fontWeight: FontWeight.bold)),
                     Text(sr.creatorName ?? 'Miner', style: TextStyle(color: kGold, fontSize: 13, fontWeight: FontWeight.w500)),
                   ],
                 ),

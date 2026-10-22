@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/notification_bell_button.dart';
 import '../../domain/entities/service_request_entity.dart';
 import '../../infrastructure/repositories/supabase_service_request_repository.dart';
 import 'client_drawer.dart';
@@ -82,6 +83,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
         ),
         iconTheme: const IconThemeData(color: kGold),
         actions: [
+          const NotificationBellButton(),
           const ThemeToggleButton(),
           IconButton(
             icon: const Icon(Icons.menu_rounded, color: kGold),
@@ -512,11 +514,8 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
   }
 
   Widget _buildRequestActivity(ServiceRequestEntity request) {
-    final reference = request.id.length > 8
-        ? request.id.substring(0, 8).toUpperCase()
-        : request.id.toUpperCase();
     return _buildActivityLog(
-      'Request $reference: ${_statusLabel(request.status)}',
+      '${request.serviceReference} · ${_statusLabel(request.status)}',
       MaterialLocalizations.of(context).formatShortDate(request.updatedAt),
     );
   }

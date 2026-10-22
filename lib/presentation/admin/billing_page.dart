@@ -183,6 +183,10 @@ class _BillingPageState extends State<BillingPage> {
 
   Widget _buildPaymentReceiptCard(Map<String, dynamic> payment) {
     final paymentId = payment['payment_id']?.toString() ?? '';
+    final serviceRequestId = payment['service_request_id']?.toString() ?? '';
+    final serviceReference = serviceRequestId.isEmpty
+        ? 'SR: N/A'
+        : 'SR: ${serviceRequestId.substring(0, serviceRequestId.length < 8 ? serviceRequestId.length : 8).toUpperCase()}';
     final user = payment['users'] is Map
         ? payment['users'] as Map
         : const <String, dynamic>{};
@@ -227,7 +231,7 @@ class _BillingPageState extends State<BillingPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Service ${payment['service_request_id']?.toString().substring(0, 8).toUpperCase() ?? 'N/A'}  •  ${date == null ? 'Date unavailable' : DateFormat('MMM dd, yyyy • hh:mm a').format(date.toLocal())}',
+              '$serviceReference  •  ${date == null ? 'Date unavailable' : DateFormat('MMM dd, yyyy • hh:mm a').format(date.toLocal())}',
               style: TextStyle(color: context.mutedTextColor, fontSize: 12),
             ),
             if (receiptUrl != null && receiptUrl.isNotEmpty) ...[
@@ -423,7 +427,7 @@ class _BillingPageState extends State<BillingPage> {
       onChanged: (v) => setState(() => _searchQuery = v),
       style: TextStyle(color: context.textColor),
       decoration: InputDecoration(
-        hintText: 'Search by Miner name or Ref ID...',
+        hintText: 'Search by Miner name or SR reference...',
         hintStyle: TextStyle(color: context.mutedTextColor.withValues(alpha: 0.5)),
         prefixIcon: const Icon(Icons.search, color: kGold, size: 20),
         filled: true,
@@ -547,8 +551,8 @@ class _BillingPageState extends State<BillingPage> {
               _buildMiniStatCard('Weight', '${fd?.goldWeightGrams ?? 0}g'),
               _buildMiniStatCard('Price/g', 'P ${fd?.goldBuyingPrice ?? 0}'),
               _buildMiniStatCard(
-                'Ref',
-                request.id.substring(0, 5).toUpperCase(),
+                'SR reference',
+                request.serviceReference,
               ),
             ],
           ),
@@ -740,7 +744,7 @@ class _BillingPageState extends State<BillingPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'SR-${request.id.substring(0, 5).toUpperCase()}',
+                        request.serviceReference,
                         style: const TextStyle(
                           color: kGold,
                           fontWeight: FontWeight.bold,

@@ -140,7 +140,7 @@ class _GoldTransactionsPageState extends State<GoldTransactionsPage> {
       onChanged: (v) => setState(() => _searchQuery = v),
       style: TextStyle(color: context.textColor),
       decoration: InputDecoration(
-        hintText: 'Search by Miner name or Ref ID...',
+        hintText: 'Search by Miner name or SR reference...',
         hintStyle: TextStyle(color: context.mutedTextColor.withOpacity(0.5)),
         prefixIcon: const Icon(Icons.search, color: kGold, size: 20),
         filled: true,
@@ -326,8 +326,8 @@ class _GoldTransactionsPageState extends State<GoldTransactionsPage> {
                   Icons.tag_rounded,
                 ),
                 _buildCardMiniStat(
-                  'Ref ID',
-                  request.id.substring(0, 5).toUpperCase(),
+                  'Reference',
+                  request.serviceReference,
                   Icons.numbers_rounded,
                 ),
               ],

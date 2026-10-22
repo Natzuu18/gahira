@@ -53,6 +53,11 @@ class ServiceRequestEntity extends Equatable {
   final DateTime? emergencyResolvedAt;
   final String? creatorName; // Optional display name
 
+  String get serviceReference {
+    if (id.isEmpty) return 'SR: N/A';
+    return 'SR: ${id.substring(0, id.length < 8 ? id.length : 8).toUpperCase()}';
+  }
+
   const ServiceRequestEntity({
     required this.id,
     required this.creatorId,
@@ -227,6 +232,7 @@ class MaterialDetails extends Equatable {
 class OperatorVerification extends Equatable {
   final String id;
   final String operatorId;
+  final String? operatorName;
   final DateTime verifiedAt;
 
   // Verified/Corrected Material Details
@@ -244,6 +250,7 @@ class OperatorVerification extends Equatable {
   const OperatorVerification({
     required this.id,
     required this.operatorId,
+    this.operatorName,
     required this.verifiedAt,
     required this.actualSacks,
     required this.condition,
@@ -259,6 +266,7 @@ class OperatorVerification extends Equatable {
   List<Object?> get props => [
     id,
     operatorId,
+    operatorName,
     verifiedAt,
     actualSacks,
     condition,

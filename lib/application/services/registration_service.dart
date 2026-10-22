@@ -27,8 +27,8 @@ class RegistrationService {
   }
 
   /// Sends a one-time password (OTP) to the specified phone number.
-  Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber) {
-    return repository.sendPhoneOtp(phoneNumber);
+  Future<Either<Failure, void>> sendPhoneOtp(String phoneNumber, {String? recipientName}) {
+    return repository.sendPhoneOtp(phoneNumber, recipientName: recipientName);
   }
 
   /// Verifies the OTP sent to the specified phone number.

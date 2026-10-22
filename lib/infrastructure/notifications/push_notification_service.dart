@@ -17,7 +17,7 @@ class PushNotificationService {
   String? _registeredUserId;
   bool _initialized = false;
 
-  Future<void> initializeForMiner() async {
+  Future<void> initializeForCurrentUser() async {
     final isMobile =
         defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
@@ -103,7 +103,7 @@ class PushNotificationService {
       debugPrint('[Push] Firebase register() completed; waiting for its device ID event.');
     } catch (error, stackTrace) {
       _initialized = false;
-      debugPrint('Could not initialize miner push notifications: $error');
+      debugPrint('Could not initialize push notifications: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
   }

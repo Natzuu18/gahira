@@ -1001,6 +1001,12 @@ class _ServiceRequestPageState extends State<ServiceRequestPage> {
             'Est. Time',
             request.processingDetails.estimatedTime ?? 'N/A',
           ),
+          if (latestVerification != null)
+            _buildDetailRow(
+              'Verified By',
+              latestVerification.operatorName ??
+                  _getUserName(latestVerification.operatorId),
+            ),
           if (showOriginal && request.materialDetails.photoUrls.isNotEmpty) ...[
             const SizedBox(height: 12),
             Align(

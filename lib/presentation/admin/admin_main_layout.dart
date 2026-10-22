@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/curved_active_bottom_nav_bar.dart';
@@ -6,6 +8,7 @@ import 'miner_client_list_page.dart';
 import 'equipment/machine_page.dart';
 import 'service_request_page.dart';
 import 'admin_settings_page.dart';
+import '../../infrastructure/notifications/push_notification_service.dart';
 
 class AdminMainLayout extends StatefulWidget {
   const AdminMainLayout({super.key, this.initialIndex = 2, this.adminName = 'Admin'});
@@ -24,6 +27,7 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    unawaited(PushNotificationService.instance.initializeForCurrentUser());
   }
 
   @override

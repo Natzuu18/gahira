@@ -10,6 +10,7 @@ import 'billing_page.dart';
 import 'transaction_history_page.dart';
 import 'client_profile_page.dart';
 import '../shared_widgets/profile_activity_page.dart';
+import '../shared_widgets/notification_inbox_page.dart';
 
 // Shared drawer menu used across every client page.
 // Drop <ClientDrawer currentMenu: ClientMenu.xxx> into any page's
@@ -23,6 +24,7 @@ enum ClientMenu {
   transactionHistory,
   profile,
   profileActivity,
+  notifications,
 }
 
 class ClientDrawer extends StatelessWidget {
@@ -137,6 +139,13 @@ class ClientDrawer extends StatelessWidget {
                   ),
                   _buildItem(
                     context,
+                    icon: Icons.notifications_outlined,
+                    label: 'Notifications',
+                    menu: ClientMenu.notifications,
+                    page: const NotificationInboxPage(),
+                  ),
+                  _buildItem(
+                    context,
                     icon: Icons.person_outline,
                     label: 'Profile',
                     menu: ClientMenu.profile,
@@ -196,9 +205,13 @@ class ClientDrawer extends StatelessWidget {
       onTap: () {
         Navigator.of(context).pop(); // close drawer first
         if (!selected) {
-          Navigator.of(
-            context,
-          ).pushReplacement(MaterialPageRoute(builder: (_) => page));
+          final navigator = Navigator.of(context);
+          final route = MaterialPageRoute<void>(builder: (_) => page);
+          if (menu == ClientMenu.notifications) {
+            navigator.push(route);
+          } else {
+            navigator.pushReplacement(route);
+          }
         }
       },
     );

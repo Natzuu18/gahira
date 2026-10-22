@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'appColor.dart';
 
 class AuditTrailViewer extends StatefulWidget {
@@ -53,7 +54,7 @@ class _AuditTrailViewerState extends State<AuditTrailViewer> {
                 ? '${user['fname']} ${user['lname']}'
                 : 'System';
             final role = user != null ? user['role_id'] : '';
-            final date = DateTime.parse(trail['created_at']);
+            final date = DateTime.parse(trail['created_at']).toLocal();
             final remarks = trail['remarks']?.toString() ?? '';
             final wasScheduledWithoutOperator =
                 trail['action'] == 'SCHEDULE_AND_ASSIGN' &&
@@ -106,7 +107,7 @@ class _AuditTrailViewerState extends State<AuditTrailViewer> {
                                 ),
                               ),
                               Text(
-                                '${date.month}/${date.day} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
+                                '${date.month}/${date.day} ${DateFormat('h:mm a').format(date)}',
                                 style: TextStyle(
                                   color: context.mutedTextColor,
                                   fontSize: 12,

@@ -174,7 +174,7 @@ class SupabaseApprovalRepository {
       final roleMap = userResponse['role'] as Map<String, dynamic>?;
       final roleName = roleMap?['role']?.toString().toUpperCase() ?? 'ACCOUNT';
 
-      final smsMessage = 'EGReS System: Hello $fname! Your $roleName application has been APPROVED. You can now log in using Email: $email | Password: $tempPassword. Thank you!';
+      final smsMessage = 'Dear $fname,\nYour $roleName application has been approved. You may now log in using Email: $email | Temporary password: $tempPassword.\nEmilio Gold Refinery Service Management Center (EGReS)';
 
       final smsResponse = await http.post(
         Uri.parse(EnvConfig.philsmsEndpoint),
@@ -295,7 +295,7 @@ class SupabaseApprovalRepository {
         final roleMap = userResponse['role'] as Map<String, dynamic>?;
         final roleName = roleMap?['role']?.toString().toUpperCase() ?? 'ACCOUNT';
 
-        final smsMessage = 'EGReS System: Hello $fname! Your $roleName application was DECLINED. Reason: $reason. For inquiries, please contact support.';
+        final smsMessage = 'Dear $fname,\nWe regret to inform you that your $roleName application was declined. Reason: $reason. For inquiries, please contact support.\nEmilio Gold Refinery Service Management Center (EGReS)';
 
         final smsResponse = await http.post(
           Uri.parse(EnvConfig.philsmsEndpoint),

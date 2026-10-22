@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/profile_picture_editor.dart';
 import 'gold_transactions_page.dart';
 import 'billing_page.dart';
 import 'expenses_page.dart';
@@ -320,16 +321,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: kGold, width: 2),
-                      color: context.bgColor,
-                    ),
-                    child: const Icon(Icons.person, color: kGold, size: 28),
-                  ),
+                const ProfilePictureEditor(size: 64, compact: true),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(

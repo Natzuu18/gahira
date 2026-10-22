@@ -45,10 +45,18 @@ class ServiceRequestModel extends ServiceRequestEntity {
       final List verificationsRaw = raw is List ? raw : [raw];
 
       for (var v in verificationsRaw) {
+        final operator = v['operator'];
+        final operatorData = operator is List
+            ? (operator.isEmpty ? null : operator.first)
+            : operator;
+        final operatorName = operatorData is Map
+            ? '${operatorData['fname'] ?? ''} ${operatorData['lname'] ?? ''}'.trim()
+            : '';
         verificationList.add(
           OperatorVerification(
             id: v['verification_id']?.toString() ?? '',
             operatorId: v['operator_id']?.toString() ?? '',
+            operatorName: operatorName.isEmpty ? null : operatorName,
             verifiedAt: v['verified_at'] != null
                 ? DateTime.parse(v['verified_at'])
                 : DateTime.now(),

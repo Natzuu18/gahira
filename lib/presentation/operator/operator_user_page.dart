@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
+import '../shared_widgets/profile_picture_editor.dart';
 
 class OperatorUserPage extends StatefulWidget {
   const OperatorUserPage({
@@ -157,15 +158,7 @@ class _OperatorUserPageState extends State<OperatorUserPage> {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          color: kGold.withValues(alpha: 0.13),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.person_rounded, color: kGold),
-                      ),
+                      const ProfilePictureEditor(size: 64, compact: true),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(

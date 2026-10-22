@@ -11,6 +11,7 @@ import 'workforce_shift_page.dart';
 import 'sms_notification_page.dart';
 import 'emergency_stop_dialog.dart';
 import '../shared_widgets/profile_activity_page.dart';
+import '../shared_widgets/notification_inbox_page.dart';
 import 'operator_menu.dart';
 
 class OperatorDrawer extends StatelessWidget {
@@ -132,6 +133,13 @@ class OperatorDrawer extends StatelessWidget {
                   ),
                   _buildItem(
                     context,
+                    icon: Icons.notifications_outlined,
+                    label: 'Notifications',
+                    menu: OperatorMenu.notifications,
+                    page: const NotificationInboxPage(),
+                  ),
+                  _buildItem(
+                    context,
                     icon: Icons.manage_history_rounded,
                     label: 'Profile Activity',
                     menu: OperatorMenu.profileActivity,
@@ -213,7 +221,8 @@ class OperatorDrawer extends StatelessWidget {
         if (!selected) {
           final navigator = Navigator.of(context);
           final route = MaterialPageRoute<void>(builder: (_) => page);
-          if (menu == OperatorMenu.profileActivity) {
+          if (menu == OperatorMenu.profileActivity ||
+              menu == OperatorMenu.notifications) {
             navigator.push(route);
           } else {
             navigator.pushReplacement(route);

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/themeToggleButton.dart';
 import '../shared_widgets/profile_activity_page.dart';
 import '../shared_widgets/profile_picture_editor.dart';
 import 'package:gahira/main.dart';
+import '../../domain/entities/user_entity.dart';
+import '../../infrastructure/repositories/supabase_user_repository.dart';
 
 // Gahira Ball Mill Management System - Client Profile Page
 // Clients can view and manage their profile information and settings
@@ -18,12 +21,38 @@ class ClientProfilePage extends StatefulWidget {
 
 class _ClientProfilePageState extends State<ClientProfilePage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final SupabaseUserRepository _userRepository = SupabaseUserRepository();
+  UserEntity? _miner;
+  bool _loadingProfile = true;
 
   bool _notificationsEnabled = true;
   bool _emailNotifications = true;
   bool _smsNotifications = false;
   bool _processingUpdates = true;
   bool _billingAlerts = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMinerProfile();
+  }
+
+  Future<void> _loadMinerProfile() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      if (mounted) setState(() => _loadingProfile = false);
+      return;
+    }
+    final result = await _userRepository.getUserById(userId);
+    if (!mounted) return;
+    result.fold(
+      (_) => setState(() => _loadingProfile = false),
+      (user) => setState(() {
+        _miner = user;
+        _loadingProfile = false;
+      }),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +95,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Manage your account settings and preferences',
+              'Manage your miner account and preferences',
               style: TextStyle(color: context.mutedTextColor, fontSize: 14),
             ),
             const SizedBox(height: 32),
@@ -84,7 +113,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                   const ProfilePictureEditor(size: 80),
                   const SizedBox(height: 16),
                   Text(
-                    'Client Name',
+                    _loadingProfile
+                        ? 'Loading miner profile…'
+                        : (_miner == null
+                            ? 'Miner profile unavailable'
+                            : '${_miner!.fname} ${_miner!.lname}'.trim()),
                     style: TextStyle(
                       color: context.textColor,
                       fontSize: 20,
@@ -93,7 +126,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'client@example.com',
+                    _miner?.email ??
+                        Supabase.instance.client.auth.currentUser?.email ??
+                        '',
                     style: TextStyle(
                       color: context.mutedTextColor,
                       fontSize: 14,
@@ -110,7 +145,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Verified Client',
+                      _miner?.status.isNotEmpty == true
+                          ? _miner!.status.toUpperCase()
+                          : 'MINER',
                       style: TextStyle(
                         color: kGold,
                         fontSize: 11,
@@ -119,6 +156,18 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _miner == null ? null : _editMinerProfile,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit Profile'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kGold,
+                        side: BorderSide(color: kGold.withOpacity(0.6)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -134,15 +183,38 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               ),
             ),
             const SizedBox(height: 16),
-            _buildInfoCard(Icons.phone_outlined, 'Phone', '+63 912 345 6789'),
+            _buildInfoCard(
+              Icons.phone_outlined,
+              'Phone',
+              _miner?.contactNum.isNotEmpty == true
+                  ? _miner!.contactNum
+                  : 'Not provided',
+            ),
             const SizedBox(height: 12),
-            _buildInfoCard(Icons.email_outlined, 'Email', 'client@example.com'),
+            _buildInfoCard(
+              Icons.email_outlined,
+              'Email',
+              _miner?.email ??
+                  Supabase.instance.client.auth.currentUser?.email ??
+                  'Not provided',
+            ),
             const SizedBox(height: 12),
             _buildInfoCard(
               Icons.location_on_outlined,
               'Address',
-              '123 Mining Street, Gold City, Philippines',
+              _miner?.address.isNotEmpty == true
+                  ? _miner!.address
+                  : 'Not provided',
             ),
+            if ((_miner?.miningUnitName?.isNotEmpty ?? false) ||
+                (_miner?.miningUnitType?.isNotEmpty ?? false)) ...[
+              const SizedBox(height: 12),
+              _buildInfoCard(
+                Icons.factory_outlined,
+                _miner?.miningUnitType ?? 'Mining Unit',
+                _miner?.miningUnitName ?? 'Not provided',
+              ),
+            ],
             const SizedBox(height: 32),
 
             // Notification Preferences
@@ -255,6 +327,146 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _editMinerProfile() async {
+    final miner = _miner;
+    if (miner == null) return;
+
+    final formKey = GlobalKey<FormState>();
+    final firstNameController = TextEditingController(text: miner.fname);
+    final lastNameController = TextEditingController(text: miner.lname);
+    final phoneController = TextEditingController(text: miner.contactNum);
+    final addressController = TextEditingController(text: miner.address);
+    var isSaving = false;
+
+    final updatedMiner = await showDialog<UserEntity>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: context.surfaceColor,
+          title: Text(
+            'Edit Miner Profile',
+            style: TextStyle(color: context.textColor),
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _profileEditField(firstNameController, 'First name'),
+                  const SizedBox(height: 12),
+                  _profileEditField(lastNameController, 'Last name'),
+                  const SizedBox(height: 12),
+                  _profileEditField(
+                    phoneController,
+                    'Phone number',
+                    keyboardType: TextInputType.phone,
+                  ),
+                  const SizedBox(height: 12),
+                  _profileEditField(
+                    addressController,
+                    'Address',
+                    maxLines: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (!(formKey.currentState?.validate() ?? false)) return;
+                      setDialogState(() => isSaving = true);
+                      final result = await _userRepository.updateUser(
+                        UserEntity(
+                          userId: miner.userId,
+                          fname: firstNameController.text.trim(),
+                          mname: miner.mname,
+                          lname: lastNameController.text.trim(),
+                          address: addressController.text.trim(),
+                          email: miner.email,
+                          contactNum: phoneController.text.trim(),
+                          roleId: miner.roleId,
+                          status: miner.status,
+                          miningUnitId: miner.miningUnitId,
+                          miningUnitName: miner.miningUnitName,
+                          miningUnitType: miner.miningUnitType,
+                          pinHash: miner.pinHash,
+                          createdAt: miner.createdAt,
+                        ),
+                      );
+                      result.fold(
+                        (failure) {
+                          if (!dialogContext.mounted) return;
+                          setDialogState(() => isSaving = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(failure.message)),
+                          );
+                        },
+                        (user) => Navigator.pop(dialogContext, user),
+                      );
+                    },
+              child: isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    firstNameController.dispose();
+    lastNameController.dispose();
+    phoneController.dispose();
+    addressController.dispose();
+
+    if (updatedMiner != null && mounted) {
+      setState(() => _miner = updatedMiner);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Miner profile updated successfully.')),
+      );
+    }
+  }
+
+  Widget _profileEditField(
+    TextEditingController controller,
+    String label, {
+    TextInputType? keyboardType,
+    int maxLines = 1,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      style: TextStyle(color: context.textColor),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: context.mutedTextColor),
+        enabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: kGold.withOpacity(0.25)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: const BorderSide(color: kGold),
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+      validator: (value) => value == null || value.trim().isEmpty
+          ? 'Please enter your $label.'
+          : null,
     );
   }
 

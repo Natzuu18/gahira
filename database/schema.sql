@@ -263,6 +263,7 @@ CREATE TABLE public.operator_verification_appeals (
   miner_id uuid NOT NULL,
   category text NOT NULL,
   reason text NOT NULL,
+  evidence_url text NOT NULL,
   appeal_date date NOT NULL DEFAULT CURRENT_DATE,
   status text NOT NULL DEFAULT 'pending',
   miner_decision text CHECK (miner_decision = ANY (ARRAY['continue', 'cancel'])),

@@ -196,6 +196,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     final reasonController = TextEditingController();
     final appealDate = DateTime.now();
     var selectedCategory = categories.first;
+    PlatformFile? evidencePhoto;
+    String? submittedEvidenceUrl;
     var isSubmitting = false;
     String? errorMessage;
 
@@ -253,6 +255,42 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     alignLabelWithHint: true,
                   ),
                 ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final result = await FilePicker.platform.pickFiles(
+                            type: FileType.image,
+                            withData: true,
+                          );
+                          if (result != null && result.files.isNotEmpty) {
+                            setDialogState(
+                              () => evidencePhoto = result.files.first,
+                            );
+                          }
+                        },
+                  icon: Icon(
+                    evidencePhoto == null
+                        ? Icons.add_a_photo_outlined
+                        : Icons.check_circle_outline,
+                  ),
+                  label: Text(evidencePhoto == null
+                      ? 'Upload image evidence (required)'
+                      : 'Change image: ${evidencePhoto!.name}'),
+                ),
+                if (evidencePhoto?.bytes != null) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(
+                      evidencePhoto!.bytes!,
+                      height: 140,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ],
                 if (errorMessage != null) ...[
                   const SizedBox(height: 10),
                   Text(
@@ -282,6 +320,13 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                         );
                         return;
                       }
+                      if (evidencePhoto?.bytes == null) {
+                        setDialogState(
+                          () => errorMessage =
+                              'Upload an image to support your appeal.',
+                        );
+                        return;
+                      }
                       final minerId =
                           Supabase.instance.client.auth.currentUser?.id;
                       if (minerId == null) {
@@ -296,6 +341,30 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                         isSubmitting = true;
                         errorMessage = null;
                       });
+                      final uploadResult = await _repository.uploadRequestPhotos(
+                        [evidencePhoto!],
+                      );
+                      String? evidenceUrl;
+                      String? uploadError;
+                      uploadResult.fold(
+                        (failure) => uploadError = failure.message,
+                        (urls) {
+                          if (urls.isEmpty) {
+                            uploadError = 'Image evidence upload failed.';
+                          } else {
+                            evidenceUrl = urls.first;
+                          }
+                        },
+                      );
+                      if (uploadError != null || evidenceUrl == null) {
+                        setDialogState(() {
+                          isSubmitting = false;
+                          errorMessage = uploadError ??
+                              'Image evidence upload failed.';
+                        });
+                        return;
+                      }
+                      submittedEvidenceUrl = evidenceUrl;
                       final result = await _repository
                           .submitOperatorVerificationAppeal(
                             requestId: request.id,
@@ -303,6 +372,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                             category: selectedCategory,
                             reason: reason,
                             appealDate: appealDate,
+                            evidenceUrl: evidenceUrl!,
                           );
                       result.fold((failure) {
                         setDialogState(() {
@@ -333,6 +403,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           'service_request_id': request.id,
           'category': selectedCategory,
           'reason': submittedReason,
+          'evidence_url': submittedEvidenceUrl,
           'appeal_date': DateFormat('yyyy-MM-dd').format(appealDate),
           'status': 'pending',
           'miner_decision': null,

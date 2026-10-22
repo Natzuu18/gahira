@@ -38,9 +38,9 @@ Widget buildAdminBottomNavBar(BuildContext context, {int selectedIndex = 3}) {
         elevation: 0,
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.people_outline_rounded, color: kGold),
-            selectedIcon: Icon(Icons.people_alt_rounded, color: kGold),
-            label: 'Users',
+            icon: Icon(Icons.assignment_outlined, color: kGold),
+            selectedIcon: Icon(Icons.assignment_rounded, color: kGold),
+            label: 'Services',
           ),
           NavigationDestination(
             icon: Icon(Icons.precision_manufacturing_outlined, color: kGold),
@@ -53,9 +53,9 @@ Widget buildAdminBottomNavBar(BuildContext context, {int selectedIndex = 3}) {
             label: 'Dashboard',
           ),
           NavigationDestination(
-            icon: Icon(Icons.assignment_outlined, color: kGold),
-            selectedIcon: Icon(Icons.assignment_rounded, color: kGold),
-            label: 'Services',
+            icon: Icon(Icons.people_outline_rounded, color: kGold),
+            selectedIcon: Icon(Icons.people_alt_rounded, color: kGold),
+            label: 'Users',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined, color: kGold),

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "63488850418",
+    "project_id": "egres-43a8a",
+    "storage_bucket": "egres-43a8a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:63488850418:android:9647c6a2a10d9c49e0936b",
+        "android_client_info": {
+          "package_name": "com.example.egres"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAc3Qoy0ZqhplOsfWyEdWrkv2X4ETLkb0s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

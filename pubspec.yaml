@@ -47,6 +47,8 @@ dependencies:
   printing: ^5.11.1
   audioplayers: ^6.7.1
   shared_preferences: ^2.5.5
+  firebase_core: ^5.0.0
+  firebase_messaging: ^17.0.0
 
 dev_dependencies:
   flutter_test:

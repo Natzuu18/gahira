@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import './firebase_options.dart';
 
 import './core/navigation/app_scaffold_messenger.dart';
 import './core/auth/remember_me_session.dart';
@@ -27,6 +29,17 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await SupabaseConfig.init();
+
+  // Firebase is initialized by FlutterFire platform configuration when it is
+  // added to the project. Keep Supabase login available if that setup is not
+  // present yet; push registration will report the configuration issue.
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (error) {
+    debugPrint('Firebase push notifications are not configured: $error');
+  }
 
   runApp(const GahiraApp());
 }

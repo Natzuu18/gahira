@@ -26,6 +26,7 @@ class MonitoringPage extends StatefulWidget {
 
 class _MonitoringPageState extends State<MonitoringPage> {
   final _requestRepo = SupabaseServiceRequestRepository();
+  final ScrollController _stageScrollController = ScrollController();
   
   ServiceRequestEntity? _currentRequest;
   List<Map<String, dynamic>> _batches = [];
@@ -34,12 +35,15 @@ class _MonitoringPageState extends State<MonitoringPage> {
   bool _isRefreshing = false;
   bool _refreshQueued = false;
   bool _isResolvingEmergency = false;
+  bool _canScrollStagesLeft = false;
+  bool _canScrollStagesRight = true;
   Timer? _refreshTimer;
   RealtimeChannel? _realtimeChannel;
 
   @override
   void initState() {
     super.initState();
+    _stageScrollController.addListener(_updateStageScrollButtons);
     _subscribeToRealtime();
     _loadData();
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
@@ -79,11 +83,40 @@ class _MonitoringPageState extends State<MonitoringPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _stageScrollController
+      ..removeListener(_updateStageScrollButtons)
+      ..dispose();
     final channel = _realtimeChannel;
     if (channel != null) {
       unawaited(Supabase.instance.client.removeChannel(channel));
     }
     super.dispose();
+  }
+
+  void _updateStageScrollButtons() {
+    if (!_stageScrollController.hasClients) return;
+    final position = _stageScrollController.position;
+    final canScrollLeft = position.pixels > 1;
+    final canScrollRight = position.pixels < position.maxScrollExtent - 1;
+    if (canScrollLeft != _canScrollStagesLeft ||
+        canScrollRight != _canScrollStagesRight) {
+      setState(() {
+        _canScrollStagesLeft = canScrollLeft;
+        _canScrollStagesRight = canScrollRight;
+      });
+    }
+  }
+
+  void _scrollStages(bool forward) {
+    if (!_stageScrollController.hasClients) return;
+    final offset = _stageScrollController.offset + (forward ? 220 : -220);
+    _stageScrollController.animateTo(
+      offset
+          .clamp(0, _stageScrollController.position.maxScrollExtent)
+          .toDouble(),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
   }
 
   Future<void> _loadData({bool showLoading = true}) async {
@@ -346,9 +379,25 @@ class _MonitoringPageState extends State<MonitoringPage> {
           ),
         ),
         const SizedBox(height: 10),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
+        Row(
+          children: [
+            IconButton(
+              tooltip: 'Scroll to previous stages',
+              onPressed: _canScrollStagesLeft
+                  ? () => _scrollStages(false)
+                  : null,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.chevron_left_rounded),
+              color: kGold,
+            ),
+            Expanded(
+              child: Scrollbar(
+                controller: _stageScrollController,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _stageScrollController,
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
             children: stages.map((stage) {
               final index = stages.indexOf(stage);
               final isCurrent = stage == currentStage;
@@ -429,7 +478,20 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 ),
               );
             }).toList(),
-          ),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Scroll to more stages',
+              onPressed: _canScrollStagesRight
+                  ? () => _scrollStages(true)
+                  : null,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.chevron_right_rounded),
+              color: kGold,
+            ),
+          ],
         ),
       ],
     );

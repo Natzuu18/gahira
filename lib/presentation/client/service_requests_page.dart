@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,16 +42,64 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   List<UserEntity> _availableMiners = [];
   UserEntity? _currentUser;
   bool _isLoading = true;
+  bool _isRefreshing = false;
+  bool _refreshQueued = false;
+  RealtimeChannel? _realtimeChannel;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _service = ServiceRequestService(_repository);
+    _subscribeToRealtime();
     _loadData();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _loadData(showLoading: false);
+    });
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  void _subscribeToRealtime() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    _realtimeChannel = Supabase.instance.client
+        .channel('miner-services-$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'service_requests',
+          callback: (payload) {
+            final record = payload.newRecord.isNotEmpty
+                ? payload.newRecord
+                : payload.oldRecord;
+            final participants = record['participating_miners'];
+            final isMine = record['user_id']?.toString() == userId ||
+                (participants is List && participants.contains(userId));
+            if (isMine || !record.containsKey('user_id')) {
+              _loadData(showLoading: false);
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    final channel = _realtimeChannel;
+    if (channel != null) {
+      unawaited(Supabase.instance.client.removeChannel(channel));
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadData({bool showLoading = true}) async {
+    if (_isRefreshing) {
+      _refreshQueued = true;
+      return;
+    }
+    _isRefreshing = true;
+    if (showLoading && mounted) setState(() => _isLoading = true);
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
 
     if (currentUserId == null) {
@@ -59,30 +109,39 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           _isLoading = false;
         });
       }
+      _isRefreshing = false;
       return;
     }
 
-    final requestsResult = await _repository.getServiceRequests();
-    final appealsResult = await _repository.getVerificationAppealsForMiner(currentUserId);
-    final minersResult = await _userRepository.getMinersAndClients();
-    final userResult = await _userRepository.getUserById(currentUserId);
-    userResult.fold((_) => null, (user) => _currentUser = user);
+    try {
+      final requestsResult = await _repository.getServiceRequests();
+      final appealsResult = await _repository.getVerificationAppealsForMiner(currentUserId);
+      final minersResult = await _userRepository.getMinersAndClients();
+      final userResult = await _userRepository.getUserById(currentUserId);
+      userResult.fold((_) => null, (user) => _currentUser = user);
 
-    if (!mounted) return;
-    setState(() {
-      _requests = requestsResult
-          .getOrElse(() => [])
-          .where(
-            (request) =>
-                request.creatorId == currentUserId ||
-                request.participatingMinerIds.contains(currentUserId),
-          )
-          .toList();
+      if (!mounted) return;
+      setState(() {
+        _requests = requestsResult
+            .getOrElse(() => [])
+            .where(
+              (request) =>
+                  request.creatorId == currentUserId ||
+                  request.participatingMinerIds.contains(currentUserId),
+            )
+            .toList();
 
-      _availableMiners = minersResult.getOrElse(() => []);
-      _myVerificationAppeals = appealsResult.getOrElse(() => []);
-      _isLoading = false;
-    });
+        _availableMiners = minersResult.getOrElse(() => []);
+        _myVerificationAppeals = appealsResult.getOrElse(() => []);
+        _isLoading = false;
+      });
+    } finally {
+      _isRefreshing = false;
+      if (_refreshQueued && mounted) {
+        _refreshQueued = false;
+        unawaited(_loadData(showLoading: false));
+      }
+    }
   }
 
   Future<void> _decideRejectedAppeal(

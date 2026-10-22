@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../infrastructure/notifications/push_notification_service.dart';
 import '../../infrastructure/supabase/supabase_config.dart';
 
 class RememberMeSession {
@@ -26,6 +27,7 @@ class RememberMeSession {
   }
 
   static Future<void> signOut() async {
+    await PushNotificationService.instance.unregisterBeforeSignOut();
     await SupabaseConfig.client.auth.signOut();
     await clear();
   }

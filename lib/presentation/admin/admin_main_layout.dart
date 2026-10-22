@@ -29,10 +29,10 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
-      MinerClientListPage(key: ValueKey('miners_$_currentIndex')),
+      ServiceRequestPage(key: ValueKey('services_$_currentIndex')),
       MachinePage(key: ValueKey('machines_$_currentIndex')),
       AdminDashboardPage(key: ValueKey('dashboard_$_currentIndex'), adminName: widget.adminName),
-      ServiceRequestPage(key: ValueKey('services_$_currentIndex')),
+      MinerClientListPage(key: ValueKey('miners_$_currentIndex')),
       AdminSettingsPage(key: ValueKey('settings_$_currentIndex'), adminName: widget.adminName),
     ];
 
@@ -49,11 +49,11 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
           });
         },
         items: [
-          CurvedNavItem(
-            icon: Icons.people_outline_rounded,
-            selectedIcon: Icons.people_alt_rounded,
-            label: 'Users',
-            activeColor: Colors.tealAccent.shade400,
+          const CurvedNavItem(
+            icon: Icons.assignment_outlined,
+            selectedIcon: Icons.assignment_rounded,
+            label: 'Services',
+            activeColor: Colors.lightBlueAccent,
           ),
           const CurvedNavItem(
             icon: Icons.precision_manufacturing_outlined,
@@ -67,11 +67,11 @@ class _AdminMainLayoutState extends State<AdminMainLayout> {
             label: 'Dashboard',
             activeColor: kGold,
           ),
-          const CurvedNavItem(
-            icon: Icons.assignment_outlined,
-            selectedIcon: Icons.assignment_rounded,
-            label: 'Services',
-            activeColor: Colors.lightBlueAccent,
+          CurvedNavItem(
+            icon: Icons.people_outline_rounded,
+            selectedIcon: Icons.people_alt_rounded,
+            label: 'Users',
+            activeColor: Colors.tealAccent.shade400,
           ),
           CurvedNavItem(
             icon: Icons.settings_outlined,

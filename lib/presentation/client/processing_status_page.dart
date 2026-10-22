@@ -61,6 +61,36 @@ class _ProcessingStatusPageState extends State<ProcessingStatusPage> {
             }
           },
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'milling_batches',
+          callback: (payload) {
+            final record = payload.newRecord.isNotEmpty
+                ? payload.newRecord
+                : payload.oldRecord;
+            final requestId = record['service_request_id']?.toString();
+            if (requestId != null &&
+                _requests.any((request) => request.id == requestId)) {
+              _loadData(showLoading: false);
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'ongoing_services',
+          callback: (payload) {
+            final record = payload.newRecord.isNotEmpty
+                ? payload.newRecord
+                : payload.oldRecord;
+            final requestId = record['service_request_id']?.toString();
+            if (requestId != null &&
+                _requests.any((request) => request.id == requestId)) {
+              _loadData(showLoading: false);
+            }
+          },
+        )
         .subscribe();
   }
 

@@ -220,8 +220,17 @@ class SupabaseServiceRequestRepository {
       });
       return const Right(null);
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(_claimFailure(e));
     }
+  }
+
+  ServerFailure _claimFailure(Object error) {
+    if (error is PostgrestException &&
+        error.code == '23505' &&
+        error.message.contains('ongoing_services_service_request_id_key')) {
+      return ServerFailure('This service is claimed by another operator.');
+    }
+    return ServerFailure(error.toString());
   }
 
   Future<Either<Failure, void>> assignVerifyingOperatorToService({
@@ -372,7 +381,7 @@ class SupabaseServiceRequestRepository {
       }
       return const Right(null);
     } catch (e) {
-      return Left(ServerFailure(e.toString()));
+      return Left(_claimFailure(e));
     }
   }
 

@@ -18,7 +18,14 @@ import '../../infrastructure/supabase/supabase_config.dart';
 import '../../infrastructure/models/user_model.dart';
 import 'sacking_page.dart';
 
-enum _ServiceRequestFilter { all, toVerify, queued, scheduledToday }
+enum _ServiceRequestFilter {
+  all,
+  toVerify,
+  queued,
+  scheduledToday,
+  scheduled,
+  completed,
+}
 
 class ServiceVerificationPage extends StatefulWidget {
   const ServiceVerificationPage({super.key, this.onPendingCountChanged});
@@ -39,6 +46,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   List<ServiceRequestEntity> _requests = [];
   List<UserEntity> _allUsers = [];
   final ValueNotifier<int> _requestsRevision = ValueNotifier<int>(0);
+  final Set<String> _claimingRequestIds = {};
   bool _isLoading = true;
   OverlayEntry? _claimNoticeEntry;
   Timer? _claimNoticeTimer;
@@ -258,27 +266,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   @override
   Widget build(BuildContext context) {
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
-    final assignedRequests = _requests
-        .where(
-          (request) =>
-              operatorId != null &&
-              request.processingDetails.assignedOperatorIds.contains(
-                operatorId,
-              ) &&
-              {
-                ServiceRequestStatus.verified,
-                ServiceRequestStatus.accepted,
-                ServiceRequestStatus.queued,
-                ServiceRequestStatus.scheduled,
-              }.contains(request.status),
-        )
-        .toList();
-    final pendingRequests = _requests
-        .where(
-          (r) => r.status == ServiceRequestStatus.pendingOperatorVerification,
-        )
-        .toList();
     final serviceRequestItems = _getServiceRequestItems();
+    final scheduledQueuedRequests = _getScheduledQueueServiceItems();
     final ongoingRequests = _requests
         .where(
           (r) =>
@@ -292,21 +281,16 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
               operatorId != null &&
               r.processingDetails.assignedOperatorIds.contains(operatorId),
         )
-        .toList();
-    final verifiedRequests = _requests
-        .where(
-          (r) =>
-              r.status != ServiceRequestStatus.pendingOperatorVerification &&
-              r.status != ServiceRequestStatus.processing &&
-              r.status != ServiceRequestStatus.emergencyStop &&
-              r.materialDetails.verifications.any(
-                (verification) =>
-                    verification.operatorId ==
-                    Supabase.instance.client.auth.currentUser?.id,
-              ),
-        )
-        .toList();
-
+        .toList()
+      ..sort(
+        (a, b) => (a.queueAddedAt ?? a.createdAt).compareTo(
+          b.queueAddedAt ?? b.createdAt,
+        ),
+      );
+    final ongoingQueueNumbers = {
+      for (var index = 0; index < ongoingRequests.length; index++)
+        ongoingRequests[index].id: index + 1,
+    };
     return Scaffold(
       backgroundColor: context.bgColor,
       appBar: AppBar(
@@ -361,14 +345,11 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 100),
                   children: [
-                    if (assignedRequests.isNotEmpty) ...[
-                      _buildAssignedServicesNotice(assignedRequests),
-                      const SizedBox(height: 16),
-                    ],
                     _buildSectionTitle('SERVICE DESK'),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                         Expanded(
                           child: _buildServiceShortcutCard(
                             title: 'Service Requests',
@@ -391,28 +372,34 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _buildServiceShortcutCard(
-                            title: 'Verification History',
-                            subtitle: 'Verified by you',
-                            count: verifiedRequests.length,
+                            title: 'Scheduled and Queued Services',
+                            subtitle: 'FIFO service queue',
+                            count: scheduledQueuedRequests.length,
                             icon: Icons.fact_check_rounded,
-                            color: Colors.teal,
+                            color: Colors.blue,
                             onTap: () => _showServiceListSheet(
-                              title: 'Verification History',
-                              subtitle: 'Your completed verification checks',
+                              title: 'Scheduled and Queued Services',
+                              subtitle: 'First in, first out',
                               icon: Icons.fact_check_rounded,
-                              color: Colors.teal,
-                              requests: verifiedRequests,
+                              color: Colors.blue,
+                              requests: scheduledQueuedRequests,
                               isPending: false,
-                              emptyMessage: 'No services verified by you yet.',
+                              emptyMessage: 'No scheduled or queued services.',
+                              showScheduledQueueFilters: true,
                             ),
                           ),
                         ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 18),
                     Row(
                       children: [
                         Expanded(child: _buildSectionTitle('ONGOING SERVICES')),
+                        if (ongoingRequests.isNotEmpty) ...[
+                          const _BlinkingGreenLight(),
+                          const SizedBox(width: 8),
+                        ],
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -437,7 +424,11 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       _buildEmptyState('You have no ongoing services.')
                     else
                       ...ongoingRequests.map(
-                        (r) => _buildRequestCard(r, isPending: false),
+                        (r) => _buildRequestCard(
+                          r,
+                          isPending: false,
+                          queueNumber: ongoingQueueNumbers[r.id],
+                        ),
                       ),
                   ],
                 ),
@@ -575,9 +566,17 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     required bool isPending,
     required String emptyMessage,
     bool showRequestFilters = false,
+    bool showScheduledQueueFilters = false,
   }) {
-    var selectedFilter = _ServiceRequestFilter.all;
+    var selectedFilter = showRequestFilters
+        ? _ServiceRequestFilter.toVerify
+        : showScheduledQueueFilters
+        ? _ServiceRequestFilter.scheduled
+        : _ServiceRequestFilter.all;
+    var mostRecentFirst = true;
     var isRefreshingRequests = false;
+    var searchQuery = '';
+    final searchController = TextEditingController();
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -601,7 +600,9 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
               if (!context.mounted) return;
               setSheetState(() => isRefreshingRequests = false);
             }
-            final requestFilterItems = _getServiceRequestItems();
+            final requestFilterItems = showScheduledQueueFilters
+                ? _getScheduledQueueServiceItems()
+                : _getServiceRequestItems();
             return Container(
           decoration: BoxDecoration(
             color: context.surfaceColor,
@@ -664,53 +665,151 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                 ),
               ),
               Divider(height: 1, color: color.withValues(alpha: 0.15)),
-              if (showRequestFilters)
+              if (showRequestFilters || showScheduledQueueFilters)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _serviceRequestFilterChip(
-                          label: 'To Verify',
-                          icon: Icons.fact_check_outlined,
-                          count: _filterServiceRequests(
-                            requestFilterItems,
-                            _ServiceRequestFilter.toVerify,
-                          ).length,
-                          filter: _ServiceRequestFilter.toVerify,
-                          selectedFilter: selectedFilter,
-                          onSelected: selectFilterAndRefresh,
-                        ),
-                        const SizedBox(width: 8),
-                        _serviceRequestFilterChip(
-                          label: 'Queued',
-                          icon: Icons.format_list_numbered_rounded,
-                          count: _filterServiceRequests(
-                            requestFilterItems,
-                            _ServiceRequestFilter.queued,
-                          ).length,
-                          filter: _ServiceRequestFilter.queued,
-                          selectedFilter: selectedFilter,
-                          onSelected: selectFilterAndRefresh,
-                        ),
-                        const SizedBox(width: 8),
-                        _serviceRequestFilterChip(
-                          label: 'Scheduled',
-                          icon: Icons.today_outlined,
-                          count: _filterServiceRequests(
-                            requestFilterItems,
-                            _ServiceRequestFilter.scheduledToday,
-                          ).length,
-                          filter: _ServiceRequestFilter.scheduledToday,
-                          selectedFilter: selectedFilter,
-                          onSelected: selectFilterAndRefresh,
-                        ),
-                      ],
-                    ),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: searchController,
+                              onChanged: (value) => setSheetState(
+                                () => searchQuery = value.trim().toLowerCase(),
+                              ),
+                              style: TextStyle(color: context.textColor),
+                              decoration: InputDecoration(
+                                hintText: 'Search service ID or miner name',
+                                prefixIcon: const Icon(Icons.search_rounded),
+                                isDense: true,
+                                filled: true,
+                                fillColor: context.bgColor,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          ActionChip(
+                            avatar: Icon(
+                              mostRecentFirst
+                                  ? Icons.south_rounded
+                                  : Icons.north_rounded,
+                              size: 16,
+                              color: context.textColor,
+                            ),
+                            label: Text(
+                              mostRecentFirst ? 'Most recent' : 'Oldest first',
+                            ),
+                            onPressed: () => setSheetState(
+                              () => mostRecentFirst = !mostRecentFirst,
+                            ),
+                            backgroundColor: context.bgColor,
+                            labelStyle: TextStyle(
+                              color: context.textColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            side: BorderSide(
+                              color: kGold.withValues(alpha: 0.55),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: showScheduledQueueFilters
+                            ? [
+                                _serviceRequestFilterChip(
+                                  label: 'Scheduled',
+                                  icon: Icons.today_outlined,
+                                  count: _filterServiceRequests(
+                                    requestFilterItems,
+                                    _ServiceRequestFilter.scheduled,
+                                  ).length,
+                                  filter: _ServiceRequestFilter.scheduled,
+                                  selectedFilter: selectedFilter,
+                                  onSelected: selectFilterAndRefresh,
+                                ),
+                                _serviceRequestFilterChip(
+                                  label: 'Queued',
+                                  icon: Icons.format_list_numbered_rounded,
+                                  count: _filterServiceRequests(
+                                    requestFilterItems,
+                                    _ServiceRequestFilter.queued,
+                                  ).length,
+                                  filter: _ServiceRequestFilter.queued,
+                                  selectedFilter: selectedFilter,
+                                  onSelected: selectFilterAndRefresh,
+                                ),
+                                _serviceRequestFilterChip(
+                                  label: 'Completed',
+                                  icon: Icons.task_alt_rounded,
+                                  count: _filterServiceRequests(
+                                    requestFilterItems,
+                                    _ServiceRequestFilter.completed,
+                                  ).length,
+                                  filter: _ServiceRequestFilter.completed,
+                                  selectedFilter: selectedFilter,
+                                  onSelected: selectFilterAndRefresh,
+                                ),
+                              ]
+                            : [
+                          _serviceRequestFilterChip(
+                            label: 'To Verify',
+                            icon: Icons.fact_check_outlined,
+                            count: _filterServiceRequests(
+                              requestFilterItems,
+                              _ServiceRequestFilter.toVerify,
+                            ).length,
+                            filter: _ServiceRequestFilter.toVerify,
+                            selectedFilter: selectedFilter,
+                            onSelected: selectFilterAndRefresh,
+                          ),
+                          _serviceRequestFilterChip(
+                            label: 'Queued',
+                            icon: Icons.format_list_numbered_rounded,
+                            count: _filterServiceRequests(
+                              requestFilterItems,
+                              _ServiceRequestFilter.queued,
+                            ).length,
+                            filter: _ServiceRequestFilter.queued,
+                            selectedFilter: selectedFilter,
+                            onSelected: selectFilterAndRefresh,
+                          ),
+                          _serviceRequestFilterChip(
+                            label: 'Scheduled',
+                            icon: Icons.today_outlined,
+                            count: _filterServiceRequests(
+                              requestFilterItems,
+                              _ServiceRequestFilter.scheduledToday,
+                            ).length,
+                            filter: _ServiceRequestFilter.scheduledToday,
+                            selectedFilter: selectedFilter,
+                            onSelected: selectFilterAndRefresh,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              if (showRequestFilters && isRefreshingRequests)
+              if ((showRequestFilters || showScheduledQueueFilters) &&
+                  isRefreshingRequests)
                 const LinearProgressIndicator(minHeight: 2, color: kGold),
               Expanded(
                 child: ValueListenableBuilder<int>(
@@ -718,18 +817,48 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   builder: (context, _, _) {
                     final currentRequests = showRequestFilters
                         ? _getServiceRequestItems()
+                        : showScheduledQueueFilters
+                        ? _getScheduledQueueServiceItems()
                         : requests;
-                    final filteredRequests = _filterServiceRequests(
-                      currentRequests,
-                      selectedFilter,
+                    final filteredRequests = List<ServiceRequestEntity>.of(
+                      _filterServiceRequests(currentRequests, selectedFilter),
                     );
+                    if (searchQuery.isNotEmpty) {
+                      filteredRequests.removeWhere((request) {
+                        final searchFields = [
+                          request.id,
+                          request.creatorId,
+                          request.creatorName ?? '',
+                        ];
+                        return !searchFields.any(
+                          (field) => field.toLowerCase().contains(searchQuery),
+                        );
+                      });
+                    }
+                    if (showRequestFilters || showScheduledQueueFilters) {
+                      filteredRequests.sort((a, b) {
+                        final byCreatedAt = b.createdAt.compareTo(a.createdAt);
+                        return mostRecentFirst ? byCreatedAt : -byCreatedAt;
+                      });
+                    }
+                    final queuedRequests = _filterServiceRequests(
+                      currentRequests,
+                      _ServiceRequestFilter.queued,
+                    );
+                    final queueNumbers = {
+                      for (var index = 0; index < queuedRequests.length; index++)
+                        queuedRequests[index].id: index + 1,
+                    };
                     return filteredRequests.isEmpty
                     ? ListView(
                         controller: scrollController,
                         padding: const EdgeInsets.all(18),
                         children: [
                           _buildEmptyState(
-                                filteredRequests.isEmpty && currentRequests.isNotEmpty
+                            searchQuery.isNotEmpty
+                                ? 'No requests match your search.'
+                                : filteredRequests.isEmpty &&
+                                      currentRequests.isNotEmpty
                                 ? _serviceRequestFilterEmptyMessage(
                                     selectedFilter,
                                   )
@@ -747,8 +876,15 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                               filteredRequests[index].status ==
                                   ServiceRequestStatus
                                       .pendingOperatorVerification,
-                          queueNumber:
-                              selectedFilter == _ServiceRequestFilter.queued
+                          queueNumber: queueNumbers[
+                            filteredRequests[index].id
+                          ],
+                          displayOrder: selectedFilter ==
+                                      _ServiceRequestFilter.toVerify ||
+                                  selectedFilter ==
+                                      _ServiceRequestFilter.scheduledToday ||
+                                  selectedFilter ==
+                                      _ServiceRequestFilter.scheduled
                               ? index + 1
                               : null,
                         ),
@@ -762,7 +898,20 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
           },
         ),
       ),
-    );
+    ).whenComplete(searchController.dispose);
+  }
+
+  String _ordinalLabel(int value) {
+    final remainder = value % 100;
+    final suffix = remainder >= 11 && remainder <= 13
+        ? 'TH'
+        : switch (value % 10) {
+            1 => 'ST',
+            2 => 'ND',
+            3 => 'RD',
+            _ => 'TH',
+          };
+    return '$value$suffix';
   }
 
   List<ServiceRequestEntity> _filterServiceRequests(
@@ -793,6 +942,16 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             .where((request) =>
                 request.status == ServiceRequestStatus.scheduled &&
                 _isScheduledForToday(request))
+            .toList();
+      case _ServiceRequestFilter.scheduled:
+        return requests
+            .where((request) =>
+                request.status == ServiceRequestStatus.scheduled)
+            .toList();
+      case _ServiceRequestFilter.completed:
+        return requests
+            .where((request) =>
+                request.status == ServiceRequestStatus.completed)
             .toList();
       case _ServiceRequestFilter.all:
         return requests;
@@ -845,6 +1004,24 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     return items;
   }
 
+  List<ServiceRequestEntity> _getScheduledQueueServiceItems() {
+    final items = _requests
+        .where(
+          (request) =>
+              request.status == ServiceRequestStatus.scheduled ||
+              request.status == ServiceRequestStatus.completed ||
+              (request.status == ServiceRequestStatus.queued &&
+                  request.processingDetails.assignedOperatorIds.isEmpty),
+        )
+        .toList();
+    items.sort(
+      (a, b) => (a.queueAddedAt ?? a.createdAt).compareTo(
+        b.queueAddedAt ?? b.createdAt,
+      ),
+    );
+    return items;
+  }
+
   String _serviceRequestFilterEmptyMessage(_ServiceRequestFilter filter) {
     switch (filter) {
       case _ServiceRequestFilter.toVerify:
@@ -853,6 +1030,10 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
         return 'No queued service requests.';
       case _ServiceRequestFilter.scheduledToday:
         return 'No scheduled services.';
+      case _ServiceRequestFilter.scheduled:
+        return 'No scheduled services.';
+      case _ServiceRequestFilter.completed:
+        return 'No completed services.';
       case _ServiceRequestFilter.all:
         return 'No service requests.';
     }
@@ -977,76 +1158,32 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     );
   }
 
-  Widget _buildAssignedServicesNotice(
-    List<ServiceRequestEntity> assignedRequests,
-  ) {
-    return Material(
-      color: Colors.teal.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => _showServiceListSheet(
-          title: 'Assigned to you',
-          subtitle: 'Services assigned by admin',
-          icon: Icons.assignment_ind_outlined,
-          color: Colors.teal,
-          requests: assignedRequests,
-          isPending: false,
-          emptyMessage: 'No services have been assigned to you.',
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              const Icon(Icons.assignment_ind_outlined, color: Colors.teal),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'ASSIGNED TO YOU',
-                      style: TextStyle(
-                        color: Colors.teal,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Admin assigned ${assignedRequests.length} service${assignedRequests.length == 1 ? '' : 's'} to you. Tap to review.',
-                      style: TextStyle(
-                        color: context.textColor,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.teal),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildRequestCard(
     ServiceRequestEntity request, {
     required bool isPending,
     int? queueNumber,
+    int? displayOrder,
   }) {
     final bool isGroup = request.participatingMinerIds.length > 1;
-    final String timeStr = DateFormat('hh:mm a').format(request.createdAt);
+    final String requestDate = DateFormat(
+      'MMM d, yyyy',
+    ).format(request.createdAt.toLocal());
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     final isAssignedToCurrentOperator = operatorId != null &&
         request.processingDetails.assignedOperatorIds.contains(operatorId);
     final scheduledPriorityBlocksQueue =
         request.status == ServiceRequestStatus.queued &&
         _hasScheduledServicesToday;
+    final mustClaimFirst =
+        request.status == ServiceRequestStatus.queued &&
+        !isAssignedToCurrentOperator &&
+        queueNumber != null &&
+        queueNumber > 1;
     final canClaimService = !isAssignedToCurrentOperator &&
         !scheduledPriorityBlocksQueue &&
-        (queueNumber != null || request.status == ServiceRequestStatus.scheduled);
+        ((request.status == ServiceRequestStatus.queued && queueNumber == 1) ||
+            request.status == ServiceRequestStatus.scheduled);
+    final isClaiming = _claimingRequestIds.contains(request.id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1068,7 +1205,6 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1091,8 +1227,30 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       ),
                     ),
                   ),
+                  if (displayOrder != null) ...[
+                    const SizedBox(width: 7),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _ordinalLabel(displayOrder),
+                        style: const TextStyle(
+                          color: Colors.teal,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
                   Text(
-                    timeStr,
+                    requestDate,
                     style: TextStyle(
                       color: context.mutedTextColor,
                       fontSize: 11,
@@ -1100,30 +1258,67 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   ),
                 ],
               ),
-              if (queueNumber != null) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.orange.withValues(alpha: 0.3),
+              const SizedBox(height: 9),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SERVICE ID',
+                          style: TextStyle(
+                            color: context.mutedTextColor,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.7,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        SelectableText(
+                          request.id.toUpperCase(),
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 10,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Text(
-                    'QUEUE #$queueNumber',
-                    style: const TextStyle(
-                      color: Colors.orange,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: queueNumber != null
+                          ? Colors.orange.withValues(alpha: 0.12)
+                          : context.bgColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: queueNumber != null
+                            ? Colors.orange.withValues(alpha: 0.3)
+                            : context.mutedTextColor.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Text(
+                      queueNumber != null
+                          ? 'QUEUE #$queueNumber'
+                          : 'NOT QUEUED',
+                      style: TextStyle(
+                        color: queueNumber != null
+                            ? Colors.orange
+                            : context.mutedTextColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
               const SizedBox(height: 8),
               Text(
                 request.creatorName ?? 'Unknown Miner',
@@ -1151,62 +1346,78 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   ),
                 ],
               ),
-              if (isAssignedToCurrentOperator) ...[
+              if (isAssignedToCurrentOperator || !isPending) ...[
                 const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.assignment_ind_outlined,
-                          color: Colors.teal, size: 14),
-                      SizedBox(width: 6),
-                      Text(
-                        'ASSIGNED TO YOU',
-                        style: TextStyle(
-                          color: Colors.teal,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
+                Row(
+                  children: [
+                    if (isAssignedToCurrentOperator)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.teal.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.assignment_ind_outlined,
+                              color: Colors.teal,
+                              size: 14,
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'CLAIMED BY YOU',
+                              style: TextStyle(
+                                color: Colors.teal,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    if (isAssignedToCurrentOperator && !isPending)
+                      const SizedBox(width: 8),
+                    if (!isPending) _buildStatusBadge(request.status),
+                  ],
                 ),
               ],
-              if (!isPending) ...[
-                const SizedBox(height: 12),
-                _buildStatusBadge(request.status),
-              ],
-              if (canClaimService || scheduledPriorityBlocksQueue) ...[
+              if (canClaimService ||
+                  scheduledPriorityBlocksQueue ||
+                  mustClaimFirst) ...[
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: canClaimService
+                    onPressed: canClaimService && !isClaiming
                         ? () => _claimQueuedService(request)
                         : null,
                     child: Text(
-                      scheduledPriorityBlocksQueue
+                      isClaiming
+                          ? 'CLAIMING...'
+                          : scheduledPriorityBlocksQueue
                           ? 'START TODAY’S SCHEDULED SERVICES FIRST'
+                          : mustClaimFirst
+                          ? 'CLAIM QUEUE #1 FIRST'
                           : 'CLAIM SERVICE',
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: scheduledPriorityBlocksQueue
+                      backgroundColor:
+                          (scheduledPriorityBlocksQueue || mustClaimFirst)
                           ? Colors.grey
                           : Colors.green,
                       foregroundColor: Colors.white,
                       disabledBackgroundColor: Colors.grey.shade700,
                       disabledForegroundColor: Colors.white,
                       side: BorderSide(
-                        color: scheduledPriorityBlocksQueue
+                        color: scheduledPriorityBlocksQueue || mustClaimFirst
                             ? Colors.grey.shade400
                             : Colors.white,
                         width: 1.5,
@@ -1264,11 +1475,24 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
     final scheduledPriorityBlocksQueue =
         request.status == ServiceRequestStatus.queued &&
         _hasScheduledServicesToday;
+    final queuedRequests = _filterServiceRequests(
+      _getServiceRequestItems(),
+      _ServiceRequestFilter.queued,
+    );
+    final queuePosition = queuedRequests.indexWhere(
+          (queuedRequest) => queuedRequest.id == request.id,
+        ) +
+        1;
+    final mustClaimFirst =
+        request.status == ServiceRequestStatus.queued &&
+        queuePosition > 1;
     final canClaimService = !isAssignedToMe &&
         !scheduledPriorityBlocksQueue &&
-        (request.status == ServiceRequestStatus.queued ||
+        ((request.status == ServiceRequestStatus.queued && queuePosition == 1) ||
             request.status == ServiceRequestStatus.scheduled);
-    final showClaimAction = canClaimService || scheduledPriorityBlocksQueue;
+    final showClaimAction =
+        canClaimService || scheduledPriorityBlocksQueue || mustClaimFirst;
+    final isClaiming = _claimingRequestIds.contains(request.id);
     var canScrollFurther = true;
     showModalBottomSheet(
       context: context,
@@ -1468,7 +1692,8 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                   height: 56,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: scheduledPriorityBlocksQueue
+                      backgroundColor:
+                          (scheduledPriorityBlocksQueue || mustClaimFirst)
                           ? Colors.grey
                           : canClaimService
                           ? Colors.green
@@ -1486,7 +1711,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                     ),
                     onPressed: scheduledPriorityBlocksQueue
                         ? null
-                        : canClaimService
+                        : canClaimService && !isClaiming
                         ? () async {
                             Navigator.pop(context);
                             await _claimQueuedService(request);
@@ -1501,8 +1726,12 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          scheduledPriorityBlocksQueue
+                          isClaiming
+                              ? 'CLAIMING...'
+                              : scheduledPriorityBlocksQueue
                               ? 'START TODAY’S SCHEDULED SERVICES FIRST'
+                              : mustClaimFirst
+                              ? 'CLAIM QUEUE #1 FIRST'
                               : canClaimService
                               ? 'CLAIM SERVICE'
                               : request.status ==
@@ -1630,8 +1859,53 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
   }
 
   Future<void> _claimQueuedService(ServiceRequestEntity request) async {
+    if (_claimingRequestIds.contains(request.id)) return;
+
     final operatorId = Supabase.instance.client.auth.currentUser?.id;
     if (operatorId == null) return;
+
+    setState(() => _claimingRequestIds.add(request.id));
+    if (request.status == ServiceRequestStatus.queued) {
+      final latestResult = await _repository.getServiceRequests();
+      if (!mounted) return;
+      final latestRequests = latestResult.fold<List<ServiceRequestEntity>?>(
+        (_) => null,
+        (requests) => requests,
+      );
+      if (latestRequests == null) {
+        setState(() => _claimingRequestIds.remove(request.id));
+        _showClaimNotice(
+          'Could not check the queue. Please try again.',
+          isError: true,
+        );
+        return;
+      }
+
+      ServiceRequestEntity? latestRequest;
+      for (final item in latestRequests) {
+        if (item.id == request.id) {
+          latestRequest = item;
+          break;
+        }
+      }
+      final queuedRequests = _filterServiceRequests(
+        latestRequests,
+        _ServiceRequestFilter.queued,
+      );
+      if (queuedRequests.isEmpty || queuedRequests.first.id != request.id) {
+        setState(() => _claimingRequestIds.remove(request.id));
+        final alreadyClaimed =
+            latestRequest?.processingDetails.assignedOperatorIds.isNotEmpty ??
+                false;
+        _showClaimNotice(
+          alreadyClaimed
+              ? 'This service has already been claimed by another operator.'
+              : 'Please claim Queue #1 first.',
+          isError: true,
+        );
+        return;
+      }
+    }
 
     final result = await _service.claimQueuedService(
       requestId: request.id,
@@ -1641,6 +1915,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
 
     result.fold(
       (failure) {
+        setState(() => _claimingRequestIds.remove(request.id));
         _showClaimNotice(
           'Could not claim service: ${failure.message}',
           isError: true,
@@ -1648,7 +1923,7 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       },
       (_) {
         _showClaimNotice(
-          'Service claimed. Open Assigned to You to start it.',
+          'Service claimed. It is now in Ongoing Services.',
           isError: false,
         );
         _loadRequests(showLoading: false);
@@ -3042,4 +3317,43 @@ class _ServiceVerificationPageState extends State<ServiceVerificationPage> {
       ),
     );
   }
+}
+
+class _BlinkingGreenLight extends StatefulWidget {
+  const _BlinkingGreenLight();
+
+  @override
+  State<_BlinkingGreenLight> createState() => _BlinkingGreenLightState();
+}
+
+class _BlinkingGreenLightState extends State<_BlinkingGreenLight>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 800),
+  )..repeat(reverse: true);
+
+  late final Animation<double> _opacity = Tween<double>(
+    begin: 0.25,
+    end: 1,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: _opacity,
+    child: Container(
+      width: 10,
+      height: 10,
+      decoration: const BoxDecoration(
+        color: Colors.green,
+        shape: BoxShape.circle,
+      ),
+    ),
+  );
 }

@@ -30,6 +30,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
+supabase/functions/.env
 /build/
 /coverage/
 
@@ -44,3 +45,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+node_modules/

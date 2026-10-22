@@ -41,6 +41,7 @@ class _SackingPageState extends State<SackingPage> {
   RealtimeChannel? _realtimeChannel;
   bool _isSaving = false;
   bool _isResuming = false;
+  bool _showMillingActionLabels = false;
   String? _completionSmsFailure;
 
   @override
@@ -1408,8 +1409,37 @@ class _SackingPageState extends State<SackingPage> {
                     : context.textColor.withOpacity(0.05)),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (isMilling)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                tooltip: _showMillingActionLabels
+                    ? 'Hide milling action labels'
+                    : 'Show milling action labels',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                onPressed: () => setState(
+                  () => _showMillingActionLabels =
+                      !_showMillingActionLabels,
+                ),
+                icon: Icon(
+                  Icons.info_outline_rounded,
+                  color: _showMillingActionLabels
+                      ? kGold
+                      : context.mutedTextColor,
+                  size: 19,
+                ),
+              ),
+            ),
+          Row(
+            children: [
           if (isMilling)
             MillingTimerCircle(
               startTime: createdAt,
@@ -1600,31 +1630,26 @@ class _SackingPageState extends State<SackingPage> {
                     ),
                   )
                 else ...[
-                  IconButton(
+                  _buildMillingActionButton(
+                    label: 'STOP',
                     tooltip: 'Emergency stop this batch',
+                    icon: Icons.warning_amber_rounded,
+                    color: Colors.red,
                     onPressed: () => _handleBatchEmergencyStop(batch),
-                    icon: const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.red,
-                    ),
                   ),
-                  IconButton(
-                    onPressed: () => _handleCompleteBatch(batch),
+                  _buildMillingActionButton(
+                    label: 'COMPLETE',
                     tooltip: 'Complete batch',
-                    icon: const Icon(
-                      Icons.check_circle_rounded,
-                      color: Colors.green,
-                      size: 23,
-                    ),
+                    icon: Icons.check_circle_rounded,
+                    color: Colors.green,
+                    onPressed: () => _handleCompleteBatch(batch),
                   ),
-                  IconButton(
-                    onPressed: () => _handleExtendBatch(batch),
+                  _buildMillingActionButton(
+                    label: 'EXTEND',
                     tooltip: 'Extend milling time',
-                    icon: const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Colors.blue,
-                      size: 23,
-                    ),
+                    icon: Icons.arrow_forward_rounded,
+                    color: Colors.blue,
+                    onPressed: () => _handleExtendBatch(batch),
                   ),
                 ],
               ],
@@ -1635,7 +1660,44 @@ class _SackingPageState extends State<SackingPage> {
               color: isResolved ? Colors.orange : Colors.red,
               size: 28,
             ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMillingActionButton({
+    required String label,
+    required String tooltip,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    if (!_showMillingActionLabels) {
+      return IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, color: color, size: 23),
+      );
+    }
+
+    return SizedBox(
+      width: 96,
+      height: 32,
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 15),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+        ),
+        style: TextButton.styleFrom(
+          foregroundColor: color,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../shared_widgets/appColor.dart';
 import '../shared_widgets/curved_active_bottom_nav_bar.dart';
@@ -6,9 +8,14 @@ import 'processing_status_page.dart';
 import '../miner/miner_dashboard.dart';
 import 'billing_page.dart';
 import 'client_profile_page.dart';
+import '../../infrastructure/notifications/push_notification_service.dart';
 
 class MinerMainLayout extends StatefulWidget {
-  const MinerMainLayout({super.key, this.initialIndex = 2, this.minerName = 'Miner'});
+  const MinerMainLayout({
+    super.key,
+    this.initialIndex = 2,
+    this.minerName = 'Miner',
+  });
 
   final int initialIndex;
   final String minerName;
@@ -24,6 +31,7 @@ class _MinerMainLayoutState extends State<MinerMainLayout> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    unawaited(PushNotificationService.instance.initializeForMiner());
   }
 
   @override
@@ -31,16 +39,16 @@ class _MinerMainLayoutState extends State<MinerMainLayout> {
     final List<Widget> pages = [
       ServiceRequestsPage(key: ValueKey('requests_$_currentIndex')),
       ProcessingStatusPage(key: ValueKey('status_$_currentIndex')),
-      MinerDashboardPage(key: ValueKey('dashboard_$_currentIndex'), minerName: widget.minerName),
+      MinerDashboardPage(
+        key: ValueKey('dashboard_$_currentIndex'),
+        minerName: widget.minerName,
+      ),
       BillingPage(key: ValueKey('billing_$_currentIndex')),
       ClientProfilePage(key: ValueKey('profile_$_currentIndex')),
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: CurvedActiveBottomNavBar(
         selectedIndex: _currentIndex,
         onTabSelected: (index) {

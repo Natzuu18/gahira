@@ -646,7 +646,7 @@ class _LoginPageState extends State<LoginPage>
                                 horizontal: 12,
                               ),
                               child: Text(
-                                'v1.0',
+                                'v1.3.0',
                                 style: TextStyle(
                                   color: kGold.withOpacity(0.4),
                                   fontSize: 12,

@@ -74,7 +74,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 ? payload.newRecord
                 : payload.oldRecord;
             final participants = record['participating_miners'];
-            final isMine = record['user_id']?.toString() == userId ||
+            final isMine =
+                record['user_id']?.toString() == userId ||
                 (participants is List && participants.contains(userId));
             if (isMine || !record.containsKey('user_id')) {
               _loadData(showLoading: false);
@@ -116,7 +117,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
 
     try {
       final requestsResult = await _repository.getServiceRequests();
-      final appealsResult = await _repository.getVerificationAppealsForMiner(currentUserId);
+      final appealsResult = await _repository.getVerificationAppealsForMiner(
+        currentUserId,
+      );
       final minersResult = await _userRepository.getMinersAndClients();
       final userResult = await _userRepository.getUserById(currentUserId);
       userResult.fold((_) => null, (user) => _currentUser = user);
@@ -159,7 +162,10 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
     if (!mounted) return;
     result.fold(
       (failure) => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(failure.message), backgroundColor: Colors.redAccent),
+        SnackBar(
+          content: Text(failure.message),
+          backgroundColor: Colors.redAccent,
+        ),
       ),
       (_) async {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -220,10 +226,12 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     border: OutlineInputBorder(),
                   ),
                   items: categories
-                      .map((category) => DropdownMenuItem(
-                            value: category,
-                            child: Text(category),
-                          ))
+                      .map(
+                        (category) => DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ),
+                      )
                       .toList(),
                   onChanged: isSubmitting
                       ? null
@@ -269,7 +277,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       final reason = reasonController.text.trim();
                       if (reason.isEmpty) {
                         setDialogState(
-                          () => errorMessage = 'Please enter a reason for appeal.',
+                          () => errorMessage =
+                              'Please enter a reason for appeal.',
                         );
                         return;
                       }
@@ -277,7 +286,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                           Supabase.instance.client.auth.currentUser?.id;
                       if (minerId == null) {
                         setDialogState(
-                          () => errorMessage = 'Your session has expired. Please sign in again.',
+                          () => errorMessage =
+                              'Your session has expired. Please sign in again.',
                         );
                         return;
                       }
@@ -292,17 +302,14 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                             minerId: minerId,
                             category: selectedCategory,
                             reason: reason,
-        appealDate: appealDate,
+                            appealDate: appealDate,
                           );
-                      result.fold(
-                        (failure) {
-                          setDialogState(() {
-                            isSubmitting = false;
-                            errorMessage = failure.message;
-                          });
-                        },
-                        (_) => Navigator.pop(dialogContext, true),
-                      );
+                      result.fold((failure) {
+                        setDialogState(() {
+                          isSubmitting = false;
+                          errorMessage = failure.message;
+                        });
+                      }, (_) => Navigator.pop(dialogContext, true));
                     },
               icon: isSubmitting
                   ? const SizedBox(
@@ -574,9 +581,7 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           .toList();
     }
 
-    return requests
-        .where((r) => _getStatusLabel(r.status) == filter)
-        .toList();
+    return requests.where((r) => _getStatusLabel(r.status) == filter).toList();
   }
 
   int _filterCount(String filter) {
@@ -845,10 +850,13 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
 
   Widget _buildRequestCard(ServiceRequestEntity request) {
     final requestAppeals = _myVerificationAppeals
-        .where((appeal) => appeal['service_request_id']?.toString() == request.id)
+        .where(
+          (appeal) => appeal['service_request_id']?.toString() == request.id,
+        )
         .toList();
     final latestAppeal = requestAppeals.isEmpty ? null : requestAppeals.first;
-    final appealDecisionRequired = latestAppeal != null &&
+    final appealDecisionRequired =
+        latestAppeal != null &&
         latestAppeal['status'] == 'rejected' &&
         latestAppeal['miner_decision'] == null;
     final appealPending = latestAppeal?['status'] == 'pending';
@@ -980,7 +988,8 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
           children: [
             const Divider(height: 32),
             if (request.materialDetails.verifications.isNotEmpty &&
-                request.status != ServiceRequestStatus.pendingOperatorVerification &&
+                request.status !=
+                    ServiceRequestStatus.pendingOperatorVerification &&
                 request.status != ServiceRequestStatus.returnedToMiner)
               Container(
                 width: double.infinity,
@@ -1026,15 +1035,15 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                     appealPending
                         ? Icons.hourglass_top_rounded
                         : appealDecisionRequired
-                            ? Icons.pending_actions_rounded
-                            : Icons.report_gmailerrorred_rounded,
+                        ? Icons.pending_actions_rounded
+                        : Icons.report_gmailerrorred_rounded,
                   ),
                   label: Text(
                     appealPending
                         ? 'APPEAL SUBMITTED'
                         : appealDecisionRequired
-                            ? 'DECISION REQUIRED'
-                            : 'APPEAL VERIFICATION',
+                        ? 'DECISION REQUIRED'
+                        : 'APPEAL VERIFICATION',
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: appealPending || appealDecisionRequired
@@ -1164,7 +1173,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => const SizedBox(
                         height: 100,
-                        child: Center(child: Text('Could not load photo evidence.')),
+                        child: Center(
+                          child: Text('Could not load photo evidence.'),
+                        ),
                       ),
                     ),
                   ),
@@ -1207,7 +1218,12 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 '${request.materialDetails.photoUrls.length} Attached',
               ),
             if (request.materialDetails.verifications.isNotEmpty &&
-                request.materialDetails.verifications.last.photoUrls.isNotEmpty) ...[
+                request
+                    .materialDetails
+                    .verifications
+                    .last
+                    .photoUrls
+                    .isNotEmpty) ...[
               const SizedBox(height: 12),
               _buildSectionHeader('Operator Verification Photos'),
               const SizedBox(height: 8),
@@ -1216,18 +1232,23 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: request
-                      .materialDetails.verifications.last.photoUrls.length,
+                      .materialDetails
+                      .verifications
+                      .last
+                      .photoUrls
+                      .length,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
                     final url = request
-                        .materialDetails.verifications.last.photoUrls[index];
+                        .materialDetails
+                        .verifications
+                        .last
+                        .photoUrls[index];
                     return InkWell(
                       onTap: () => showDialog<void>(
                         context: context,
                         builder: (context) => Dialog(
-                          child: InteractiveViewer(
-                            child: Image.network(url),
-                          ),
+                          child: InteractiveViewer(child: Image.network(url)),
                         ),
                       ),
                       child: ClipRRect(
@@ -1239,7 +1260,9 @@ class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => const SizedBox(
                             width: 110,
-                            child: Center(child: Icon(Icons.broken_image_outlined)),
+                            child: Center(
+                              child: Icon(Icons.broken_image_outlined),
+                            ),
                           ),
                         ),
                       ),

@@ -205,7 +205,8 @@ class _OperatorUserPageState extends State<OperatorUserPage> {
                           context,
                           controller: _firstNameController,
                           label: 'First Name',
-                          validator: (value) => value == null || value.trim().isEmpty
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
                               ? 'Enter your first name'
                               : null,
                         ),
@@ -220,7 +221,8 @@ class _OperatorUserPageState extends State<OperatorUserPage> {
                           context,
                           controller: _lastNameController,
                           label: 'Last Name',
-                          validator: (value) => value == null || value.trim().isEmpty
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
                               ? 'Enter your last name'
                               : null,
                         ),
@@ -363,7 +365,10 @@ class _OperatorUserPageState extends State<OperatorUserPage> {
         subtitle,
         style: TextStyle(color: context.mutedTextColor, fontSize: 12),
       ),
-      trailing: Icon(Icons.chevron_right_rounded, color: context.mutedTextColor),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: context.mutedTextColor,
+      ),
       onTap: onTap,
     ),
   );

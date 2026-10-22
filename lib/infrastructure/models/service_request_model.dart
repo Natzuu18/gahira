@@ -49,9 +49,14 @@ class ServiceRequestModel extends ServiceRequestEntity {
         final operatorData = operator is List
             ? (operator.isEmpty ? null : operator.first)
             : operator;
-        final operatorName = operatorData is Map
-            ? '${operatorData['fname'] ?? ''} ${operatorData['lname'] ?? ''}'.trim()
+        final relatedOperatorName = operatorData is Map
+            ? '${operatorData['fname'] ?? ''} ${operatorData['lname'] ?? ''}'
+                  .trim()
             : '';
+        final savedOperatorName = v['operator_name']?.toString().trim();
+        final operatorName = savedOperatorName?.isNotEmpty == true
+            ? savedOperatorName!
+            : relatedOperatorName;
         verificationList.add(
           OperatorVerification(
             id: v['verification_id']?.toString() ?? '',
@@ -67,7 +72,8 @@ class ServiceRequestModel extends ServiceRequestEntity {
             isAccurate: v['is_accurate'] ?? true,
             notes: v['correction_notes'],
             processingEstimate: v['processing_estimate'],
-            photoUrls: (v['verification_photo_urls'] as List<dynamic>?)
+            photoUrls:
+                (v['verification_photo_urls'] as List<dynamic>?)
                     ?.map((url) => url.toString())
                     .toList() ??
                 const [],
@@ -128,10 +134,9 @@ class ServiceRequestModel extends ServiceRequestEntity {
       }
     }
 
-    final double? materialWeight =
-        (json['material_weight'] as num?)?.toDouble();
-    final double? actualWeight =
-        (json['actual_weight'] as num?)?.toDouble();
+    final double? materialWeight = (json['material_weight'] as num?)
+        ?.toDouble();
+    final double? actualWeight = (json['actual_weight'] as num?)?.toDouble();
 
     return ServiceRequestModel(
       id: json['service_request_id']?.toString() ?? '',

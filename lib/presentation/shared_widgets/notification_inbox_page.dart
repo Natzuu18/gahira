@@ -108,7 +108,8 @@ class _NotificationInboxPageState extends State<NotificationInboxPage> {
             return _messageState(
               icon: Icons.notifications_none_rounded,
               title: 'You are all caught up',
-              detail: 'Service progress, payment, and application updates will appear here.',
+              detail:
+                  'Service progress, payment, and application updates will appear here.',
             );
           }
           return RefreshIndicator(
@@ -124,8 +125,8 @@ class _NotificationInboxPageState extends State<NotificationInboxPage> {
                 final createdAt = DateTime.tryParse(
                   notification['created_at']?.toString() ?? '',
                 );
-                final serviceRequestId =
-                    notification['service_request_id']?.toString();
+                final serviceRequestId = notification['service_request_id']
+                    ?.toString();
                 final srReference = _serviceReference(serviceRequestId);
                 return Card(
                   color: context.surfaceColor,
@@ -154,7 +155,9 @@ class _NotificationInboxPageState extends State<NotificationInboxPage> {
                       notification['title']?.toString() ?? 'Update',
                       style: TextStyle(
                         color: context.textColor,
-                        fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                        fontWeight: isUnread
+                            ? FontWeight.bold
+                            : FontWeight.w600,
                       ),
                     ),
                     subtitle: Padding(
@@ -181,8 +184,9 @@ class _NotificationInboxPageState extends State<NotificationInboxPage> {
                                 ),
                               if (createdAt != null)
                                 Text(
-                                  DateFormat('MMM d, yyyy · h:mm a')
-                                      .format(createdAt.toLocal()),
+                                  DateFormat(
+                                    'MMM d, yyyy · h:mm a',
+                                  ).format(createdAt.toLocal()),
                                   style: TextStyle(
                                     color: context.mutedTextColor,
                                     fontSize: 11,

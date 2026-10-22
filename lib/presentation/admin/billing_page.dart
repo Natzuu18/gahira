@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../application/services/service_request_service.dart';
@@ -692,6 +695,11 @@ class _BillingPageState extends State<BillingPage> {
     final bool isGroup = request.participatingMinerIds.length > 1;
     final bool isReadyForBilling =
         request.status == ServiceRequestStatus.processingCompleted;
+    final financial = request.financialDetails;
+    final bool canPrintReceipt =
+        request.status == ServiceRequestStatus.completed ||
+        ((financial?.totalBill ?? 0) > 0 &&
+            (financial?.paymentAmount ?? 0) > 0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -823,10 +831,156 @@ class _BillingPageState extends State<BillingPage> {
                 ),
               ),
             ),
+          if (canPrintReceipt)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: OutlinedButton.icon(
+                onPressed: () => _printSettlementReceipt(request),
+                icon: const Icon(Icons.print_outlined),
+                label: const Text('Print Official Receipt'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: kGold,
+                  side: BorderSide(color: kGold.withValues(alpha: 0.6)),
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
+
+  Future<void> _printSettlementReceipt(ServiceRequestEntity request) async {
+    final financial = request.financialDetails;
+    final currency = NumberFormat.currency(symbol: 'PHP ', decimalDigits: 2);
+    final now = DateTime.now();
+    final document = pw.Document();
+    final isGroup = request.participatingMinerIds.length > 1;
+    final representativeName =
+        request.creatorName ?? _getUserName(request.creatorId);
+
+    document.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(42),
+        build: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Center(
+              child: pw.Column(
+                children: [
+                  pw.Text(
+                    'EMILIO GOLD REFINERY',
+                    style: pw.TextStyle(
+                      fontSize: 18,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text('SERVICE MANAGEMENT CENTER'),
+                  pw.Text('OFFICIAL SETTLEMENT RECEIPT'),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 22),
+            pw.Divider(thickness: 1.5),
+            pw.SizedBox(height: 12),
+            _receiptRow('Receipt Reference', request.serviceReference),
+            _receiptRow('Date Issued', DateFormat('MMMM d, yyyy  h:mm a').format(now)),
+            _receiptRow(
+              isGroup ? 'Group Representative' : 'Miner / Account',
+              representativeName,
+            ),
+            _receiptRow('Service Type', request.materialDetails.sourceType ?? 'Gold Ore Processing'),
+            _receiptRow('Sacks Processed', '${request.materialDetails.numberOfSacks ?? 0}'),
+            pw.SizedBox(height: 12),
+            pw.Divider(),
+            _receiptRow('Processing Fee', currency.format(financial?.processingFee ?? 0)),
+            _receiptRow('Other Charges', currency.format(financial?.otherExpenses ?? 0)),
+            _receiptRow('Total Service Bill', currency.format(financial?.totalBill ?? 0), bold: true),
+            _receiptRow('Payment Recorded', currency.format(financial?.paymentAmount ?? 0)),
+            _receiptRow('Balance Remaining', currency.format(financial?.remainingBalance ?? 0)),
+            _receiptRow('Settlement Status', request.status.name.toUpperCase()),
+            pw.SizedBox(height: 12),
+            pw.Divider(thickness: 1.5),
+            pw.SizedBox(height: 18),
+            pw.Text(
+              'This document acknowledges the service billing and settlement recorded for the service reference above. Please retain this receipt for your records.',
+              textAlign: pw.TextAlign.justify,
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.Spacer(),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                _signatureBlock(
+                  isGroup ? 'Group Representative' : 'Received / Miner',
+                  printedName: representativeName,
+                ),
+                _signatureBlock(
+                  'Owner',
+                  printedName: _getUserName(
+                    Supabase.instance.client.auth.currentUser?.id ?? '',
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 24),
+            pw.Center(
+              child: pw.Text(
+                'Generated ${DateFormat('yyyy-MM-dd HH:mm').format(now)} • ${request.serviceReference}',
+                style: const pw.TextStyle(fontSize: 8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (_) async => document.save(),
+      name: 'Settlement-${request.id.substring(0, request.id.length < 8 ? request.id.length : 8)}.pdf',
+    );
+  }
+
+  pw.Widget _receiptRow(String label, String value, {bool bold = false}) =>
+      pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 5),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Expanded(child: pw.Text(label)),
+            pw.SizedBox(width: 20),
+            pw.Text(
+              value,
+              style: pw.TextStyle(
+                fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  pw.Widget _signatureBlock(String label, {String? printedName}) => pw.SizedBox(
+    width: 190,
+    child: pw.Column(
+      children: [
+        pw.SizedBox(height: 32),
+        pw.Container(height: 1, color: PdfColors.black),
+        pw.SizedBox(height: 5),
+        if (printedName != null)
+          pw.Text(
+            printedName,
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+          ),
+        pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
+      ],
+    ),
+  );
 
   Widget _buildStatusChip(ServiceRequestStatus status) {
     Color color = Colors.orange;

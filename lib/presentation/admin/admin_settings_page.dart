@@ -274,7 +274,8 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     await logoutAndNavigateToLogin(context);
   }
 
-  Widget _buildLogoMark() {    return Image.asset(
+  Widget _buildLogoMark() {
+    return Image.asset(
       'assets/img/EGReS.png',
       width: 34,
       height: 34,
@@ -295,7 +296,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
           child: _buildLogoMark(),
         ),
         title: const Text(
-          'USER SETTINGS',
+          'SETTINGS',
           style: TextStyle(
             color: kGold,
             fontWeight: FontWeight.bold,
@@ -321,7 +322,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
               ),
               child: Row(
                 children: [
-                const ProfilePictureEditor(size: 64, compact: true),
+                  const ProfilePictureEditor(size: 64, compact: true),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(

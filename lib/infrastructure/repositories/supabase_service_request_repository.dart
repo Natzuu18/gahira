@@ -22,23 +22,13 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
           );
 
       print('--- FETCHING SERVICE REQUESTS ---');
       // Removed big RAW DATA print to prevent hangs
 
-      final list = (response as List).map((json) {
-        try {
-          return ServiceRequestModel.fromJson(json);
-        } catch (e) {
-          print('PARSING ERROR FOR ROW: $json');
-          print('ERROR DETAILS: $e');
-          rethrow;
-        }
-      }).toList();
-
-      return Right(list);
+      return Right(_parseServiceRequestList(response));
     } catch (e) {
       print('REPOSITORY FETCH ERROR: $e');
       return Left(ServerFailure(e.toString()));
@@ -51,7 +41,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
           )
           .eq('status', 'pendingOperatorVerification');
       return Right(_parseServiceRequestList(response));
@@ -66,7 +56,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services!inner(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services!inner(*), mill_queue(*), ongoing_services(*), service_participant_financials(*, users:user_id(*))',
           )
           .eq('operator_verified_services.operator_id', operatorId);
       return Right(_parseServiceRequestList(response));
@@ -81,7 +71,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
           )
           .eq('ongoing_services.operator_id', operatorId)
           .inFilter('status', ['processing', 'emergencyStop']);
@@ -97,7 +87,7 @@ class SupabaseServiceRequestRepository {
       final response = await _client
           .from('service_requests')
           .select(
-            '*, users:user_id(*), operator_verified_services(*, operator:users!fk_verified_operator(fname,lname)), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
+            '*, users:user_id(*), operator_verified_services(*), mill_queue(*), ongoing_services!inner(*), service_participant_financials(*, users:user_id(*))',
           )
           .eq('ongoing_services.operator_id', operatorId)
           .inFilter('status', ['verified', 'accepted', 'queued', 'scheduled']);
@@ -301,8 +291,13 @@ class SupabaseServiceRequestRepository {
     Map<String, dynamic>? additionalData,
   }) async {
     try {
-      if ({'processing', 'processingCompleted', 'goldHandoff', 'partiallyPaid', 'completed'}
-          .contains(status)) {
+      if ({
+        'processing',
+        'processingCompleted',
+        'goldHandoff',
+        'partiallyPaid',
+        'completed',
+      }.contains(status)) {
         final hold = await _getAppealOperationHold(requestId);
         if (hold != null) return Left(ServerFailure(hold));
       }
@@ -695,7 +690,9 @@ class SupabaseServiceRequestRepository {
         );
       }
       if (batch['unloading_completed_at'] != null) {
-        return const Left(ServerFailure('This batch has already been unloaded.'));
+        return const Left(
+          ServerFailure('This batch has already been unloaded.'),
+        );
       }
       if (batch['unloading_started_at'] != null) return const Right(null);
 
@@ -726,7 +723,9 @@ class SupabaseServiceRequestRepository {
         );
       }
       if (batch['unloading_started_at'] == null) {
-        return const Left(ServerFailure('Start unloading before completing it.'));
+        return const Left(
+          ServerFailure('Start unloading before completing it.'),
+        );
       }
       if (batch['unloading_completed_at'] != null) return const Right(null);
 
@@ -742,9 +741,7 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, void>> startMillingBatchWashing(
-    String batchId,
-  ) async {
+  Future<Either<Failure, void>> startMillingBatchWashing(String batchId) async {
     try {
       final batch = await _client
           .from('milling_batches')
@@ -818,9 +815,7 @@ class SupabaseServiceRequestRepository {
     }
   }
 
-  Future<Either<Failure, void>> sendSeparationStartSms(
-    String requestId,
-  ) async {
+  Future<Either<Failure, void>> sendSeparationStartSms(String requestId) async {
     try {
       final request = await _client
           .from('service_requests')
@@ -830,7 +825,9 @@ class SupabaseServiceRequestRepository {
       final miner = request?['users'] as Map<String, dynamic>?;
       final phoneNumber = miner?['contact_num']?.toString().trim() ?? '';
       if (phoneNumber.isEmpty) {
-        return const Left(ServerFailure('The miner has no phone number on file.'));
+        return const Left(
+          ServerFailure('The miner has no phone number on file.'),
+        );
       }
 
       final digits = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
@@ -903,7 +900,9 @@ class SupabaseServiceRequestRepository {
           .maybeSingle();
       final miner = request?['users'] as Map<String, dynamic>?;
       if (miner == null) {
-        return const Left(ServerFailure('Could not find the miner for this request.'));
+        return const Left(
+          ServerFailure('Could not find the miner for this request.'),
+        );
       }
 
       final admins = await _client
@@ -926,7 +925,9 @@ class SupabaseServiceRequestRepository {
       }
       if (recipients.isEmpty) {
         return const Left(
-          ServerFailure('No miner or administrator phone numbers are available.'),
+          ServerFailure(
+            'No miner or administrator phone numbers are available.',
+          ),
         );
       }
 
@@ -969,7 +970,9 @@ class SupabaseServiceRequestRepository {
           final decoded = jsonDecode(response.body);
           if (decoded is Map<String, dynamic>) responseBody = decoded;
         } catch (_) {}
-        final providerStatus = responseBody?['status']?.toString().toLowerCase();
+        final providerStatus = responseBody?['status']
+            ?.toString()
+            .toLowerCase();
         if (response.statusCode >= 300 ||
             providerStatus == 'error' ||
             providerStatus == 'failed') {
@@ -987,7 +990,9 @@ class SupabaseServiceRequestRepository {
       }
       return const Right(null);
     } catch (e) {
-      return Left(ServerFailure('Could not send processing completion SMS: $e'));
+      return Left(
+        ServerFailure('Could not send processing completion SMS: $e'),
+      );
     }
   }
 
@@ -1403,8 +1408,8 @@ class SupabaseServiceRequestRepository {
             'payment_amount': totalPaid,
             'remaining_balance': 0,
             'payment_date': now.toIso8601String(),
-            'billing_id': request['billing_id'] ??
-                'BILL-${now.millisecondsSinceEpoch}',
+            'billing_id':
+                request['billing_id'] ?? 'BILL-${now.millisecondsSinceEpoch}',
             'updated_at': now.toIso8601String(),
           })
           .eq('service_request_id', requestId);
@@ -1415,7 +1420,8 @@ class SupabaseServiceRequestRepository {
         action: 'GROUP_BILLING_COMPLETED',
         previousStatus: request['status']?.toString() ?? 'goldHandoff',
         newStatus: 'completed',
-        remarks: 'All participant balances have been paid. Total paid: $totalPaid',
+        remarks:
+            'All participant balances have been paid. Total paid: $totalPaid',
       );
       return const Right(true);
     } catch (e) {
@@ -1730,7 +1736,8 @@ class SupabaseServiceRequestRepository {
             'emergency_stop';
         return drumStopped || machineStopped;
       }).toList();
-      final machineFailure = reason.startsWith('MACHINE FAILURE:') ||
+      final machineFailure =
+          reason.startsWith('MACHINE FAILURE:') ||
           stoppedBatches.any(
             (batch) =>
                 batch['machines']?['status']?.toString().toLowerCase() ==
@@ -1757,15 +1764,18 @@ class SupabaseServiceRequestRepository {
           if (drumIds.isNotEmpty) {
             final batchRows = await _client
                 .from('milling_batches')
-                .select('batch_id, service_request_id, milling_started_at, created_at')
+                .select(
+                  'batch_id, service_request_id, milling_started_at, created_at',
+                )
                 .filter('drum_id', 'in', drumIds)
                 .eq('status', 'milling');
             affectedBatches.addAll(
               (batchRows as List).cast<Map<String, dynamic>>(),
             );
             affectedRequestIds.addAll(
-              affectedBatches
-                  .map((batch) => batch['service_request_id'].toString()),
+              affectedBatches.map(
+                (batch) => batch['service_request_id'].toString(),
+              ),
             );
           }
           await _client
@@ -1825,10 +1835,9 @@ class SupabaseServiceRequestRepository {
         final startValue =
             batch['milling_started_at']?.toString() ??
             batch['created_at'].toString();
-        final shiftedStart = DateTime.parse(startValue)
-            .toUtc()
-            .add(pausedFor)
-            .toIso8601String();
+        final shiftedStart = DateTime.parse(
+          startValue,
+        ).toUtc().add(pausedFor).toIso8601String();
         await _client
             .from('milling_batches')
             .update({'milling_started_at': shiftedStart})

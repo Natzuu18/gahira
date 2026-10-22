@@ -40,6 +40,7 @@ class _SackingPageState extends State<SackingPage> {
   Timer? _refreshTimer;
   RealtimeChannel? _realtimeChannel;
   bool _isSaving = false;
+  final Set<String> _selectedUnloadingBatchIds = <String>{};
   bool _isResuming = false;
   bool _showMillingActionLabels = false;
   String? _completionSmsFailure;
@@ -227,6 +228,13 @@ class _SackingPageState extends State<SackingPage> {
 
   bool _batchIsUnloading(Map<String, dynamic> batch) =>
       _batchNeedsUnloading(batch) && batch['unloading_started_at'] != null;
+
+  int _unloadingBatchPriority(Map<String, dynamic> batch) {
+    if (_batchIsUnloading(batch)) return 0;
+    if (_batchNeedsUnloading(batch)) return 1;
+    if (batch['status'] == 'milling') return 2;
+    return 3;
+  }
 
   bool get _allMillingBatchesUnloaded {
     final millingBatches = _existingBatches
@@ -2103,6 +2111,71 @@ class _SackingPageState extends State<SackingPage> {
     if (mounted) setState(() => _isSaving = false);
   }
 
+  Future<void> _handleStartSelectedUnloading({bool all = false}) async {
+    if (_isSaving) return;
+    final readyBatches = _existingBatches.where(_batchNeedsUnloading).toList();
+    final batches = all
+        ? readyBatches
+        : readyBatches
+              .where(
+                (batch) => _selectedUnloadingBatchIds.contains(
+                  batch['batch_id'].toString(),
+                ),
+              )
+              .toList();
+    final operatorId = Supabase.instance.client.auth.currentUser?.id;
+    if (operatorId == null || batches.isEmpty) return;
+
+    setState(() => _isSaving = true);
+    if (_effectiveRequest.processingDetails.currentStage !=
+        ProcessingStage.unloading) {
+      final stageResult = await _service.updateProcessingStatus(
+        requestId: _effectiveRequest.id,
+        operatorId: operatorId,
+        newStatus: ServiceRequestStatus.processing,
+        currentStatus: _effectiveRequest.status.name,
+        newStage: ProcessingStage.unloading,
+        remarks: 'Moved to unloading and started multiple milling batches.',
+      );
+      final stageFailure = stageResult.fold<String?>(
+        (failure) => failure.message,
+        (_) => null,
+      );
+      if (stageFailure != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(stageFailure)));
+          setState(() => _isSaving = false);
+        }
+        return;
+      }
+    }
+
+    final results = await Future.wait(
+      batches.map(
+        (batch) => _service.startBatchUnloading(
+          batchId: batch['batch_id'].toString(),
+          requestId: _effectiveRequest.id,
+          operatorId: operatorId,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    final failures = results
+        .map((result) => result.fold<String?>((failure) => failure.message, (_) => null))
+        .whereType<String>()
+        .toList();
+    _selectedUnloadingBatchIds.clear();
+    if (failures.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Some drums could not start unloading: ${failures.first}')),
+      );
+    }
+    await _loadData(showLoading: false);
+    if (mounted) setState(() => _isSaving = false);
+  }
+
   Future<void> _handleCompleteBatchUnloading(
     Map<String, dynamic> batch,
   ) async {
@@ -2158,7 +2231,24 @@ class _SackingPageState extends State<SackingPage> {
   Widget _buildUnloadingUI() {
     final millingBatches = _existingBatches
         .where((batch) => batch['batch_kind'] == 'milling')
-        .toList();
+        .toList()
+      ..sort((a, b) {
+        final priority = _unloadingBatchPriority(a).compareTo(
+          _unloadingBatchPriority(b),
+        );
+        if (priority != 0) return priority;
+        final aCreated = DateTime.tryParse(a['created_at']?.toString() ?? '');
+        final bCreated = DateTime.tryParse(b['created_at']?.toString() ?? '');
+        if (aCreated == null || bCreated == null) return 0;
+        return bCreated.compareTo(aCreated);
+      });
+    final readyBatches = millingBatches.where(_batchNeedsUnloading).toList();
+    final allReadySelected = readyBatches.isNotEmpty &&
+        readyBatches.every(
+          (batch) => _selectedUnloadingBatchIds.contains(
+            batch['batch_id'].toString(),
+          ),
+        );
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -2175,7 +2265,7 @@ class _SackingPageState extends State<SackingPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Unload each completed milling batch. Work on other batches can continue while an unloading timer runs.',
+          'Batches in progress appear first, followed by drums ready to unload. Work on other batches can continue while an unloading timer runs.',
           textAlign: TextAlign.center,
           style: TextStyle(color: context.mutedTextColor),
         ),
@@ -2186,8 +2276,59 @@ class _SackingPageState extends State<SackingPage> {
             textAlign: TextAlign.center,
             style: TextStyle(color: context.mutedTextColor),
           )
-        else
+        else ...[
+          if (readyBatches.isNotEmpty) ...[
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: _isSaving
+                      ? null
+                      : () => setState(() {
+                            if (allReadySelected) {
+                              _selectedUnloadingBatchIds.clear();
+                            } else {
+                              _selectedUnloadingBatchIds.addAll(
+                                readyBatches.map(
+                                  (batch) => batch['batch_id'].toString(),
+                                ),
+                              );
+                            }
+                          }),
+                  icon: Icon(
+                    allReadySelected ? Icons.deselect_rounded : Icons.select_all_rounded,
+                  ),
+                  label: Text(allReadySelected ? 'CLEAR SELECTION' : 'SELECT ALL DRUMS'),
+                ),
+                const Spacer(),
+                Text(
+                  '${_selectedUnloadingBatchIds.length} selected',
+                  style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+                ),
+              ],
+            ),
+            if (_selectedUnloadingBatchIds.isNotEmpty) ...[
+              OutlinedButton.icon(
+                onPressed: _isSaving ? null : () => _handleStartSelectedUnloading(),
+                icon: const Icon(Icons.playlist_add_check_rounded),
+                label: Text('START SELECTED (${_selectedUnloadingBatchIds.length})'),
+              ),
+            ],
+            if (readyBatches.length > 1)
+              ElevatedButton.icon(
+                onPressed: _isSaving
+                    ? null
+                    : () => _handleStartSelectedUnloading(all: true),
+                icon: const Icon(Icons.fast_forward_rounded),
+                label: Text('START ALL DRUMS (${readyBatches.length})'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kGold,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            const SizedBox(height: 10),
+          ],
           ...millingBatches.map(_buildUnloadingBatchItem),
+        ],
         if (_unloadingMillingBatchesInProgress.isNotEmpty) ...[
           const SizedBox(height: 4),
           OutlinedButton.icon(
@@ -2283,6 +2424,23 @@ class _SackingPageState extends State<SackingPage> {
                   ],
                 ),
               ),
+              if (batchIsMilled && !isUnloaded && startedAt == null)
+                Checkbox(
+                  value: _selectedUnloadingBatchIds.contains(
+                    batch['batch_id'].toString(),
+                  ),
+                  onChanged: _isSaving
+                      ? null
+                      : (selected) => setState(() {
+                          final batchId = batch['batch_id'].toString();
+                          if (selected == true) {
+                            _selectedUnloadingBatchIds.add(batchId);
+                          } else {
+                            _selectedUnloadingBatchIds.remove(batchId);
+                          }
+                        }),
+                  activeColor: kGold,
+                ),
               Text(
                 isUnloaded
                     ? 'DONE'

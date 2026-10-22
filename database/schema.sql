@@ -252,6 +252,7 @@ CREATE TABLE public.operator_verified_services (
   correction_notes text,
   processing_estimate character varying,
   verification_photo_urls text[] NOT NULL DEFAULT '{}'::text[],
+  operator_name text,
   CONSTRAINT operator_verified_services_pkey PRIMARY KEY (verification_id),
   CONSTRAINT fk_verified_service_request FOREIGN KEY (service_request_id) REFERENCES public.service_requests(service_request_id),
   CONSTRAINT fk_verified_operator FOREIGN KEY (operator_id) REFERENCES public.users(userId)

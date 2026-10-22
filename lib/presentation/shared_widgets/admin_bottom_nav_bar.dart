@@ -7,10 +7,7 @@ Widget buildAdminBottomNavBar(BuildContext context, {int selectedIndex = 3}) {
     decoration: BoxDecoration(
       color: context.surfaceColor,
       border: Border(
-        top: BorderSide(
-          color: kGold.withValues(alpha: 0.2),
-          width: 1,
-        ),
+        top: BorderSide(color: kGold.withValues(alpha: 0.2), width: 1),
       ),
       boxShadow: [
         BoxShadow(
@@ -44,7 +41,10 @@ Widget buildAdminBottomNavBar(BuildContext context, {int selectedIndex = 3}) {
           ),
           NavigationDestination(
             icon: Icon(Icons.precision_manufacturing_outlined, color: kGold),
-            selectedIcon: Icon(Icons.precision_manufacturing_rounded, color: kGold),
+            selectedIcon: Icon(
+              Icons.precision_manufacturing_rounded,
+              color: kGold,
+            ),
             label: 'Machine',
           ),
           NavigationDestination(
@@ -53,14 +53,17 @@ Widget buildAdminBottomNavBar(BuildContext context, {int selectedIndex = 3}) {
             label: 'Dashboard',
           ),
           NavigationDestination(
-            icon: Icon(Icons.people_outline_rounded, color: kGold),
-            selectedIcon: Icon(Icons.people_alt_rounded, color: kGold),
-            label: 'Users',
+            icon: Icon(Icons.account_balance_wallet_outlined, color: kGold),
+            selectedIcon: Icon(
+              Icons.account_balance_wallet_rounded,
+              color: kGold,
+            ),
+            label: 'Finance',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined, color: kGold),
             selectedIcon: Icon(Icons.settings_rounded, color: kGold),
-            label: 'User Settings',
+            label: 'Settings',
           ),
         ],
       ),

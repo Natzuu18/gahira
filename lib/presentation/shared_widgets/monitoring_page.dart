@@ -217,20 +217,28 @@ class _MonitoringPageState extends State<MonitoringPage> {
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: kGold))
         : SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (_effectiveRequest.status == ServiceRequestStatus.emergencyStop ||
                     _hasActiveEquipmentEmergency ||
                     _isResolvedAwaitingOperator)
-                  _buildEmergencyAlert(),
-                _buildStatusHeader(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: _buildEmergencyAlert(),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _buildStatusHeader(),
+                ),
                 const SizedBox(height: 24),
                 _buildWorkflowProgress(),
                 const SizedBox(height: 32),
-                
-                _buildSelectedStageSection(_displayStage),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _buildSelectedStageSection(_displayStage),
+                ),
               ],
             ),
           ),
@@ -369,13 +377,16 @@ class _MonitoringPageState extends State<MonitoringPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'TAP A STAGE TO REVIEW ITS PROGRESS',
-          style: TextStyle(
-            color: context.mutedTextColor,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.7,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            'TAP A STAGE TO REVIEW ITS PROGRESS',
+            style: TextStyle(
+              color: context.mutedTextColor,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.7,
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -387,17 +398,33 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   ? () => _scrollStages(false)
                   : null,
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.chevron_left_rounded),
-              color: kGold,
+              constraints: const BoxConstraints.tightFor(width: 24, height: 40),
+              padding: EdgeInsets.zero,
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                overlayColor: WidgetStateProperty.all(
+                  kGold.withOpacity(0.08),
+                ),
+              ),
+              icon: const Icon(Icons.chevron_left_rounded, size: 18),
+              color: kGold.withOpacity(0.55),
+              disabledColor: context.mutedTextColor.withOpacity(0.2),
             ),
             Expanded(
-              child: Scrollbar(
-                controller: _stageScrollController,
-                thumbVisibility: true,
-                child: SingleChildScrollView(
+              child: ScrollbarTheme(
+                data: ScrollbarThemeData(
+                  thumbColor: WidgetStateProperty.all(Colors.transparent),
+                  trackColor: WidgetStateProperty.all(Colors.transparent),
+                  trackVisibility: WidgetStateProperty.all(true),
+                ),
+                child: Scrollbar(
                   controller: _stageScrollController,
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: _stageScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
             children: stages.map((stage) {
               final index = stages.indexOf(stage);
               final isCurrent = stage == currentStage;
@@ -478,6 +505,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 ),
               );
             }).toList(),
+                    ),
                   ),
                 ),
               ),
@@ -488,8 +516,17 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   ? () => _scrollStages(true)
                   : null,
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.chevron_right_rounded),
-              color: kGold,
+              constraints: const BoxConstraints.tightFor(width: 24, height: 40),
+              padding: EdgeInsets.zero,
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                overlayColor: WidgetStateProperty.all(
+                  kGold.withOpacity(0.08),
+                ),
+              ),
+              icon: const Icon(Icons.chevron_right_rounded, size: 18),
+              color: kGold.withOpacity(0.55),
+              disabledColor: context.mutedTextColor.withOpacity(0.2),
             ),
           ],
         ),
